@@ -1,0 +1,4 @@
+name: ncnn
+build:
+  cmake: .
+  kconfig: Kconfig

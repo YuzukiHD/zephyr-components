@@ -1,0 +1,32 @@
+# Copyright (c) 2026 Yuzuki Tsuru
+# SPDX-License-Identifier: Apache-2.0
+
+config NCNN
+	bool "ncnn neural network inference framework"
+	depends on CPP && RISCV
+	help
+	  Build ncnn (the ncnn submodule) as a separate static library with its
+	  own STL and math emulation, on top of the minimal C library. The
+	  library is compiled with the architecture options of the image, so
+	  with the V extension (RISCV_ISA_EXT_V) the vector kernels of ncnn
+	  are used.
+
+if NCNN
+
+config NCNN_BENCHMARK
+	bool "ncnn benchmark (benchncnn)"
+	default y
+	help
+	  Build the benchncnn program as ncnn_bench_main(argc, argv), with the
+	  network descriptions built in and random weights.
+
+config NCNN_BENCHMARK_MODELS
+	string "Models to run"
+	depends on NCNN_BENCHMARK
+	default "blazeface,squeezenet,shufflenet,yolo-fastest-1.1,yolo-fastestv2,FastestDet,nanodet_m"
+	help
+	  Comma separated names of the networks benchncnn runs. The weights
+	  are allocated in RAM (fp32), so the big networks do not fit. The
+	  int8 networks do not work, ncnn is built without int8.
+
+endif # NCNN

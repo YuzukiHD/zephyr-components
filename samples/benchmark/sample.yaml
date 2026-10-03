@@ -1,0 +1,11 @@
+sample:
+  name: ncnn benchmark
+tests:
+  sample.modules.ncnn_bench:
+    platform_allow:
+      - f101_evb
+    harness: console
+    harness_config:
+      type: one_line
+      regex:
+        - "ncnn benchmark done"

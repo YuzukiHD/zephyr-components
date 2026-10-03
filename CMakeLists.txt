@@ -77,6 +77,7 @@ ExternalProject_Add(ncnn_ext
     -DNCNN_USE_RVV=${NCNN_USE_RVV}
     -DNCNN_WITH_BENCHMARK=${NCNN_WITH_BENCHMARK}
     "-DNCNN_BENCH_MODELS=${CONFIG_NCNN_BENCHMARK_MODELS}"
+    -DNCNN_BENCH_MAX_WEIGHTS_MB=${CONFIG_NCNN_BENCHMARK_MAX_WEIGHTS_MB}
     -DNCNN_PYTHON_EXE=${PYTHON_EXECUTABLE}
   BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target ${NCNN_TARGETS}
   BUILD_ALWAYS ON
@@ -95,7 +96,7 @@ add_dependencies(ncnn_imported ncnn_ext)
 zephyr_library_named(ncnn_glue)
 zephyr_library_sources(ncnn_libc.c)
 add_dependencies(ncnn_glue ncnn_ext)
-zephyr_ld_options(-Wl,-u,sscanf)
+zephyr_ld_options(-Wl,-u,sscanf -Wl,--wrap=malloc)
 
 if(CONFIG_NCNN_BENCHMARK)
   add_library(ncnn_bench_imported STATIC IMPORTED GLOBAL)

@@ -32,14 +32,22 @@ CONFIG_FPU=y
 ```
 
 `CONFIG_NCNN_BENCHMARK` builds benchncnn as `int ncnn_bench_main(int argc, char **argv)`
-with the networks of `CONFIG_NCNN_BENCHMARK_MODELS` built in (random weights).
+with the networks built in (random weights): all of them except the int8 ones and
+those with more than `CONFIG_NCNN_BENCHMARK_MAX_WEIGHTS_MB` of weights, smallest
+first. A network during which a `malloc()` fails is not reported.
 
 ## Notes
 
 - ncnn is built without int8 (`NCNN_INT8=OFF`).
 - Networks are loaded from memory only, there is no file system access.
-- The weights are fp32 in RAM; use `COMMON_LIBC_MALLOC_ARENA_SIZE=-1` to give
-  all RAM above the image to the heap (16 MB PSRAM: no big networks).
+- The weights are fp32 in RAM and the layers copy them while they are set up.
+  `COMMON_LIBC_MALLOC_ARENA_SIZE=-1` gives all RAM above the image to the heap;
+  with 16 MB PSRAM that is 13 MB, enough for networks of a few M parameters.
+  ncnn does not check these allocations, a network that is too big fails or
+  crashes.
+- ncnn only detects a vector unit under Linux and reports a vector length of 0
+  everywhere else, which breaks the tensor layout; `ext/riscv_cpu.cpp` replaces
+  that detection, the two functions in `libncnn.a` are renamed after the build.
 - With the V extension every thread stack has to hold an interrupt frame
   (about 560 bytes with VLEN 128).
 

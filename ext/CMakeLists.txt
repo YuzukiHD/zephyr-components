@@ -33,8 +33,15 @@ set(NCNN_RVV ${NCNN_USE_RVV} CACHE BOOL "" FORCE)
 
 add_subdirectory(${NCNN_DIR} ncnn)
 
+if(NCNN_USE_RVV)
+  target_sources(ncnn PRIVATE ${CMAKE_CURRENT_LIST_DIR}/riscv_cpu.cpp)
+  set(_weak_cpu 1)
+else()
+  set(_weak_cpu 0)
+endif()
+
 add_custom_target(ncnn_fixup ALL
-  COMMAND ${CMAKE_COMMAND} -DAR=${CMAKE_AR} -DOBJCOPY=${CMAKE_OBJCOPY}
+  COMMAND ${CMAKE_COMMAND} -DAR=${CMAKE_AR} -DOBJCOPY=${CMAKE_OBJCOPY} -DWEAK_CPU=${_weak_cpu}
           -DARCHIVE=$<TARGET_FILE:ncnn> -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/fixup
           -P ${CMAKE_CURRENT_LIST_DIR}/weaken.cmake
   DEPENDS ncnn)
@@ -76,6 +83,8 @@ if(NCNN_WITH_BENCHMARK)
                   ${_bench_src}/benchncnn.cpp
                   ${CMAKE_CURRENT_BINARY_DIR}/benchncnn_selected.cpp
                   "${NCNN_BENCH_MODELS}"
+                  ${_bench_src}/models
+                  ${NCNN_BENCH_MAX_WEIGHTS_MB}
                   COMMAND_ERROR_IS_FATAL ANY)
 
   add_library(ncnn_bench STATIC ${CMAKE_CURRENT_BINARY_DIR}/benchncnn_selected.cpp

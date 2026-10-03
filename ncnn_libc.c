@@ -351,3 +351,33 @@ int *__errno(void)
 {
 	return &errno;
 }
+
+/*
+ * ncnn does not check most of its allocations, a network that does not fit
+ * just fails (the benchmark then measures the failure). malloc() is wrapped
+ * (-Wl,--wrap=malloc) to notice: the benchmark does not report a network
+ * during which an allocation failed.
+ */
+extern void *__real_malloc(size_t size);
+
+static volatile int oom_seen;
+
+void *__wrap_malloc(size_t size)
+{
+	void *p = __real_malloc(size);
+
+	if (p == NULL && size != 0) {
+		oom_seen = 1;
+	}
+	return p;
+}
+
+void ncnn_zephyr_oom_clear(void)
+{
+	oom_seen = 0;
+}
+
+int ncnn_zephyr_oom_seen(void)
+{
+	return oom_seen;
+}

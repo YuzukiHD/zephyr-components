@@ -21,12 +21,24 @@ config NCNN_BENCHMARK
 	  network descriptions built in and random weights.
 
 config NCNN_BENCHMARK_MODELS
-	string "Models to run"
+	string "Networks to run"
 	depends on NCNN_BENCHMARK
-	default "blazeface,squeezenet,shufflenet,yolo-fastest-1.1,yolo-fastestv2,FastestDet,nanodet_m"
 	help
-	  Comma separated names of the networks benchncnn runs. The weights
-	  are allocated in RAM (fp32), so the big networks do not fit. The
-	  int8 networks do not work, ncnn is built without int8.
+	  Comma separated names of the networks benchncnn runs, empty: all of
+	  them. The int8 networks are never run, ncnn is built without int8.
+	  The networks run from the smallest to the biggest. One during which
+	  an allocation fails is not reported.
+
+config NCNN_BENCHMARK_MAX_WEIGHTS_MB
+	int "Biggest network to try (MB of fp32 weights)"
+	depends on NCNN_BENCHMARK
+	default 5
+	help
+	  Networks with more weights than this are not run at all (0: no
+	  limit). The weights are in RAM and the layers make a second copy of
+	  them while they are set up, with 13 MB of heap on a 16 MB board only
+	  the small networks fit. ncnn does not check the allocation of the
+	  weights and crashes when they do not fit, so the big networks (some
+	  have hundreds of MB of weights) must not be tried.
 
 endif # NCNN

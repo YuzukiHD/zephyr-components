@@ -1,0 +1,4 @@
+name: mgba
+build:
+  cmake: .
+  kconfig: Kconfig

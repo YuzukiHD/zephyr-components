@@ -1,0 +1,28 @@
+# Copyright (c) 2026 Yuzuki Tsuru
+# SPDX-License-Identifier: Apache-2.0
+
+config MGBA
+	bool "mGBA Game Boy Advance emulator core"
+	depends on RISCV
+	select FILE_SYSTEM
+	help
+	  Build the Game Boy Advance core of mGBA (the git submodule mgba/)
+	  as a library without threading, debugger, scripting or image
+	  codecs. The mGBA software renderer draws RGB565 frames; the
+	  built-in BIOS replacement is used, no BIOS file is needed.
+
+if MGBA
+
+config MGBA_RVV
+	bool "Vector versions of hot loops (needs the V extension)"
+	default y if SUN252I_F101_RVV
+	help
+	  The emulator library is built with the V extension; copies and
+	  fills, and the background renderer use the vector unit.
+
+config MGBA_MAX_ROM_SIZE_MB
+	int "Largest ROM that is read into memory (MiB)"
+	default 32
+	range 1 32
+
+endif # MGBA

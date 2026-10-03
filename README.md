@@ -1,7 +1,9 @@
 # ncnn-zephyr
 
-[ncnn](https://github.com/Tencent/ncnn) as a Zephyr module, for the Allwinner
-F101 (XuanTie C907, rv32imafdcv). ncnn itself is the git submodule `ncnn/`.
+[ncnn](https://github.com/Tencent/ncnn) as a Zephyr module for RISC-V
+(rv32imafdcv, with the V extension). ncnn itself is the git submodule `ncnn/`.
+
+Tested on the Allwinner F101 EVB (XuanTie C907).
 
 ncnn is built by its own CMake project with the architecture options of the
 image, `NCNN_SIMPLESTL` (its own STL, no libstdc++) and the headers of the
@@ -40,3 +42,7 @@ with the networks of `CONFIG_NCNN_BENCHMARK_MODELS` built in (random weights).
   all RAM above the image to the heap (16 MB PSRAM: no big networks).
 - With the V extension every thread stack has to hold an interrupt frame
   (about 560 bytes with VLEN 128).
+
+## License
+
+Apache-2.0, see `LICENSE`. ncnn is under its own license (BSD-3-Clause).

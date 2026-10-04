@@ -47,4 +47,14 @@ config SAMPLE_GBA_ROM_DIAG
 config SAMPLE_GBA_PROFILE
 	bool "Sample the program counter of the emulation thread and print a histogram"
 
+config SAMPLE_GBA_HOT_RAM
+	bool "Run the emulator and the sample code from RAM in an XIP image"
+	depends on XIP
+	select CODE_DATA_RELOCATION
+	help
+	  With the image running from the flash window, the emulator (mGBA) and
+	  the sample are relocated to RAM: their text is copied from the flash to
+	  RAM at boot and executed there, the rest (kernel, drivers, LVGL, file
+	  system) stays in the flash.
+
 source "Kconfig.zephyr"

@@ -1,7 +1,6 @@
 # zephyr-components
 
-Zephyr modules for RISC-V boards, built and tested on the Allwinner F101 EVB
-(XuanTie C907, rv32imafdcv, 16 MB PSRAM). Each directory is a module of its own
+Zephyr modules for RISC-V boards. Each directory is a module of its own
 (`zephyr/module.yml`), add the ones you need to `ZEPHYR_EXTRA_MODULES`.
 
 | Module | What |

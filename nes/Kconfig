@@ -1,0 +1,21 @@
+# Copyright (c) 2026 Yuzuki Tsuru
+# SPDX-License-Identifier: Apache-2.0
+
+config NES
+	bool "NES emulator (nofrendo core)"
+	depends on RISCV
+	select FILE_SYSTEM
+	help
+	  Build the nofrendo NES / Famicom core (nes/nofrendo/, GPL-2.0)
+	  as a library. The picture is RGB565, the sound is 16 bit stereo
+	  at the rate the caller asks for. ROM and save files are read
+	  through the Zephyr file system.
+
+if NES
+
+config NES_MAX_ROM_SIZE_KB
+	int "Largest ROM file accepted (KiB)"
+	default 2048
+	range 16 2048
+
+endif # NES

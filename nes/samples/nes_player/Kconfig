@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "NES player"
+
+config SAMPLE_NES_ROM
+	string "ROM file"
+	default "/SD:/game.nes"
+
+config SAMPLE_NES_RATE
+	int "Sound output rate"
+	default 48000
+	help
+	  48000 or 44100.
+
+config SAMPLE_NES_BENCH
+	bool "Run the emulation unpaced for a fixed number of frames and print the time"
+
+config SAMPLE_NES_BENCH_FRAMES
+	int "Frames of the benchmark, a checksum of the picture is printed every 200"
+	depends on SAMPLE_NES_BENCH
+	default 1200
+
+source "Kconfig.zephyr"

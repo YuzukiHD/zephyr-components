@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "GBA player"
+
+config SAMPLE_GBA_ROM
+	string "ROM file"
+	default "/SD:/game.gba"
+
+config SAMPLE_GBA_RATE
+	int "Sound output rate"
+	default 48000
+	help
+	  48000 or 44100.
+
+config SAMPLE_GBA_VIDEO_DIV
+	int "Draw one frame in this many (2 = 30 fps)"
+	default 2
+	range 1 4
+	help
+	  A frame that is not drawn runs the emulation and the sound but not the
+	  renderer, which leaves time for the heavy scenes. The sound is not
+	  affected, the picture is.
+
+config SAMPLE_GBA_CPU_MHZ
+	int "CPU clock in MHz, 0 keeps what the boot loader set up (600)"
+	default 0
+	help
+	  The CPU PLL is raised in steps of 120 MHz and the memory is checked
+	  after each step. The voltage is not changed.
+
+config SAMPLE_GBA_BENCH
+	bool "Run the emulation unpaced for a fixed number of frames and print the time"
+
+config SAMPLE_GBA_BENCH_FRAMESKIP
+	int "Frames skipped between two drawn frames in the benchmark"
+	depends on SAMPLE_GBA_BENCH
+	default 0
+
+config SAMPLE_GBA_BENCH_FRAMES
+	int "Frames of the benchmark, a checksum of the picture is printed every 200"
+	depends on SAMPLE_GBA_BENCH
+	default 1200
+
+config SAMPLE_GBA_ROM_DIAG
+	bool "Print size, padding and read speed of the ROM files on the card, then stop"
+
+config SAMPLE_GBA_PROFILE
+	bool "Sample the program counter of the emulation thread and print a histogram"
+
+source "Kconfig.zephyr"

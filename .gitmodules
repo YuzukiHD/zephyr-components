@@ -7,3 +7,6 @@
 [submodule "doom/doomgeneric"]
 	path = doom/doomgeneric
 	url = https://github.com/ozkl/doomgeneric
+[submodule "micropython/micropython"]
+	path = micropython/micropython
+	url = https://github.com/micropython/micropython.git

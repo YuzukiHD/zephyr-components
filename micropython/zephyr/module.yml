@@ -1,0 +1,4 @@
+name: micropython-f101
+build:
+  cmake: .
+  kconfig: Kconfig

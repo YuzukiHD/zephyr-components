@@ -1,0 +1,5 @@
+# Copyright (c) 2026 Yuzuki Tsuru
+# SPDX-License-Identifier: Apache-2.0
+
+# Nothing to configure yet: the options of the port itself are the MICROPY_*
+# ones of micropython/ports/zephyr/Kconfig.

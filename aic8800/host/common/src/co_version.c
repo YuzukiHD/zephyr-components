@@ -1,0 +1,1 @@
+const char aic_wifi_version[] = "aic_melis4.x_f133 2025-06-10 12:08:28 +0800 b6a954b6";

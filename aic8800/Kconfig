@@ -1,0 +1,91 @@
+# Copyright (c) 2026 Yuzuki Tsuru
+# SPDX-License-Identifier: Apache-2.0
+
+config AIC8800
+	bool "AIC8800 WiFi driver"
+	depends on RISCV
+	select SD_STACK
+	select SDIO_STACK
+	select SDHC
+	select GPIO
+	select HWINFO
+	select MINIMAL_LIBC_RAND if MINIMAL_LIBC
+	select NETWORKING
+	select NET_L2_ETHERNET
+	select WIFI
+	select WIFI_USE_NATIVE_NETWORKING
+	select NET_L2_WIFI_MGMT
+	select NET_IPV4
+	select NET_UDP
+	select NET_TCP
+	select NET_SOCKETS
+	select NET_DRIVERS
+	select NET_LOOPBACK
+	select NET_DHCPV4
+	select NET_MGMT
+	select NET_MGMT_EVENT
+	help
+	  FullMAC WiFi driver of the AIC8800 family on an SDIO bus: the
+	  host side of the MAC (command queue, TX/RX descriptors), the
+	  firmware download, a port of wpa_supplicant for the station
+	  and access point modes, and the Zephyr network interface.
+
+if AIC8800
+
+choice AIC8800_CHIP
+	prompt "AIC chip"
+	default AIC8800D80
+
+config AIC8800D
+	bool "AIC8800D"
+
+config AIC8800DW
+	bool "AIC8800DW"
+
+config AIC8800D40L
+	bool "AIC8800D40L"
+
+config AIC8800D80
+	bool "AIC8800D80"
+
+endchoice
+
+choice AIC8800_INTERFACE
+	prompt "Chip interface"
+	default AIC8800_INTF_SDIO
+
+config AIC8800_INTF_SDIO
+	bool "SDIO"
+
+config AIC8800_INTF_USB
+	bool "USB"
+	depends on BROKEN
+	help
+	  The USB transport is not ported.
+
+endchoice
+
+config AIC8800_SDIO_DEV
+	string "SDHC device of the chip"
+	default "smhc2"
+	help
+	  Devicetree node label of the SD host controller the chip is
+	  wired to.
+
+config AIC8800_WPA3
+	bool "WPA3 (SAE)"
+	depends on MBEDTLS
+	select MBEDTLS_ECP_C
+	select MBEDTLS_ECP_DP_SECP256R1_ENABLED
+	help
+	  Build the SAE handshake of the supplicant on top of mbedTLS.
+
+config AIC8800_P2P
+	bool "Wi-Fi Direct (P2P), WPS and Hotspot 2.0"
+	default y
+
+config AIC8800_WIFI_MODE_RFTEST
+	bool "RF test firmware"
+	default y
+
+endif # AIC8800

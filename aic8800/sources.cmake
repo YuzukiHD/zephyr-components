@@ -1,0 +1,187 @@
+# Source lists of the driver
+
+set(AIC_COMMON_SRCS
+  host/common/src/co_list.c
+  host/common/src/co_math.c
+  host/common/src/co_pool.c
+  host/common/src/co_ring.c
+  host/common/src/co_version.c
+)
+
+set(AIC_DRV_SRCS
+  host/drv/fhost/fhost_config.c
+  host/drv/fhost/fhost_rx.c
+  host/drv/fhost/fhost_tx.c
+  host/drv/fhost/fhost_wpa_config.c
+  host/drv/aic_bsp/aic_bsp_driver.c
+  host/drv/aic_bsp/aic_bsp_main.c
+  host/drv/fw/aic_fw.c
+  host/drv/macif/cli_cmd.c
+  host/drv/macif/rwnx_main.c
+  host/drv/macif/rwnx_msg.c
+  host/drv/macif/rwnx_platform.c
+  host/drv/wlan/wifi_api_dummy.c
+)
+
+set(AIC_DRV_PRIV_SRCS
+  host/drv/fhost/fhost.c
+  host/drv/fhost/fhost_ip.c
+  host/drv/fhost/fhost_ipc_cntrl.c
+  host/drv/fhost/fhost_wpa.c
+  host/drv/wlan/wlan_if.c
+  host/drv/fhost/fhost_cntrl.c
+  host/drv/macif/rwnx_msg_rx.c
+  host/drv/macif/rwnx_msg_tx.c
+  host/drv/macif/rwnx_cmds.c
+  host/drv/macif/rwnx_utils.c
+  host/drv/fhost/rwnx_radar.c
+)
+
+set(AIC_P2P_SRCS
+  host/wpa_supplicant/src/ap/wps_hostapd.c
+  host/wpa_supplicant/src/eapol_supp/eapol_supp_sm.c
+  host/wpa_supplicant/src/eap_peer/eap_methods.c
+  host/wpa_supplicant/src/eap_peer/eap.c
+  host/wpa_supplicant/wpa_supplicant/wps_supplicant.c
+  host/wpa_supplicant/wpa_supplicant/offchannel.c
+  host/wpa_supplicant/wpa_supplicant/p2p_supplicant.c
+  host/wpa_supplicant/wpa_supplicant/p2p_supplicant_sd.c
+  host/wpa_supplicant/wpa_supplicant/wifi_display.c
+)
+
+set(AIC_WPA_SRCS
+  host/wpa_supplicant/src/ap/ap_config.c
+  host/wpa_supplicant/src/ap/acs.c
+  host/wpa_supplicant/src/ap/ap_drv_ops.c
+  host/wpa_supplicant/src/ap/ap_list.c
+  host/wpa_supplicant/src/ap/ap_mlme.c
+  host/wpa_supplicant/src/ap/authsrv.c
+  host/wpa_supplicant/src/ap/beacon.c
+  host/wpa_supplicant/src/ap/bss_load.c
+  host/wpa_supplicant/src/ap/ctrl_iface_ap.c
+  host/wpa_supplicant/src/ap/dfs.c
+  host/wpa_supplicant/src/ap/drv_callbacks.c
+  host/wpa_supplicant/src/ap/eap_user_db.c
+  host/wpa_supplicant/src/ap/hostapd.c
+  host/wpa_supplicant/src/ap/hw_features.c
+  host/wpa_supplicant/src/ap/ieee802_11.c
+  host/wpa_supplicant/src/ap/ieee802_11_auth.c
+  host/wpa_supplicant/src/ap/ieee802_11_he.c
+  host/wpa_supplicant/src/ap/ieee802_11_ht.c
+  host/wpa_supplicant/src/ap/ieee802_11_shared.c
+  host/wpa_supplicant/src/ap/ieee802_11_vht.c
+  host/wpa_supplicant/src/ap/ieee802_1x.c
+  host/wpa_supplicant/src/ap/neighbor_db.c
+  host/wpa_supplicant/src/ap/pmksa_cache_auth.c
+  host/wpa_supplicant/src/ap/p2p_hostapd.c
+  host/wpa_supplicant/src/ap/rrm.c
+  host/wpa_supplicant/src/ap/sta_info.c
+  host/wpa_supplicant/src/ap/tkip_countermeasures.c
+  host/wpa_supplicant/src/ap/utils.c
+  host/wpa_supplicant/src/ap/wmm.c
+  host/wpa_supplicant/src/ap/wnm_ap.c
+  host/wpa_supplicant/src/ap/wpa_auth.c
+  host/wpa_supplicant/src/ap/wpa_auth_glue.c
+  host/wpa_supplicant/src/ap/wpa_auth_ie.c
+  host/wpa_supplicant/src/common/hw_features_common.c
+  host/wpa_supplicant/src/common/ieee802_11_common.c
+  host/wpa_supplicant/src/common/wpa_common.c
+  host/wpa_supplicant/src/common/gas.c
+  host/wpa_supplicant/src/crypto/aes-internal-dec.c
+  host/wpa_supplicant/src/crypto/aes-internal-enc.c
+  host/wpa_supplicant/src/crypto/aes-internal.c
+  host/wpa_supplicant/src/crypto/aes-cbc.c
+  host/wpa_supplicant/src/crypto/aes-omac1.c
+  host/wpa_supplicant/src/crypto/aes-unwrap.c
+  host/wpa_supplicant/src/crypto/aes-wrap.c
+  host/wpa_supplicant/src/crypto/crypto_internal-modexp.c
+  host/wpa_supplicant/src/crypto/dh_groups.c
+  host/wpa_supplicant/src/crypto/dh_group5.c
+  host/wpa_supplicant/src/crypto/md5-internal.c
+  host/wpa_supplicant/src/crypto/md5.c
+  host/wpa_supplicant/src/crypto/random.c
+  host/wpa_supplicant/src/crypto/rc4.c
+  host/wpa_supplicant/src/crypto/sha1-internal.c
+  host/wpa_supplicant/src/crypto/sha1-pbkdf2.c
+  host/wpa_supplicant/src/crypto/sha1-prf.c
+  host/wpa_supplicant/src/crypto/sha1.c
+  host/wpa_supplicant/src/crypto/sha256-internal.c
+  host/wpa_supplicant/src/crypto/sha256-prf.c
+  host/wpa_supplicant/src/crypto/sha256.c
+  host/wpa_supplicant/src/crypto/tls_none.c
+  host/wpa_supplicant/src/drivers/drivers.c
+  host/wpa_supplicant/src/drivers/driver_common.c
+  host/wpa_supplicant/src/drivers/driver_rwnx.c
+  host/wpa_supplicant/src/eapol_auth/eapol_auth_sm.c
+  host/wpa_supplicant/src/eap_common/chap.c
+  host/wpa_supplicant/src/eap_common/eap_common.c
+  host/wpa_supplicant/src/eap_common/eap_wsc_common.c
+  host/wpa_supplicant/src/eap_server/eap_server.c
+  host/wpa_supplicant/src/eap_server/eap_server_identity.c
+  host/wpa_supplicant/src/eap_server/eap_server_methods.c
+  host/wpa_supplicant/src/eap_server/eap_server_wsc.c
+  host/wpa_supplicant/src/eap_peer/eap_wsc.c
+  host/wpa_supplicant/src/l2_packet/l2_packet_rwnx.c
+  host/wpa_supplicant/src/p2p/p2p_build.c
+  host/wpa_supplicant/src/p2p/p2p.c
+  host/wpa_supplicant/src/p2p/p2p_dev_disc.c
+  host/wpa_supplicant/src/p2p/p2p_go_neg.c
+  host/wpa_supplicant/src/p2p/p2p_group.c
+  host/wpa_supplicant/src/p2p/p2p_invitation.c
+  host/wpa_supplicant/src/p2p/p2p_parse.c
+  host/wpa_supplicant/src/p2p/p2p_pd.c
+  host/wpa_supplicant/src/p2p/p2p_sd.c
+  host/wpa_supplicant/src/p2p/p2p_utils.c
+  host/wpa_supplicant/src/rsn_supp/preauth.c
+  host/wpa_supplicant/src/rsn_supp/wpa.c
+  host/wpa_supplicant/src/rsn_supp/wpa_ie.c
+  host/wpa_supplicant/src/rsn_supp/pmksa_cache.c
+  host/wpa_supplicant/src/tls/bignum.c
+  host/wpa_supplicant/src/utils/base64.c
+  host/wpa_supplicant/src/utils/bitfield.c
+  host/wpa_supplicant/src/utils/common.c
+  host/wpa_supplicant/src/utils/eloop.c
+  host/wpa_supplicant/src/utils/ip_addr.c
+  host/wpa_supplicant/src/utils/os_rwnx.c
+  host/wpa_supplicant/src/utils/wpa_byteorder_stubs.c
+  host/wpa_supplicant/src/utils/uuid.c
+  host/wpa_supplicant/src/utils/wpabuf.c
+  host/wpa_supplicant/src/utils/wpa_debug.c
+  host/wpa_supplicant/src/wps/wps.c
+  host/wpa_supplicant/src/wps/wps_attr_build.c
+  host/wpa_supplicant/src/wps/wps_attr_parse.c
+  host/wpa_supplicant/src/wps/wps_attr_process.c
+  host/wpa_supplicant/src/wps/wps_common.c
+  host/wpa_supplicant/src/wps/wps_dev_attr.c
+  host/wpa_supplicant/src/wps/wps_enrollee.c
+  host/wpa_supplicant/src/wps/wps_registrar.c
+  host/wpa_supplicant/wpa_supplicant/ap.c
+  host/wpa_supplicant/wpa_supplicant/blacklist.c
+  host/wpa_supplicant/wpa_supplicant/bss.c
+  host/wpa_supplicant/wpa_supplicant/aic8800_config.c
+  host/wpa_supplicant/wpa_supplicant/config_none.c
+  host/wpa_supplicant/wpa_supplicant/ctrl_iface.c
+  host/wpa_supplicant/wpa_supplicant/ctrl_iface_udp.c
+  host/wpa_supplicant/wpa_supplicant/eap_register.c
+  host/wpa_supplicant/wpa_supplicant/events.c
+  host/wpa_supplicant/wpa_supplicant/main_rwnx.c
+  host/wpa_supplicant/wpa_supplicant/notify.c
+  host/wpa_supplicant/wpa_supplicant/op_classes.c
+  host/wpa_supplicant/wpa_supplicant/scan.c
+  host/wpa_supplicant/wpa_supplicant/sta_rrm.c
+  host/wpa_supplicant/wpa_supplicant/wmm_ac.c
+  host/wpa_supplicant/wpa_supplicant/wpas_glue.c
+  host/wpa_supplicant/wpa_supplicant/wpa_supplicant.c
+  host/wpa_supplicant/wpa_supplicant/interworking.c
+  host/wpa_supplicant/wpa_supplicant/gas_query.c
+  host/wpa_supplicant/wpa_supplicant/hs20_supplicant.c
+  host/wpa_supplicant/src/ap/hs20.c
+  host/wpa_supplicant/src/ap/gas_serv.c
+)
+
+set(AIC_WPA3_SRCS
+  host/wpa_supplicant/wpa_supplicant/sme.c
+  host/wpa_supplicant/src/common/sae.c
+  host/wpa_supplicant/src/common/dragonfly.c
+  host/wpa_supplicant/src/crypto/crypto_mbedtls.c
+)

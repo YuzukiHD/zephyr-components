@@ -1,0 +1,2 @@
+echo -n 'const char aic_wifi_version[] = ' > ./host/common/src/co_version.c
+echo -n '"'"$(git branch --show-current)" "$(git log origin/master -1 --pretty=format:"%cd %h" --date=format:"%Y-%m-%d %H:%M:%S %z")"'"'';' >> ./host/common/src/co_version.c

@@ -1,0 +1,5 @@
+SDK Version: F133-1.0.3
+Release Time: 2023-11-13
+Note:
+	1. 加入P2P GO + AP模式的支持，当前可在平台上电后通过命令行 aic init + aic START_P2P来启动
+	

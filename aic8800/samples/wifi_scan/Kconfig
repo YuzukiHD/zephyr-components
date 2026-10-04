@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "AIC8800 WiFi scan"
+
+config SAMPLE_WIFI_SSID
+	string "SSID to connect to after the scan (empty: scan only)"
+	default ""
+
+config SAMPLE_WIFI_PSK
+	string "WPA2 passphrase"
+	default ""
+
+source "Kconfig.zephyr"

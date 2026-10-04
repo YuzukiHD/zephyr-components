@@ -1,0 +1,11 @@
+{
+  "manufacture_name": "AIC Semiconductor",
+  "model_name": "AIC-BLE-1.0",
+  "serial_num": "1.0.0.0-LE",
+  "hw_version": "1.0.0"
+  "fw_version": "6.1.2",
+  "sw_version": "6.3.0",
+  "sys_id": "\x12\x34\x56\xFF\xFE\x9A\xBC\xDE",
+  "ieee_char": "\xFF\xEE\xDD\xCC\xBB\xAA",
+  "pnp_id": "\x02\x5E\x04\x40\x00\x00\x03"
+}

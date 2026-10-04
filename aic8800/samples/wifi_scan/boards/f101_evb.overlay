@@ -1,0 +1,50 @@
+/*
+ * AIC8800 module on the SD host controller 2 (SMHC2), pins PE0..PE5 mux 9, power
+ * enable on PA0 and the wakeup line on PF6.
+ *
+ * Those pins are shared: PE2 is the switch of the USB host VBUS and PE0..PE4 are the pins
+ * of I2S0, so neither of them can be used together with this overlay (the USB host is
+ * switched off below). PF6 is also the card detect of the SD slot, it is only read here.
+ */
+&pio {
+	smhc2_pins: smhc2_pins {
+		smhc2_clk {
+			pinmux = <ALLWINNER_PINMUX(ALLWINNER_PIO_PE, 2, 9)>;
+			bias-disable;
+		};
+		smhc2_cmd_data {
+			pinmux = <ALLWINNER_PINMUX(ALLWINNER_PIO_PE, 3, 9)
+				  ALLWINNER_PINMUX(ALLWINNER_PIO_PE, 1, 9)
+				  ALLWINNER_PINMUX(ALLWINNER_PIO_PE, 0, 9)
+				  ALLWINNER_PINMUX(ALLWINNER_PIO_PE, 5, 9)
+				  ALLWINNER_PINMUX(ALLWINNER_PIO_PE, 4, 9)>;
+			bias-pull-up;
+		};
+	};
+};
+
+&usbhci {
+	status = "disabled";
+};
+
+&usbotg {
+	status = "disabled";
+};
+
+&usbphy {
+	status = "disabled";
+};
+
+&smhc2 {
+	pinctrl-0 = <&smhc2_pins>;
+	pinctrl-names = "default";
+	bus-width = <4>;
+	non-removable;
+	status = "okay";
+
+	aic8800 {
+		compatible = "aicsemi,aic8800";
+		reg-on-gpios = <&gpioa 0 GPIO_ACTIVE_HIGH>;
+		wakeup-gpios = <&gpiof 6 GPIO_ACTIVE_HIGH>;
+	};
+};

@@ -26,8 +26,16 @@
 #define RATE		CONFIG_SAMPLE_GBA_RATE
 /* the emulation waits while this many frames of sound are queued */
 #define HIGH_WATER	(RATE / 15)
-/* below this many queued sound frames the emulation skips drawing */
-#define SKIP_BELOW	1200
+/*
+ * Below SKIP_BELOW queued sound frames the emulation catches up by drawing one frame in four,
+ * until the queue has grown to SKIP_RESUME again. The gap keeps it from falling back to
+ * the normal rate, which a heavy scene cannot keep up with, as soon as the queue recovers.
+ */
+#define SKIP_BELOW	1500
+#define SKIP_RESUME	2800
+#define SKIP_COUNT	3
+/* the frames skipped between two drawn ones in normal running */
+#define SKIP_BASE	(CONFIG_SAMPLE_GBA_VIDEO_DIV - 1)
 #define REPORT_MS	5000
 #define SAVE_MS		3000
 
@@ -68,7 +76,6 @@ static void cpu_clock_setup(void)
 	uint32_t rate, target = CONFIG_SAMPLE_GBA_CPU_MHZ * 1000000U;
 
 	clock_control_get_rate(cctl, (clock_control_subsys_t)CLK_CPU, &rate);
-	printk("cpu: %u MHz\n", rate / 1000000U);
 	/* in steps, each one checked: the voltage is not changed */
 	while (target != 0U && rate < target) {
 		uint32_t next = MIN(rate + 72000000U, target);
@@ -80,8 +87,8 @@ static void cpu_clock_setup(void)
 			break;
 		}
 		ok = cpu_selftest();
-		printk("cpu: %u MHz %s\n", next / 1000000U, ok ? "ok" : "BAD");
 		if (!ok) {
+			printk("cpu: %u MHz BAD\n", next / 1000000U);
 			clock_control_set_rate(cctl, (clock_control_subsys_t)CLK_CPU,
 					       (clock_control_subsys_rate_t)rate);
 			printk("cpu: back to %u MHz\n", rate / 1000000U);
@@ -233,23 +240,11 @@ int main(void)
 	static int16_t pcm[2 * 2048];
 	int64_t t_report, t_save;
 	uint32_t frames = 0, emu_us = 0, pushed = 0, skipped = 0;
+	bool catching_up = false;
 	int drawn;
 	int ret;
 
 	cpu_clock_setup();
-	{
-		uint32_t c0, t0 = k_cycle_get_32();
-
-		__asm__ volatile("csrr %0, mcycle" : "=r"(c0));
-		while (k_cycle_get_32() - t0 < 2400000U) {
-		}
-		{
-			uint32_t c1;
-
-			__asm__ volatile("csrr %0, mcycle" : "=r"(c1));
-			printk("cpu: %u MHz\n", (c1 - c0) / 100000U);
-		}
-	}
 	ret = fs_mount(&mp);
 	if (ret != 0) {
 		printk("cannot mount the SD card: %d\n", ret);
@@ -287,13 +282,13 @@ int main(void)
 		/* no sound pacing, no skipping, no display: the cost of the emulation alone */
 		static int16_t sink[2 * 2048];
 		uint32_t t0 = k_cycle_get_32(), worst = 0;
-		const int n_frames = 1200;
+		const int n_frames = CONFIG_SAMPLE_GBA_BENCH_FRAMES;
 
 		for (int i = 0; i < n_frames; i++) {
 			uint32_t c0 = k_cycle_get_32();
 
 			gba_set_frame_buffer(video_acquire());
-			gba_set_frameskip(0);
+			gba_set_frameskip(CONFIG_SAMPLE_GBA_BENCH_FRAMESKIP);
 			gba_run_frame();
 			while (gba_audio_read(sink, ARRAY_SIZE(sink) / 2) > 0) {
 			}
@@ -319,8 +314,17 @@ int main(void)
 
 		gba_set_keys(pad_keys());
 		gba_set_frame_buffer(video_acquire());
-		/* behind the sound: draw every other frame until it has caught up */
-		gba_set_frameskip(audio_queued() < SKIP_BELOW);
+		/* behind the sound: draw less until it has caught up */
+		{
+			size_t queued = audio_queued();
+
+			if (queued < SKIP_BELOW) {
+				catching_up = true;
+			} else if (queued > SKIP_RESUME) {
+				catching_up = false;
+			}
+			gba_set_frameskip(catching_up ? MAX(SKIP_COUNT, SKIP_BASE) : SKIP_BASE);
+		}
 		drawn = gba_run_frame();
 		emu_us += k_cyc_to_us_floor32(k_cycle_get_32() - c0);
 		if (drawn) {

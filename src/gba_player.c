@@ -23,8 +23,11 @@
 #include <mgba/internal/gb/gb.h>
 #include <mgba/internal/gba/gba.h>
 #include <mgba-util/audio-buffer.h>
-#include <mgba-util/audio-resampler.h>
 #include <mgba-util/vfs.h>
+#ifdef CONFIG_MGBA_ROM_DEMAND_PAGED
+#include <zephyr/kernel/mm/backing_store_fs.h>
+#include <zephyr/kernel/mm/demand_paging.h>
+#endif
 
 #include <mgba_zephyr/gba.h>
 
@@ -37,12 +40,12 @@ LOG_MODULE_REGISTER(gba, LOG_LEVEL_INF);
 static struct {
 	struct mCore *core;
 	void *rom;
+	bool rom_mapped;
 	uint16_t *frame;
 	struct VFile *save_vf;
 	const char *save_path;
 	uint32_t save_crc;
 	struct mAudioBuffer out;
-	struct mAudioResampler rs;
 	unsigned int out_rate;
 	bool is_gb;
 	bool own_frame;
@@ -122,6 +125,55 @@ static int write_file(const char *path, const void *data, size_t len)
 	return ret == (int)len ? 0 : (ret < 0 ? ret : -EIO);
 }
 
+/*
+ * The sound of the core to the output rate: linear interpolation, the position in the
+ * source frames is a 16.16 fixed point number. Frames that are not used up stay in buf for
+ * the next call, which is also what keeps one frame behind the position to interpolate from.
+ */
+#define RS_FRAMES 4096
+
+static struct {
+	uint32_t pos;
+	unsigned int have;
+	int16_t buf[RS_FRAMES * 2];
+	int16_t out[RS_FRAMES * 2];
+} rs;
+
+static void resample(void)
+{
+	struct mAudioBuffer *src = g.core->getAudioBuffer(g.core);
+	uint32_t step = ((uint64_t)g.core->audioSampleRate(g.core) << 16) / g.out_rate;
+	size_t space = mAudioBufferCapacity(&g.out) - mAudioBufferAvailable(&g.out);
+	unsigned int total = rs.have + mAudioBufferRead(src, rs.buf + rs.have * 2, RS_FRAMES - rs.have);
+	unsigned int n = 0, drop;
+	uint32_t pos = rs.pos;
+
+	if (space > RS_FRAMES) {
+		space = RS_FRAMES;
+	}
+	while (n < space) {
+		unsigned int idx = pos >> 16;
+		const int16_t *a = rs.buf + idx * 2;
+		int32_t frac = pos & 0xFFFF;
+
+		if (idx + 1 >= total) {
+			break;
+		}
+		rs.out[n * 2] = a[0] + (((int32_t)(a[2] - a[0]) * frac) >> 16);
+		rs.out[n * 2 + 1] = a[1] + (((int32_t)(a[3] - a[1]) * frac) >> 16);
+		n++;
+		pos += step;
+	}
+	if (n > 0) {
+		mAudioBufferWrite(&g.out, rs.out, n);
+	}
+	/* what is behind the position is not needed any more */
+	drop = MIN(pos >> 16, total);
+	rs.have = total - drop;
+	rs.pos = pos - ((uint32_t)drop << 16);
+	memmove(rs.buf, rs.buf + drop * 2, rs.have * 2 * sizeof(int16_t));
+}
+
 int gba_open(const char *rom_path, const char *save_path, unsigned int out_rate)
 {
 	void *sav = NULL;
@@ -131,7 +183,20 @@ int gba_open(const char *rom_path, const char *save_path, unsigned int out_rate)
 	if (g.core != NULL) {
 		return -EALREADY;
 	}
-	ret = read_file(rom_path, &g.rom, &rom_len);
+#ifdef CONFIG_MGBA_ROM_DEMAND_PAGED
+	g.rom = k_mem_paging_map_file(rom_path, &rom_len, K_MEM_PERM_RW);
+	if (g.rom != NULL) {
+		g.rom_mapped = true;
+		/* a cartridge with a clock or sensor gets its port in the first page of the ROM:
+		 * the writes to it must stay
+		 */
+		k_mem_pin(g.rom, CONFIG_MMU_PAGE_SIZE);
+		ret = 0;
+	} else
+#endif
+	{
+		ret = read_file(rom_path, &g.rom, &rom_len);
+	}
 	if (ret < 0) {
 		LOG_ERR("read %s: %d", rom_path, ret);
 		return ret;
@@ -186,10 +251,8 @@ int gba_open(const char *rom_path, const char *save_path, unsigned int out_rate)
 	/* the core's own audio buffer is filled by the emulation, we resample it */
 	g.out_rate = out_rate;
 	mAudioBufferInit(&g.out, 4096, 2);
-	mAudioResamplerInit(&g.rs, mINTERPOLATOR_COSINE);
-	mAudioResamplerSetSource(&g.rs, g.core->getAudioBuffer(g.core),
-				 g.core->audioSampleRate(g.core), true);
-	mAudioResamplerSetDestination(&g.rs, &g.out, out_rate);
+	rs.pos = 0;
+	rs.have = 0;
 
 	return 0;
 fail:
@@ -204,10 +267,17 @@ void gba_close(void)
 		g.core->unloadROM(g.core);
 		g.core->deinit(g.core);
 		mCoreConfigDeinit(&g.core->config);
-		mAudioResamplerDeinit(&g.rs);
 		mAudioBufferDeinit(&g.out);
 	}
-	free(g.rom);
+#ifdef CONFIG_MGBA_ROM_DEMAND_PAGED
+	if (g.rom_mapped) {
+		k_mem_unpin(g.rom, CONFIG_MMU_PAGE_SIZE);
+		k_mem_paging_unmap_file(g.rom);
+	} else
+#endif
+	{
+		free(g.rom);
+	}
 	if (g.own_frame) {
 		free(g.frame);
 	}
@@ -226,10 +296,13 @@ void gba_set_frame_buffer(uint16_t *buf)
 
 void gba_set_frameskip(int skip)
 {
+	if (skip < 0) {
+		skip = 0;
+	}
 	if (g.is_gb) {
-		((struct GB *)g.core->board)->video.frameskip = skip ? 1 : 0;
+		((struct GB *)g.core->board)->video.frameskip = skip;
 	} else {
-		((struct GBA *)g.core->board)->video.frameskip = skip ? 1 : 0;
+		((struct GBA *)g.core->board)->video.frameskip = skip;
 	}
 }
 
@@ -241,8 +314,7 @@ int gba_run_frame(void)
 
 	g.core->runFrame(g.core);
 	/* a game can change the sound resolution, the source rate follows it */
-	g.rs.sourceRate = g.core->audioSampleRate(g.core);
-	mAudioResamplerProcess(&g.rs);
+	resample();
 
 	return drawn;
 }

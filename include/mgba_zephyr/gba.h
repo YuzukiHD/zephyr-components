@@ -64,7 +64,10 @@ int gba_run_frame(void);
 /** Draw the following frames into @p buf (GBA_WIDTH x GBA_HEIGHT RGB565, row pitch GBA_WIDTH) */
 void gba_set_frame_buffer(uint16_t *buf);
 
-/** Draw only every other frame while set: the emulation gets cheaper, the picture rougher */
+/**
+ * Draw one frame, then skip @p skip frames, and so on: a skipped frame runs the emulation and the
+ * sound but not the renderer, which makes it cheaper. 0 draws every frame.
+ */
 void gba_set_frameskip(int skip);
 
 /**

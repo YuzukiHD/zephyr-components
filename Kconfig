@@ -20,9 +20,22 @@ config MGBA_RVV
 	  The emulator library is built with the V extension; copies and
 	  fills, and the background renderer use the vector unit.
 
+config MGBA_ROM_DEMAND_PAGED
+	bool "Map the ROM as a demand paged file"
+	depends on DEMAND_PAGING && BACKING_STORE_FS
+	help
+	  Instead of reading the whole ROM into memory it is mapped from
+	  the file system and the pages come in when the emulation touches
+	  them, so a 16 MiB ROM needs only the page frames that are left.
+	  Needs the MMU of the kernel and enough page frames: the memory
+	  that is not malloc arena or image.
+
 config MGBA_MAX_ROM_SIZE_MB
 	int "Largest ROM that is read into memory (MiB)"
 	default 32
 	range 1 32
+	help
+	  With MGBA_ROM_DEMAND_PAGED the limit is the address space of the
+	  cartridge, 32 MiB.
 
 endif # MGBA

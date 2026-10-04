@@ -49,7 +49,7 @@ zephyr_library_sources(
   ${S}/gba/cart/matrix.c ${S}/gba/cart/unlicensed.c ${S}/gba/cart/vfame.c
   ${S}/gba/cheats.c ${S}/gba/cheats/codebreaker.c ${S}/gba/cheats/gameshark.c
   ${S}/gba/cheats/parv3.c ${S}/gba/core.c ${S}/gba/dma.c ${S}/gba/gba.c
-  ${S}/gba/hle-bios.c ${S}/gba/input.c ${S}/gba/io.c ${S}/gba/memory.c
+  ${S}/gba/hle-bios.c ${S}/gba/input.c ${S}/gba/io.c src/gba_memory.c
   ${S}/gba/overrides.c ${S}/gba/renderers/cache-set.c ${S}/gba/renderers/common.c
   ${S}/gba/renderers/software-bg.c src/renderers/software-mode0.c
   ${S}/gba/renderers/software-obj.c ${S}/gba/renderers/video-software.c
@@ -96,6 +96,9 @@ zephyr_library_compile_definitions(
 )
 # the C907 bit manipulation, indexed addressing and conditional move extensions
 # suit an interpreter: bit field extraction, rotates and post-increment loads
+if(CONFIG_MGBA_ROM_DEMAND_PAGED)
+  zephyr_library_compile_definitions(MGBA_ROM_DEMAND_PAGED)
+endif()
 if(NOT CONFIG_MGBA_RVV)
   zephyr_library_compile_definitions(MGBA_NO_RVV)
 endif()

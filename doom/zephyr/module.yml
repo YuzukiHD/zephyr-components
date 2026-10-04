@@ -1,0 +1,4 @@
+name: doom
+build:
+  cmake: .
+  kconfig: Kconfig

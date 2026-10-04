@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "Doom player"
+
+config SAMPLE_DOOM_WAD
+	string "WAD file"
+	default "/SD:/doom1.wad"
+
+config SAMPLE_DOOM_RATE
+	int "Sound output rate"
+	default 48000
+
+source "Kconfig.zephyr"

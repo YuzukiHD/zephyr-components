@@ -1,0 +1,33 @@
+# Copyright (c) 2026 Yuzuki Tsuru
+# SPDX-License-Identifier: Apache-2.0
+
+config DOOM
+	bool "Doom (doomgeneric engine)"
+	depends on RISCV
+	select FILE_SYSTEM
+	help
+	  Build the doomgeneric port of the Doom engine (doom/doomgeneric,
+	  GPL-2.0) as a library. The WAD, the config and the saved games are
+	  read through the Zephyr file system; the picture is 320x200 RGB565.
+	  The game data is not part of the module: put doom1.wad (or the
+	  Freedoom WADs) on the card.
+
+if DOOM
+
+config DOOM_ZONE_SIZE_MB
+	int "Memory of the zone allocator (MiB)"
+	default 6
+	range 4 32
+	help
+	  Doom allocates this once from the malloc arena.
+
+config DOOM_SOUND
+	bool "Sound effects"
+	default y
+	depends on I2S && AUDIO_CODEC
+	help
+	  Mix the effects of the game (the music is not played) and play
+	  them through doom_audio_read(), which the application sends to the
+	  codec.
+
+endif # DOOM

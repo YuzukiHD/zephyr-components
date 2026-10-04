@@ -1,9 +1,10 @@
-# mgba-zephyr
+# mGBA
 
 The Game Boy, Game Boy Color and Game Boy Advance core of
 [mGBA](https://github.com/mgba-emu/mgba) as a Zephyr module. mGBA itself is the
-git submodule `mgba/` (MPL-2.0), unchanged. The glue in this repository is
-Apache-2.0; `src/renderers/` holds modified copies of two mGBA files (MPL-2.0).
+git submodule `mgba/mgba` (MPL-2.0), unchanged. The glue in this directory is
+Apache-2.0; `src/renderers/` and `src/gba_memory.c` hold modified copies of mGBA
+files (MPL-2.0).
 
 Tested on the Allwinner F101 EVB (XuanTie C907, 16 MB PSRAM).
 
@@ -14,14 +15,14 @@ the minimal C library are filled by `src/mgba_libc.c` and `shim/`.
 ## Use
 
 ```
-git submodule update --init
-west build -b f101_evb -d build/gba mgba-zephyr/samples/gba_player
+git submodule update --init mgba/mgba
+west build -b f101_evb -d build/gba zephyr-components/mgba/samples/gba_player
 ```
 
 or, in another application, add the module and enable it:
 
 ```
-list(APPEND ZEPHYR_EXTRA_MODULES /path/to/mgba-zephyr)   # before find_package(Zephyr)
+list(APPEND ZEPHYR_EXTRA_MODULES /path/to/zephyr-components/mgba)   # before find_package(Zephyr)
 ```
 
 ```
@@ -44,7 +45,15 @@ ARGB plane over it, the sound pacing the emulation. The save file is written nex
 to the ROM. The CPU clock is raised to `CONFIG_SAMPLE_GBA_CPU_MHZ`.
 
 The whole ROM is read into memory, so a ROM larger than `CONFIG_MGBA_MAX_ROM_SIZE_MB`
-(10 on the EVB) is skipped.
+(10 on the EVB) is skipped. With `-DEXTRA_CONF_FILE=.../paged.conf`
+(`CONFIG_MGBA_ROM_DEMAND_PAGED`, needs the MMU and the demand paging of the
+kernel) the ROM is a window of the file that is paged in from the card when the
+emulation touches it, so a 16 MiB ROM runs on the 16 MB board; `src/gba_memory.c`
+then leaves out the 32 MiB copy that mGBA makes when a game writes into the ROM.
+
+The picture is drawn at 30 fps (`CONFIG_SAMPLE_GBA_VIDEO_DIV`) and less while the
+sound is about to run out: a skipped frame runs the emulation and the sound but
+not the renderer. The sound is resampled by a fixed point linear interpolation.
 
 ## Vector extension
 

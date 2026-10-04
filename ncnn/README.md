@@ -1,7 +1,7 @@
-# ncnn-zephyr
+# ncnn
 
 [ncnn](https://github.com/Tencent/ncnn) as a Zephyr module for RISC-V
-(rv32imafdcv, with the V extension). ncnn itself is the git submodule `ncnn/`.
+(rv32imafdcv, with the V extension). ncnn itself is the git submodule `ncnn/ncnn`.
 
 Tested on the Allwinner F101 EVB (XuanTie C907).
 
@@ -14,14 +14,14 @@ and the minimal one does not provide (`sscanf`, a clock, `usleep`, file stubs).
 ## Use
 
 ```
-git submodule update --init
-west build -b f101_evb -d build/ncnn ncnn-zephyr/samples/benchmark
+git submodule update --init ncnn/ncnn
+west build -b f101_evb -d build/ncnn zephyr-components/ncnn/samples/benchmark
 ```
 
 or, in another application, add the module and enable it:
 
 ```
-list(APPEND ZEPHYR_EXTRA_MODULES /path/to/ncnn-zephyr)   # before find_package(Zephyr)
+list(APPEND ZEPHYR_EXTRA_MODULES /path/to/zephyr-components/ncnn)   # before find_package(Zephyr)
 ```
 
 ```

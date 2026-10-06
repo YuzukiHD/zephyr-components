@@ -57,6 +57,9 @@ static void audio_main(void *a, void *b, void *c)
 		return;
 	}
 	audio_codec_start_output(ctl);
+	/* small speaker: digital volume raised from the default */
+	audio_codec_set_property(ctl, AUDIO_PROPERTY_OUTPUT_VOLUME, AUDIO_CHANNEL_ALL,
+				 (audio_property_value_t){.vol = 150});
 
 	while (true) {
 		void *blk;

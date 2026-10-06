@@ -1,0 +1,7 @@
+/* the video feed: four cards in a row (the page switches to a grid that litehtml has not) */
+.recommended-container_floor-aside .container,
+.recommended-container_overseas .container { display: flex; flex-wrap: wrap; width: 100%; }
+.recommended-container_floor-aside .container > *,
+.recommended-container_overseas .container > * { width: 23%; margin: 0 2% 24px 0; }
+.recommended-swipe-shim { display: block; }
+.bili-video-card__cover img, .bili-video-card img { width: 100%; }

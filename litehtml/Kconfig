@@ -1,0 +1,11 @@
+# Copyright (c) 2026 Yuzuki Tsuru
+# SPDX-License-Identifier: Apache-2.0
+
+config LITEHTML
+	bool "litehtml HTML/CSS renderer"
+	depends on CPP && RISCV
+	help
+	  Build litehtml (the litehtml submodule) as a separate static library
+	  with the C++ standard library of the toolchain, and link it into the
+	  image. The library draws a page into an RGB565 buffer with a bitmap
+	  font, see include/litehtml_zephyr/lh.h.

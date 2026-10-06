@@ -1,0 +1,4 @@
+name: litehtml
+build:
+  cmake: .
+  kconfig: Kconfig

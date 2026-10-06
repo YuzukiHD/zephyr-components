@@ -1,0 +1,2 @@
+/* litehtml only includes the stream headers for declarations, see ext/src/url.cpp */
+#include <iosfwd>

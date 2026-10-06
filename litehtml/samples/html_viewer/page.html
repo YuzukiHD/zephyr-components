@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>litehtml test page</title>
+<style>
+  body { margin: 0; background: #eef1f7; color: #1d2433; font-size: 16px; }
+  .bar { background: #1a4fa0; color: #ffffff; padding: 14px 28px; }
+  .bar h1 { margin: 0; font-size: 30px; }
+  .bar p { margin: 4px 0 0 0; font-size: 14px; color: #c8d8f4; }
+  .wrap { padding: 20px 28px; }
+  h2 { color: #1a4fa0; border-bottom: 2px solid #1a4fa0; padding-bottom: 4px; margin-top: 28px; }
+  .card { background: #ffffff; border: 1px solid #b9c4da; padding: 12px 16px; margin: 12px 0; }
+  .row { display: block; }
+  .chip { display: inline-block; padding: 4px 10px; margin: 2px 4px 2px 0; color: #ffffff; }
+  .red { background: #c0392b; } .green { background: #1e8449; } .blue { background: #2471a3; }
+  .orange { background: #d68910; } .purple { background: #7d3c98; } .gray { background: #5d6d7e; }
+  table { border-collapse: collapse; width: 100%; background: #ffffff; }
+  th { background: #1a4fa0; color: #ffffff; text-align: left; padding: 6px 10px; }
+  td { border: 1px solid #b9c4da; padding: 6px 10px; }
+  tr.alt td { background: #f2f5fb; }
+  code { background: #e1e6f0; padding: 0 4px; }
+  .note { border-left: 6px solid #d68910; background: #fdf3e0; padding: 8px 14px; }
+  a { color: #1a4fa0; }
+  .big { font-size: 24px; } .small { font-size: 12px; color: #5d6d7e; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <h1>litehtml on the Allwinner F101</h1>
+  <p>HTML and CSS rendered by a 600 MHz T-Head C907 into a 1024x600 RGB565 frame</p>
+</div>
+
+<div class="wrap">
+
+<h2>Text</h2>
+<div class="card">
+  <p>Plain text, <b>bold text</b>, <i>italic text</i>, <u>underlined text</u>,
+  <s>struck out text</s> and <code>inline code</code>. Lines wrap at the width of the
+  viewport; the quick brown fox jumps over the lazy dog, 0123456789.</p>
+  <p class="big">Bigger text, 24 px.</p>
+  <p class="small">Smaller text, 12 px, in gray.</p>
+</div>
+
+<h2>Colors</h2>
+<div class="card">
+  <span class="chip red">red</span><span class="chip green">green</span>
+  <span class="chip blue">blue</span><span class="chip orange">orange</span>
+  <span class="chip purple">purple</span><span class="chip gray">gray</span>
+</div>
+
+<h2>Lists</h2>
+<div class="card">
+  <ul>
+    <li>First item of a bullet list</li>
+    <li>Second item, a little longer than the first one</li>
+    <li>Third item
+      <ul><li>nested item A</li><li>nested item B</li></ul>
+    </li>
+  </ul>
+  <ol>
+    <li>Parse the page with gumbo</li>
+    <li>Apply the style sheets</li>
+    <li>Lay out the boxes</li>
+    <li>Draw them into the frame buffer</li>
+  </ol>
+</div>
+
+<h2>Table</h2>
+<table>
+  <tr><th>Part</th><th>Value</th><th>Note</th></tr>
+  <tr><td>CPU</td><td>XuanTie C907, rv32imafdc</td><td>600 MHz after the FEL boot</td></tr>
+  <tr class="alt"><td>Memory</td><td>16 MB PSRAM</td><td>the page tree lives in the heap</td></tr>
+  <tr><td>Display</td><td>1024 x 600</td><td>RGB, 48 MHz pixel clock</td></tr>
+  <tr class="alt"><td>Storage</td><td>SD card</td><td>FAT, this page is read from it</td></tr>
+</table>
+
+<h2>Boxes</h2>
+<div class="card" style="border: 4px solid #1e8449;">
+  <div class="note">A note box with a thick left border and a tinted background.</div>
+  <div style="background:#d6eaf8; padding:10px; margin-top:10px;">
+    Nested <div style="background:#aed6f1; padding:10px; margin-top:6px;">boxes
+    <div style="background:#85c1e9; padding:10px; margin-top:6px;">three levels deep</div></div>
+  </div>
+</div>
+
+<h2>Long text</h2>
+<div class="card">
+  <p>This section only exists to make the page taller than the screen, so that the viewer
+  has something to scroll through. Lorem ipsum dolor sit amet, consectetur adipiscing elit,
+  sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam,
+  quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+  <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat
+  nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia
+  deserunt mollit anim id est laborum. <a href="#">A link</a> looks like a link.</p>
+  <p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque
+  laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi
+  architecto beatae vitae dicta sunt explicabo.</p>
+</div>
+
+<p class="small">End of the page.</p>
+</div>
+</body>
+</html>

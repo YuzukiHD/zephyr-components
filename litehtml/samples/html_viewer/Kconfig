@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "HTML viewer"
+
+config SAMPLE_HTML_FILE
+	string "Page to show"
+	default "/SD:/page.html"
+	help
+	  The page on the SD card. When it does not exist the first .html or .htm
+	  file in the root of the card is used, and a built in page when there is none.
+
+config SAMPLE_HTML_SCROLL_PX
+	int "Pixels the page scrolls every frame (0: no scrolling)"
+	default 2
+	help
+	  There is no input device bound yet, a long page scrolls by itself and
+	  starts over at the end.
+
+source "Kconfig.zephyr"

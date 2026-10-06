@@ -13,3 +13,9 @@ zephyr_library_sources(src/f101_libc.c)
 
 # math functions of the toolchain's libm
 zephyr_link_libraries(-lm)
+
+# the console on the LCD: the port's stdout function is wrapped, the UART output stays
+if(CONFIG_F101_MICROPY_SCREEN_CONSOLE)
+  zephyr_library_sources(src/screen_console.c)
+  zephyr_link_libraries(-Wl,--wrap=mp_hal_stdout_tx_strn)
+endif()

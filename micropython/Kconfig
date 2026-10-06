@@ -1,5 +1,14 @@
 # Copyright (c) 2026 Yuzuki Tsuru
 # SPDX-License-Identifier: Apache-2.0
 
-# Nothing to configure yet: the options of the port itself are the MICROPY_*
-# ones of micropython/ports/zephyr/Kconfig.
+# The options of the port itself are the MICROPY_* ones of
+# micropython/ports/zephyr/Kconfig.
+
+config F101_MICROPY_SCREEN_CONSOLE
+	bool "Show the console output on the LCD"
+	default y
+	depends on DISPLAY
+	select CHARACTER_FRAMEBUFFER
+	help
+	  Everything MicroPython prints is also drawn into a character grid on the
+	  frame buffer plane. The UART stays the keyboard.

@@ -18,6 +18,58 @@
 
 namespace {
 
+/* the image loader and the extra glyphs, set by the application */
+lh_image_fn g_image_fn;
+void *g_image_user;
+const uint8_t *g_cjk;
+uint32_t g_cjk_count, g_cjk_cell;
+
+const uint32_t *cjk_codes()
+{
+	return reinterpret_cast<const uint32_t *>(g_cjk + 16);
+}
+
+/* the alpha of the glyph of a code point, NULL when the font has none */
+const uint8_t *cjk_glyph(uint32_t cp)
+{
+	uint32_t lo = 0, hi = g_cjk_count;
+
+	if (g_cjk == nullptr) {
+		return nullptr;
+	}
+	while (lo < hi) {
+		uint32_t mid = (lo + hi) / 2;
+		uint32_t c = cjk_codes()[mid];
+
+		if (c == cp) {
+			return g_cjk + 16 + (size_t)g_cjk_count * 4 + (size_t)mid * g_cjk_cell * g_cjk_cell;
+		}
+		if (c < cp) {
+			lo = mid + 1;
+		} else {
+			hi = mid;
+		}
+	}
+	return nullptr;
+}
+
+/* the next code point of a UTF-8 text, p moves on */
+uint32_t next_cp(const unsigned char *&p)
+{
+	uint32_t c = *p++;
+
+	if (c < 0x80) {
+		return c;
+	}
+	int n = (c >= 0xf0) ? 3 : (c >= 0xe0) ? 2 : (c >= 0xc0) ? 1 : 0;
+
+	c &= (0x3f >> n);
+	while (n-- > 0 && (*p & 0xc0) == 0x80) {
+		c = (c << 6) | (*p++ & 0x3f);
+	}
+	return c;
+}
+
 struct font_data {
 	int size;
 	int weight;
@@ -96,14 +148,14 @@ public:
 	int text_width(const char *text, litehtml::uint_ptr h) override
 	{
 		const auto *f = reinterpret_cast<font_data *>(h);
-		int n = 0;
+		int w = 0;
 
-		for (const unsigned char *p = (const unsigned char *)text; *p; p++) {
-			if ((*p & 0xc0) != 0x80) {
-				n++;
-			}
+		for (const unsigned char *p = (const unsigned char *)text; *p;) {
+			uint32_t cp = next_cp(p);
+
+			w += (cp >= 0x80 && cjk_glyph(cp) != nullptr) ? f->size : f->cell_w;
 		}
-		return n * f->cell_w;
+		return w;
 	}
 
 	void draw_text(litehtml::uint_ptr, const char *text, litehtml::uint_ptr h,
@@ -113,16 +165,15 @@ public:
 		int x = pos.x;
 
 		for (const unsigned char *p = (const unsigned char *)text; *p;) {
-			unsigned char c = *p++;
+			uint32_t cp = next_cp(p);
+			const uint8_t *g = cp >= 0x80 ? cjk_glyph(cp) : nullptr;
 
-			if (c >= 0x80) {
-				/* one glyph for a whole UTF-8 sequence */
-				while ((*p & 0xc0) == 0x80) {
-					p++;
-				}
-				c = '?';
+			if (g != nullptr) {
+				draw_alpha_glyph(f, g, x, pos.y, color);
+				x += f->size;
+				continue;
 			}
-			draw_glyph(f, c, x, pos.y, color);
+			draw_glyph(f, cp >= 0x80 ? '?' : (unsigned char)cp, x, pos.y, color);
 			x += f->cell_w;
 		}
 		if (f->decoration & litehtml::font_decoration_underline) {
@@ -173,10 +224,17 @@ public:
 
 	/* images are not supported: the elements get no size */
 	void load_image(const char *, const char *, bool) override {}
-	void get_image_size(const char *, const char *, litehtml::size &sz) override
+	void get_image_size(const char *src, const char *, litehtml::size &sz) override
 	{
-		sz.width = 0;
-		sz.height = 0;
+		int w = 0, h = 0;
+
+		if (g_image_fn != nullptr && g_image_fn(g_image_user, src, &w, &h) != nullptr) {
+			sz.width = w;
+			sz.height = h;
+		} else {
+			sz.width = 0;
+			sz.height = 0;
+		}
 	}
 
 	void draw_background(litehtml::uint_ptr, const std::vector<litehtml::background_paint> &bg) override
@@ -188,6 +246,12 @@ public:
 			const litehtml::position &b = p.clip_box;
 
 			fill({b.x, b.y, b.x + b.width, b.y + b.height}, p.color);
+		}
+		/* the images, farthest first */
+		for (int i = (int)bg.size() - 1; i >= 0; i--) {
+			if (!bg[i].image.empty()) {
+				draw_image(bg[i]);
+			}
 		}
 	}
 
@@ -312,6 +376,98 @@ private:
 			       (c.blue * a + db * (255 - a)) / 255);
 	}
 
+	void draw_alpha_glyph(const font_data *f, const uint8_t *g, int x, int y, litehtml::web_color c)
+	{
+		int cell = (int)g_cjk_cell;
+
+		for (int dy = 0; dy < f->size; dy++) {
+			int fy = y - scroll_ + dy;
+			int sy = dy * cell / f->size;
+
+			if (fy < clips_.back().y0 || fy >= clips_.back().y1) {
+				continue;
+			}
+			for (int dx = 0; dx < f->size; dx++) {
+				unsigned a = g[sy * cell + dx * cell / f->size];
+
+				if (a == 0) {
+					continue;
+				}
+				litehtml::web_color k = c;
+
+				k.alpha = (uint8_t)(c.alpha * a / 255);
+				put(x + dx, fy, k);
+				if (f->weight >= 600) {
+					put(x + dx + 1, fy, k);
+				}
+			}
+		}
+	}
+
+	/* an image, scaled to image_size, at (position_x, position_y), repeated as the style says */
+	void draw_image(const litehtml::background_paint &p)
+	{
+		int iw = 0, ih = 0;
+		const uint16_t *px;
+
+		if (g_image_fn == nullptr || p.image_size.width <= 0 || p.image_size.height <= 0) {
+			return;
+		}
+		px = g_image_fn(g_image_user, p.image.c_str(), &iw, &ih);
+		if (px == nullptr || iw <= 0 || ih <= 0) {
+			return;
+		}
+		const litehtml::position &b = p.clip_box;
+		rect r = intersect(to_frame({b.x, b.y, b.x + b.width, b.y + b.height}), clips_.back());
+		int dw = p.image_size.width, dh = p.image_size.height;
+		int ox = p.position_x, oy = p.position_y - scroll_;
+		bool rx = p.repeat == litehtml::background_repeat_repeat ||
+			  p.repeat == litehtml::background_repeat_repeat_x;
+		bool ry = p.repeat == litehtml::background_repeat_repeat ||
+			  p.repeat == litehtml::background_repeat_repeat_y;
+
+		if (r.x1 <= r.x0 || r.y1 <= r.y0) {
+			return;
+		}
+		/* the column of the source for every column of the frame */
+		xmap_.assign(r.x1 - r.x0, -1);
+		for (int x = r.x0; x < r.x1; x++) {
+			int tx = x - ox;
+
+			if (rx) {
+				tx %= dw;
+				if (tx < 0) {
+					tx += dw;
+				}
+			} else if (tx < 0 || tx >= dw) {
+				continue;
+			}
+			xmap_[x - r.x0] = tx * iw / dw;
+		}
+		for (int y = r.y0; y < r.y1; y++) {
+			int ty = y - oy;
+
+			if (ry) {
+				ty %= dh;
+				if (ty < 0) {
+					ty += dh;
+				}
+			} else if (ty < 0 || ty >= dh) {
+				continue;
+			}
+			const uint16_t *src = px + (size_t)(ty * ih / dh) * iw;
+			uint16_t *dst = fb_ + (size_t)y * stride_;
+
+			for (int x = r.x0; x < r.x1; x++) {
+				int sx = xmap_[x - r.x0];
+
+				if (sx >= 0) {
+					dst[x] = src[sx];
+				}
+			}
+		}
+	}
+
 	void side(const litehtml::border &b, const rect &r)
 	{
 		if (b.width > 0 && b.style != litehtml::border_style_none &&
@@ -370,6 +526,7 @@ private:
 	uint16_t *fb_ = nullptr;
 	int stride_ = 0, fw_ = 0, fh_ = 0, scroll_ = 0;
 	std::vector<rect> clips_;
+	std::vector<int> xmap_;
 	std::string title_;
 };
 
@@ -384,6 +541,28 @@ struct lh_page {
 };
 
 extern "C" {
+
+void lh_set_image_loader(lh_image_fn fn, void *user)
+{
+	g_image_fn = fn;
+	g_image_user = user;
+}
+
+void lh_set_cjk_font(const void *data, size_t size)
+{
+	const uint8_t *d = static_cast<const uint8_t *>(data);
+
+	g_cjk = nullptr;
+	if (data == nullptr || size < 16 || memcmp(d, "LHF1", 4) != 0) {
+		return;
+	}
+	memcpy(&g_cjk_count, d + 4, 4);
+	memcpy(&g_cjk_cell, d + 8, 4);
+	if (g_cjk_cell == 0 || size < 16 + (size_t)g_cjk_count * (4 + g_cjk_cell * g_cjk_cell)) {
+		return;
+	}
+	g_cjk = d;
+}
 
 struct lh_page *lh_load(const struct lh_font *font, const char *html, int width, int height)
 {
@@ -414,6 +593,15 @@ void lh_draw(struct lh_page *page, uint16_t *fb, int stride, int w, int h, int s
 	for (int y = 0; y < h; y++) {
 		std::fill(fb + (size_t)y * stride, fb + (size_t)y * stride + w, bg);
 	}
+	page->container.begin(fb, stride, w, h);
+
+	litehtml::position clip(0, 0, w, h);
+
+	page->doc->draw(0, 0, -scroll_y, &clip);
+}
+
+void lh_draw_over(struct lh_page *page, uint16_t *fb, int stride, int w, int h, int scroll_y)
+{
 	page->container.begin(fb, stride, w, h);
 
 	litehtml::position clip(0, 0, w, h);

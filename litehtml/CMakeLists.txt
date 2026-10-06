@@ -70,6 +70,11 @@ zephyr_include_directories(include)
 zephyr_library_named(litehtml_glue)
 zephyr_library_sources(src/litehtml_libc.c)
 add_dependencies(litehtml_glue litehtml_ext)
+if(CONFIG_LITEHTML_PAGED_HEAP)
+  zephyr_library_sources(src/litehtml_paged_heap.c)
+  zephyr_ld_options(-Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=realloc
+                    -Wl,--wrap=aligned_alloc -Wl,--wrap=free)
+endif()
 zephyr_link_libraries(litehtml_imported ${LH_LIBSTDCXX})
 # strtod() and friends of the toolchain's libm/libc that the minimal library lacks come
 # from libm; the math functions litehtml uses are few

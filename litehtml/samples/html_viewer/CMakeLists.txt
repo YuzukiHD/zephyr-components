@@ -7,4 +7,4 @@ list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR}/../..)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(html_viewer)
 
-target_sources(app PRIVATE src/main.c)
+target_sources(app PRIVATE src/main.c src/chunked.c src/assets.c)

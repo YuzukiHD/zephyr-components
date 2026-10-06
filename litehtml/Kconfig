@@ -9,3 +9,12 @@ config LITEHTML
 	  with the C++ standard library of the toolchain, and link it into the
 	  image. The library draws a page into an RGB565 buffer with a bitmap
 	  font, see include/litehtml_zephyr/lh.h.
+
+config LITEHTML_PAGED_HEAP
+	bool "Heap for the pages in demand paged memory"
+	depends on LITEHTML && DEMAND_PAGING && BACKING_STORE_SWAP && FILE_SYSTEM
+	help
+	  malloc() and friends can be served from a region that is bigger than
+	  the RAM and swapped to a file of the SD card, see
+	  include/litehtml_zephyr/lh_paged.h. malloc(), calloc(), realloc(),
+	  aligned_alloc() and free() of the image are wrapped at link time.

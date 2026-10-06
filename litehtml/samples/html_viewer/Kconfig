@@ -16,4 +16,26 @@ config SAMPLE_HTML_SCROLL_PX
 	  There is no input device bound yet, a long page scrolls by itself and
 	  starts over at the end.
 
+config SAMPLE_HTML_CHUNK_KB
+	int "Size of the pieces a page is cut into, in KiB (0: the page is laid out as a whole)"
+	default 12
+	help
+	  A page is read once to find the ends of the children of <body>; a piece ends at the first
+	  one that ends after this many bytes. Only the piece on the screen and the next one are in
+	  memory. A piece needs a few MiB for the tree, a page of dense markup takes more.
+
+config SAMPLE_HTML_BENCH
+	bool "Load every page_*.html of the card, smallest first, and print time and memory"
+	help
+	  A page is skipped when the memory used per byte of the earlier ones says it will not
+	  fit. The normal viewer starts afterwards.
+
+config SAMPLE_HTML_PAGED_MB
+	int "Size of the paged heap in MiB"
+	depends on LITEHTML_PAGED_HEAP
+	default 200
+	help
+	  Virtual size of the region that holds the page; the swap file
+	  (/SD:/swap.bin) grows up to the part that is used.
+
 source "Kconfig.zephyr"

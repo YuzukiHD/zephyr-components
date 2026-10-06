@@ -33,7 +33,7 @@ add_library(litehtml_zephyr STATIC
   ${LH_DIR}/src/gumbo/parser.c ${LH_DIR}/src/gumbo/string_buffer.c ${LH_DIR}/src/gumbo/string_piece.c
   ${LH_DIR}/src/gumbo/tag.c ${LH_DIR}/src/gumbo/tokenizer.c ${LH_DIR}/src/gumbo/utf8.c
   ${LH_DIR}/src/gumbo/util.c ${LH_DIR}/src/gumbo/vector.c
-  src/lh_render.cpp src/lh_stubs.cpp)
+  src/lh_render.cpp src/lh_stubs.cpp src/lh_index.c)
 
 set_target_properties(litehtml_zephyr PROPERTIES CXX_STANDARD 17 C_STANDARD 99)
 target_include_directories(litehtml_zephyr PRIVATE

@@ -1,0 +1,91 @@
+# Copyright (c) 2026 Yuzuki Tsuru
+# SPDX-License-Identifier: Apache-2.0
+
+config BOCHS
+	bool "Bochs x86 PC emulator (386/486 class, no FPU)"
+	depends on RISCV && CPP
+	select FILE_SYSTEM
+	help
+	  Build the Bochs emulator (git submodule bochs/Bochs, LGPL-2.1+) as a
+	  library: the 486 level CPU without FPU, the ISA PC devices (PIC,
+	  PIT, DMA, CMOS, keyboard controller, floppy, IDE disk, serial, VGA),
+	  no GUI, no plugins, no networking. Disk images and the BIOS are read
+	  through the Zephyr file system.
+
+if BOCHS
+
+config BOCHS_ICACHE_ENTRIES
+	int "Decoded instruction cache entries (32 bytes each, power of 2)"
+	default 4096
+	help
+	  The stock value is 512K entries (16 MiB); the board has 16 MB of
+	  RAM in total. Only the single stepping loop uses this cache.
+
+config BOCHS_PAGE_STAMP_ENTRIES
+	int "Self-modifying code stamps (4 bytes each, power of 2)"
+	default 16384
+	help
+	  One stamp per 4 KiB page of the physical space; the stock table covers
+	  the whole 4 GiB (1M entries, 4 MiB allocated at start). Pages share a
+	  stamp when the table is smaller, which only causes extra flushes of
+	  the decoded instruction cache. 16384 entries cover 64 MiB.
+
+config BOCHS_TRACE_ENTRIES
+	int "Trace cache entries (24 bytes each, power of 2)"
+	default 4096
+	help
+	  The stock value is 64K entries.
+
+config BOCHS_TRACE_POOL
+	int "Trace cache pool, decoded instructions"
+	default 8192
+	help
+	  The stock value is 576K instructions (tens of MiB), a trace takes up
+	  to 33.
+
+config BOCHS_TEXT_MIRROR
+	bool "Print the guest text screen on the serial console"
+	help
+	  Prints the changed rows of the text screen as "|row|text" lines. In a
+	  graphics mode (Windows) the lines are noise, so it is off by default.
+
+config BOCHS_SELFTEST
+	bool "Run self tests of the C library, floating point and softfloat before the emulator"
+	help
+	  Prints "memtest:", "fp:" and "softfloat:" lines with the result.
+
+config BOCHS_DIGEST
+	bool "Print a digest of the guest registers every virtual second"
+	help
+	  A timer prints DG lines (virtual ticks, eip, cs, general registers, flags)
+	  every virtual second, to compare a run with another build of Bochs
+	  (see patches/0004-digest.patch).
+
+config BOCHS_DIGEST_PERIOD
+	int "Digest period in virtual microseconds"
+	depends on BOCHS_DIGEST
+	default 1000000
+	help
+	  With IPS = 3000000 one virtual microsecond is 3 ticks.
+
+config BOCHS_DIGEST_CODE
+	bool "Print the code bytes at eip with each digest (and a buffer compare)"
+	depends on BOCHS_DIGEST
+
+config BOCHS_DIGEST_FROM
+	int "Digest window start (virtual ticks)"
+	depends on BOCHS_DIGEST
+	default 0
+
+config BOCHS_DIGEST_TO
+	int "Digest window end (virtual ticks, 0: no window)"
+	depends on BOCHS_DIGEST
+	default 0
+
+config BOCHS_HEARTBEAT
+	bool "Print the guest instruction pointer once a second"
+	help
+	  A thread reports the guest EIP and the virtual time, to see whether
+	  the guest runs.
+
+endif

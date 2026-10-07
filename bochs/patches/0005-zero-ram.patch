@@ -1,0 +1,13 @@
+diff --git a/bochs/memory/memory_stub.cc b/bochs/memory/memory_stub.cc
+index 6a5c93f..de088d0 100644
+--- a/bochs/memory/memory_stub.cc
++++ b/bochs/memory/memory_stub.cc
+@@ -124,6 +124,8 @@ void BX_MEMORY_STUB_C::init_memory(Bit64u guest, Bit64u host, Bit32u block_size)
+     BX_MEM_THIS blocks = NULL;
+   }
+   BX_MEM_THIS vector = alloc_vector_aligned(host + BIOSROMSZ + EXROMSIZE + 4096, BX_MEM_VECTOR_ALIGN);
++  // guest RAM starts as zeros (the stock allocation relies on fresh zeroed pages of the host)
++  memset(BX_MEM_THIS vector, 0, host);
+   BX_INFO(("allocated memory at %p. after alignment, vector=%p, block_size = %dK",
+         BX_MEM_THIS actual_vector, BX_MEM_THIS vector, block_size/1024));
+ 

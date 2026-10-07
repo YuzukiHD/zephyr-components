@@ -10,8 +10,9 @@ Zephyr modules for RISC-V boards. Each directory is a module of its own
 | [`nes/`](nes) | NES / Famicom emulator, the nofrendo core with a Zephyr glue layer and a player sample |
 | [`aic8800/`](aic8800) | AIC8800 WiFi chips on SDIO: host driver, supplicant, Zephyr `net_if` / `wifi_mgmt` glue, scan sample |
 | [`mgba/`](mgba) | the Game Boy / Game Boy Color / Game Boy Advance core of [mGBA](https://github.com/mgba-emu/mgba), a player sample with scaled output, on-screen keys and sound |
+| [`bochs/`](bochs) | the [Bochs](https://github.com/bochs-emu/Bochs) x86 PC emulator (486 class, no FPU) for a Windows 95 class guest; the BIOS runs on the board, output, input and a disk are not done yet |
 
-The upstream projects are git submodules (`ncnn/ncnn`, `mgba/mgba`, `doom/doomgeneric`); the nofrendo core
+The upstream projects are git submodules (`ncnn/ncnn`, `mgba/mgba`, `doom/doomgeneric`, `bochs/Bochs`); the nofrendo core
 of `nes/` is a copy in the tree:
 
 ```

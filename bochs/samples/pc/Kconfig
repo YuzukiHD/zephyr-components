@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "Bochs PC"
+
+config SAMPLE_PC_DISK
+	string "Hard disk image (flat file) on the SD card, empty for no disk"
+	default ""
+
+config SAMPLE_PC_DISK_CYLINDERS
+	int "Disk geometry: cylinders"
+	default 914
+
+config SAMPLE_PC_DISK_HEADS
+	int "Disk geometry: heads"
+	default 16
+
+config SAMPLE_PC_DISK_SPT
+	int "Disk geometry: sectors per track"
+	default 63
+
+config SAMPLE_PC_PATCH_AUTOEXEC
+	bool "Disable the SmartDrive and VBMOUSE lines of AUTOEXEC.BAT in the image"
+	help
+	  The 450 MB image of the v86 demo loads C:\\VBADOS\\VBMOUSE.EXE (a
+	  VirtualBox mouse driver) from AUTOEXEC.BAT, which stops with
+	  "Error in EXE file" here, and SmartDrive takes memory the guest does
+	  not have. Both lines are turned into remarks, in place and with the
+	  same length, at the file offset of that image (63808512).
+
+config SAMPLE_PC_IPS
+	int "Instructions per virtual second"
+	default 3000000
+	help
+	  The guest's clock (timer ticks, the countdown of the Windows 95 boot
+	  menu, delay loops that wait for the PIT) runs at this many
+	  instructions per second. The board executes about 3 million
+	  guest instructions per second, so with the default of 50 million a
+	  30 second countdown would take half an hour.
+
+config SAMPLE_PC_VERIFY
+	bool "Print the crc32 of the whole disk image at start"
+	help
+	  Reads the image once (about 15 s for 128 MB) and prints "crc32 <file> <value>",
+	  to compare with the crc32 of the original file.
+
+config SAMPLE_PC_MEGS
+	int "Guest memory in MiB"
+	default 10
+
+config SAMPLE_PC_TEST_PATTERN
+	bool "Show a test pattern instead of starting the emulator"
+	help
+	  Puts a 720x400 RGB565 test picture on the video plane the way the
+	  emulator does, to check the display path on its own.
+
+source "Kconfig.zephyr"

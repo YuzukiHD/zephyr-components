@@ -13,3 +13,6 @@
 [submodule "litehtml/litehtml"]
 	path = litehtml/litehtml
 	url = https://github.com/litehtml/litehtml.git
+[submodule "bochs/Bochs"]
+	path = bochs/Bochs
+	url = https://github.com/bochs-emu/Bochs.git

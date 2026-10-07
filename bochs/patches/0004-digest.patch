@@ -1,0 +1,60 @@
+diff --git a/bochs/main.cc b/bochs/main.cc
+index 38036c4..446a917 100644
+--- a/bochs/main.cc
++++ b/bochs/main.cc
+@@ -1090,6 +1090,45 @@ static void bx_sim_loop(void)
+ #endif /* BX_SUPPORT_SMP */
+ }
+ 
++#ifdef BX_DIGEST
++// development aid: a digest of the guest registers every BX_DIGEST ticks, to compare two builds
++static void bx_digest_timer(void *)
++{
++  BX_CPU_C *c = BX_CPU(0);
++#if defined(BX_DIGEST_FROM) && defined(BX_DIGEST_TO)
++  if (bx_pc_system.time_ticks() < BX_DIGEST_FROM || bx_pc_system.time_ticks() > BX_DIGEST_TO) return;
++#endif
++#ifdef BX_DIGEST_CODE
++  {
++    Bit8u code[8] = {0};
++    BX_MEM(0)->dbg_fetch_mem(c, (bx_phy_address)c->sregs[BX_SEG_REG_CS].cache.u.segment.base + c->get_instruction_pointer(), 8, code);
++    fprintf(stderr, "CODE %02x%02x%02x%02x%02x%02x%02x%02x\n", code[0], code[1], code[2], code[3], code[4], code[5], code[6], code[7]);
++  }
++#endif
++  fprintf(stderr, "DG %u %08x %04x %08x %08x %08x %08x %08x %08x %08x %08x\n", (unsigned)bx_pc_system.time_ticks(),
++          (unsigned)c->get_instruction_pointer(), (unsigned)c->sregs[BX_SEG_REG_CS].selector.value,
++          (unsigned)c->get_reg32(BX_32BIT_REG_EAX), (unsigned)c->get_reg32(BX_32BIT_REG_EBX),
++          (unsigned)c->get_reg32(BX_32BIT_REG_ECX), (unsigned)c->get_reg32(BX_32BIT_REG_EDX),
++          (unsigned)c->get_reg32(BX_32BIT_REG_ESI), (unsigned)c->get_reg32(BX_32BIT_REG_EDI),
++          (unsigned)c->get_reg32(BX_32BIT_REG_ESP), (unsigned)c->read_eflags());
++#ifdef BX_DIGEST_SCREEN
++  // the VGA text page, every BX_DIGEST_SCREEN digests
++  static unsigned n;
++  if (++n % BX_DIGEST_SCREEN == 0) {
++    Bit8u page[4000];
++    BX_MEM(0)->dbg_fetch_mem(c, 0xb8000, 4000, page);
++    for (int r = 0; r < 25; r++) {
++      char line[81];
++      for (int k = 0; k < 80; k++) { Bit8u ch = page[(r * 80 + k) * 2]; line[k] = (ch >= 0x20 && ch < 0x7f) ? ch : ' '; }
++      line[80] = 0;
++      for (int k = 79; k >= 0 && line[k] == ' '; k--) line[k] = 0;
++      if (line[0]) fprintf(stderr, "TXT %02d|%s\n", r, line);
++    }
++  }
++#endif
++}
++#endif
++
+ int bx_begin_simulation(int argc, char *argv[])
+ {
+   bx_user_quit = 0;
+@@ -1126,6 +1165,9 @@ int bx_begin_simulation(int argc, char *argv[])
+   BX_ASSERT(bx_cpu_count > 0);
+ 
+   bx_init_hardware();
++#ifdef BX_DIGEST
++  bx_pc_system.register_timer(NULL, bx_digest_timer, BX_DIGEST, 1, 1, "digest");
++#endif
+ 
+   SIM->set_init_done(1);
+ 

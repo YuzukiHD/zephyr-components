@@ -1,0 +1,4 @@
+name: bochs
+build:
+  cmake: .
+  kconfig: Kconfig

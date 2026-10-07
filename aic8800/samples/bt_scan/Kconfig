@@ -4,6 +4,16 @@ mainmenu "AIC8800 Bluetooth scan"
 
 config SAMPLE_BT_SCAN_SECONDS
 	int "Duration of the scan in seconds"
-	default 10
+	default 15
+
+config SAMPLE_BT_FIND_NAME
+	string "Part of the name of the device to look for (marked in the lists)"
+	default ""
+
+config SAMPLE_BT_CONNECT_ADDR
+	string "Address of the device to connect to after the scan (empty: scan only)"
+	default ""
+	help
+	  Upper case, as the scan prints it, for example "2C:19:5C:E0:6E:60".
 
 source "Kconfig.zephyr"

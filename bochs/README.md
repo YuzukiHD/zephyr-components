@@ -9,14 +9,14 @@ the x87 emulation) and plain VGA; the guest has 10 MB; the disk is a flat image 
 panel shows the VGA output (`src/bochs_gui.cc`); the guest text screen can be mirrored to the serial console
 as `|row|text` lines (`CONFIG_BOCHS_TEXT_MIRROR`, off by default, noise in graphics modes) and the serial
 console is the keyboard (keys are fed one at a time, a whole line at
-once overflows the guest's key queue). The Windows 95 image has not been run since the last fix, see
-"Not done". The disk images are the Bochs ones of
+once overflows the guest's key queue). Windows 95 (`windows95b.img`) boots to the desktop on the board; select it with
+`-DCONFIG_SAMPLE_PC_DISK=\"/SD:/windows95b.img\" -DCONFIG_SAMPLE_PC_DISK_CYLINDERS=507` (the sample
+default is Windows 3.1). The disk images are the Bochs ones of
 [archive.org/details/bochs_windows_images](https://archive.org/details/bochs_windows_images)
 (Windows 3.1: 260/16/63 cylinders/heads/sectors, Windows 95: 507/16/63), copied to the card as
 `Win31.img` and `windows95b.img`; their licence is not stated there, check yours.
 
-Not done: mouse (the sample has the serial keyboard only: no arrow or function keys), Windows 95 and
-the v86 demo image of Windows 95 after the BIOS address fix (below), sound, speed (below).
+Not done: mouse (the sample has the serial keyboard only: no arrow or function keys), the v86 demo image of Windows 95 after the BIOS address fix (below), sound, speed (below).
 
 Speed: the board executes about 1..3 million guest instructions per second (a native Bochs on a PC
 does 23 million), waiting loops that read ports about 0.65 million. The guest clock has to be set to

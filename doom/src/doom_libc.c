@@ -232,10 +232,32 @@ int doom_rename(const char *from, const char *to)
 int doom_mkdir(const char *path, int mode)
 {
 	char full[160];
-	const char *p = resolve(path, full, sizeof(full));
+	size_t len;
+	int ret;
+
+	/* "." is the base directory, a trailing slash is not part of the name */
+	resolve(strcmp(path, ".") == 0 ? "" : path, full, sizeof(full));
+	len = strlen(full);
+	while (len > 1U && full[len - 1U] == '/') {
+		full[--len] = '\0';
+	}
 
 	/* the base directory itself is the mount point */
-	return strcmp(p, doom_base_dir) == 0 ? 0 : fs_mkdir(p);
+	if (strcmp(full, doom_base_dir) == 0) {
+		return 0;
+	}
+
+	/* a directory that is there already is what the caller wants; the file system layer logs
+	 * an error for every mkdir of an existing one, so look first
+	 */
+	struct fs_dirent st;
+
+	if (fs_stat(full, &st) == 0 && st.type == FS_DIR_ENTRY_DIR) {
+		return 0;
+	}
+	ret = fs_mkdir(full);
+
+	return ret == -EEXIST ? 0 : ret;
 }
 
 /* %d %i %x %o and literal text: the formats of the number parsing in the config code */

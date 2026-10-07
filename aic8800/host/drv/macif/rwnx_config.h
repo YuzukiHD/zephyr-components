@@ -36,7 +36,10 @@ void * __hide_aliasing_typecast(void *foo);
 
 #define CFG_P2P
 
+/* SAE (WPA3) needs the crypto library and CONFIG_AIC8800_WPA3 builds the supplicant for it */
+#if !defined(__ZEPHYR__) || defined(CONFIG_AIC8800_WPA3)
 #define NX_CRYPTOLIB 1
+#endif
 
 #define CFG_WPS
 

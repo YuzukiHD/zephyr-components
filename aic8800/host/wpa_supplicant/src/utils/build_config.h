@@ -82,8 +82,8 @@
 #define EAP_WSC
 #endif
 
-// for now only used for SAE
-#ifdef CONFIG_MBEDTLS
+// for now only used for SAE, built with CONFIG_AIC8800_WPA3 (mbedTLS can be on for other reasons)
+#ifdef CONFIG_AIC8800_WPA3
 #define CONFIG_SME
 #define CONFIG_SAE
 #define CONFIG_ECC

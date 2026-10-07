@@ -32,6 +32,10 @@ config AIC8800
 
 if AIC8800
 
+module = AIC8800
+module-str = AIC8800
+source "subsys/logging/Kconfig.template.log_config"
+
 choice AIC8800_CHIP
 	prompt "AIC chip"
 	default AIC8800D80

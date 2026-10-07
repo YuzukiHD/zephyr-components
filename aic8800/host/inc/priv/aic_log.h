@@ -42,6 +42,17 @@
 #ifdef PLATFORM_ALLWIN_FREERTOS
 #include <stdio.h>
 
+#ifdef __ZEPHYR__
+/* the Zephyr logging system, see aic_log_redirect.h */
+#define AIC_LOG_PRINTF(fmt, ...)	aic_log(AIC_LVL_INF, fmt, ##__VA_ARGS__)
+#define AIC_LOG_TRACE(fmt, ...)	    aic_log(AIC_LVL_DBG, fmt, ##__VA_ARGS__)
+#define AIC_LOG_DEBUG(fmt, ...)   	aic_log(AIC_LVL_DBG, fmt, ##__VA_ARGS__)
+#define AIC_LOG_ERROR(fmt, ...)     aic_log(AIC_LVL_ERR, fmt, ##__VA_ARGS__)
+#define AIC_LOG_INFO(fmt, ...)      aic_log(AIC_LVL_INF, fmt, ##__VA_ARGS__)
+
+#define aic_dbg(fmt, ...)	aic_log(AIC_LVL_DBG, fmt, ##__VA_ARGS__)
+#else
+
 #ifdef AIC_LOG_DEBUG_ON
 
 #define AIC_LOG_PRINTF(fmt, ...)	printf(fmt, ##__VA_ARGS__)
@@ -64,6 +75,7 @@
 #if !defined(printk) && !defined(__ZEPHYR__)
 #define printk 		printf
 #endif
+#endif /* __ZEPHYR__ */
 #endif
 
 #if 0

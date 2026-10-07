@@ -28,6 +28,7 @@ zephyr_library_sources(
   host/platform/${OS}/plat_config.c
   host/rtos_al/${OS}/rtos_al.c
   src/aic_libc.c
+  src/aic_log.c
   wifi.c
   wifi_monitor.c
   userconfig.c
@@ -65,6 +66,9 @@ zephyr_library_include_directories(
   src
 )
 zephyr_include_directories(include)
+
+# printf, printk and the AIC_LOG macros of the driver end up in the Zephyr logging system
+zephyr_library_compile_options("SHELL:-include ${CMAKE_CURRENT_LIST_DIR}/include/aic_log_redirect.h")
 
 zephyr_library_compile_definitions(
   PLATFORM_ALLWIN_FREERTOS

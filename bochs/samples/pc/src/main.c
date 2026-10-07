@@ -151,8 +151,8 @@ int main(void)
 		     "port_e9_hack: enabled=1\n"
 		     "log: -\n"
 		     "panic: action=fatal\n"
-		     "error: action=report\n"
-		     "info: action=report\n"
+		     "error: action=ignore\n"
+		     "info: action=ignore\n"
 		     "debug: action=ignore\n",
 		     CONFIG_SAMPLE_PC_MEGS, CONFIG_SAMPLE_PC_IPS);
 	if (CONFIG_SAMPLE_PC_DISK[0] != '\0') {

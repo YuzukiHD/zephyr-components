@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "AIC8800 WiFi iperf3"
+
+config SAMPLE_WIFI_SSID
+	string "SSID to connect to"
+	default ""
+
+config SAMPLE_WIFI_PSK
+	string "WPA2 passphrase"
+	default ""
+
+config SAMPLE_WIFI_CHANNEL
+	int "Channel of the access point, 0 for any"
+	default 0
+
+config SAMPLE_IPERF3_SERVER
+	string "IPv4 address of the iperf3 server"
+	default ""
+
+config SAMPLE_IPERF3_PORT
+	int "Port of the iperf3 server"
+	default 5201
+
+config SAMPLE_IPERF3_SECONDS
+	int "Duration of each run in seconds"
+	default 10
+
+source "Kconfig.zephyr"

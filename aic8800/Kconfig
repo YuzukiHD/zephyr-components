@@ -89,6 +89,18 @@ config NET_MAX_CONTEXTS
 config ZVFS_OPEN_MAX
 	default 32
 
+config AIC8800_BT
+	bool "Bluetooth"
+	depends on BT
+	depends on BT_H4
+	help
+	  The Bluetooth controller of the chip on its UART (HCI H:4 with
+	  hardware flow control, the "zephyr,bt-hci-uart" node on that UART).
+	  Its firmware and settings are sent over SDIO together with the WiFi
+	  firmware when the chip is started, the BT_RSTN line of the
+	  "bt-reset-gpios" property is released when the HCI transport is
+	  opened, after the chip has been started.
+
 config AIC8800_WPA3
 	bool "WPA3 (SAE)"
 	depends on MBEDTLS

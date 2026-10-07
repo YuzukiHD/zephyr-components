@@ -30,3 +30,10 @@ properties:
     description: |
       Line the chip uses to wake the host (WAKEUP_AP). It is only configured
       as an input; the card interrupt travels on the SDIO data line.
+
+  bt-reset-gpios:
+    type: phandle-array
+    description: |
+      Reset of the Bluetooth part (BT_RSTN). It is held in reset while the
+      firmware is downloaded over SDIO and released when the HCI transport is
+      opened (CONFIG_AIC8800_BT).

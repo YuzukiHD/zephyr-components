@@ -37,9 +37,13 @@ zephyr_library_sources(
 if(CONFIG_AIC8800_P2P)
   zephyr_library_sources(${AIC_P2P_SRCS})
 endif()
+if(CONFIG_AIC8800_BT)
+  zephyr_library_sources(src/aic_bt.c)
+  # the firmware download for the Bluetooth part is compiled in with this
+  zephyr_library_compile_definitions(CONFIG_BT_SUPPORT)
+endif()
 if(CONFIG_AIC8800_WPA3)
   zephyr_library_sources(${AIC_WPA3_SRCS})
-  zephyr_library_compile_definitions(CONFIG_MBEDTLS)
   zephyr_library_link_libraries(mbedTLS)
 endif()
 

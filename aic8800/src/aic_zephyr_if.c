@@ -172,6 +172,9 @@ void aicz_link_event(enum aicz_link_event ev)
 	case AICZ_LINK_CONNECTED:
 		d->connected = true;
 		k_sem_give(&d->joined);
+		/* DHCP does nothing on an interface that is not up and running */
+		net_if_up(d->iface);
+		net_eth_carrier_on(d->iface);
 		wifi_mgmt_raise_connect_result_event(d->iface, WIFI_STATUS_CONN_SUCCESS);
 		aicz_zif_dhcp_start(d->iface);
 		break;

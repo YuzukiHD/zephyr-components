@@ -42,8 +42,8 @@ config AIC8800D
 config AIC8800DW
 	bool "AIC8800DW"
 
-config AIC8800D40L
-	bool "AIC8800D40L"
+config AIC8800DC
+	bool "AIC8800DC (AIC8800D40)"
 
 config AIC8800D80
 	bool "AIC8800D80"
@@ -71,6 +71,19 @@ config AIC8800_SDIO_DEV
 	help
 	  Devicetree node label of the SD host controller the chip is
 	  wired to.
+
+# The control links between the driver tasks and the supplicant are TCP connections on the
+# loopback interface (two connections per link, up to three links), on top of the sockets of the
+# application.
+config NET_MAX_CONN
+	default 16
+
+config NET_MAX_CONTEXTS
+	default 24
+
+# every control link socket is a file descriptor too, three per link while one is set up
+config ZVFS_OPEN_MAX
+	default 32
 
 config AIC8800_WPA3
 	bool "WPA3 (SAE)"

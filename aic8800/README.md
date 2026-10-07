@@ -1,6 +1,6 @@
 # aic8800
 
-Zephyr module for the AIC8800 WiFi chips (D, DW, D40L, D80) on an SDIO bus: the FullMAC
+Zephyr module for the AIC8800 WiFi chips (D, DW, DC = D40, D80) on an SDIO bus: the FullMAC
 host driver (command queue, TX/RX descriptors, firmware download for every chip variant), the
 supplicant (station, access point, P2P, WPS, Hotspot 2.0, SAE), and the glue to the Zephyr
 kernel, SDIO stack and network stack (`net_if` with `wifi_mgmt`: scan, connect, disconnect, DHCPv4).

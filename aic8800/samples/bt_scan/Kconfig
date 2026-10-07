@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "AIC8800 Bluetooth scan"
+
+config SAMPLE_BT_SCAN_SECONDS
+	int "Duration of the scan in seconds"
+	default 10
+
+source "Kconfig.zephyr"

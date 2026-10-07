@@ -177,6 +177,10 @@ struct sdio_func *sdio_find_func(u8 class, u16 vendor, u16 device)
 		if (func->card == NULL) {
 			continue;
 		}
+		/* a function without a manufacturer tuple of its own has the one of the card */
+		const struct sdio_cis *cis = (func->cis.manf_id == 0 && func->cis.manf_code == 0) ?
+					     &func->card->func0.cis : &func->cis;
+
 		if (class != (u8)SDIO_ANY_ID) {
 			/* standard interface code of the function basic register */
 			if (sdio_read_byte(&func->card->func0, SDIO_FBR_BASE(i), &fbr) != 0 ||
@@ -184,10 +188,10 @@ struct sdio_func *sdio_find_func(u8 class, u16 vendor, u16 device)
 				continue;
 			}
 		}
-		if (vendor != (u16)SDIO_ANY_ID && vendor != func->cis.manf_id) {
+		if (vendor != (u16)SDIO_ANY_ID && vendor != cis->manf_id) {
 			continue;
 		}
-		if (device != (u16)SDIO_ANY_ID && device != func->cis.manf_code) {
+		if (device != (u16)SDIO_ANY_ID && device != cis->manf_code) {
 			continue;
 		}
 		return func;

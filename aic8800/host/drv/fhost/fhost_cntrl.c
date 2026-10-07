@@ -10,6 +10,7 @@
  ****************************************************************************************
  */
 
+#include <errno.h>
 #include <string.h>
 #include "lwip/sockets.h"
 #include "fhost.h"
@@ -2029,7 +2030,7 @@ struct fhost_cntrl_link *fhost_cntrl_cfgrwnx_link_open(void)
 
     int sock = socket(PF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
-        printf("sock_recv failed\n");
+        printf("sock_recv failed: errno %d\n", errno);
         goto err;
     }
 
@@ -2038,34 +2039,34 @@ struct fhost_cntrl_link *fhost_cntrl_cfgrwnx_link_open(void)
     recv_addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     recv_addr.sin_port = htons(0);
     if (bind(sock, (struct sockaddr *)&recv_addr, sizeof(recv_addr)) < 0) {
-        printf("sock_bind failed\n");
+        printf("sock_bind failed: errno %d\n", errno);
         goto err;
     }
 
     if (listen(sock, 1) < 0) {
-        printf("sock_listen failed\n");
+        printf("sock_listen failed: errno %d\n", errno);
         goto err;
     }
 
     socklen_t len = (socklen_t)sizeof(recv_addr);
     if(getsockname(sock, (struct sockaddr *)&recv_addr, &len) < 0) {
-        printf("sock_getsockname failed\n");
+        printf("sock_getsockname failed: errno %d\n", errno);
         goto err;
     }
 
     cfgrwnx_link[i].sock_send = socket(PF_INET, SOCK_STREAM, 0);
     if (cfgrwnx_link[i].sock_send < 0) {
-        printf("sock_send failed\n");
+        printf("sock_send failed: errno %d\n", errno);
         goto err;
     }
 
     if (connect(cfgrwnx_link[i].sock_send, (struct sockaddr *)&recv_addr, len) < 0) {
-        printf("sock_connect failed\n");
+        printf("sock_connect failed: errno %d\n", errno);
         goto err;
     }
 
     if ((cfgrwnx_link[i].sock_recv = accept(sock, (struct sockaddr *)&recv_addr, &len)) < 0) {
-        printf("sock_accept failed\n");
+        printf("sock_accept failed: errno %d\n", errno);
         goto err;
     }
     close(sock);

@@ -47,7 +47,7 @@ typedef uint32_t in_addr_t;
 #define MSG_DONTWAIT	0x08
 
 #define INADDR_ANY	((in_addr_t)0x00000000UL)
-#define INADDR_LOOPBACK	((in_addr_t)0x0100007fUL)
+#define INADDR_LOOPBACK	((in_addr_t)0x7f000001UL)
 #define INADDR_NONE	((in_addr_t)0xffffffffUL)
 
 #define F_GETFL		3

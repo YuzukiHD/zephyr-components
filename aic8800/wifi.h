@@ -5,7 +5,6 @@
 //#include "lwip/netifapi.h"
 #include "co_int.h"
 #if defined(PLATFORM_ALLWIN_RT_THREAD) || defined(PLATFORM_ALLWIN_FREERTOS)
-#include "wifi_driver_event.h"
 #endif
 
 #define AIC_MAC_ADDR_LEN    6

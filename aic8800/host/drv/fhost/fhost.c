@@ -1334,15 +1334,6 @@ int fhost_sta_cfg(int fhost_vif_idx, struct fhost_vif_sta_cfg *cfg)
 
     extern bool time_out_flag;
     if ((res == -1) && (time_out_flag)) {
-        extern wifi_drv_event_cbk aw_aic_wifi_event_cb;
-        if (aw_aic_wifi_event_cb) {
-            wifi_drv_event drv_event;
-            struct wifi_sta_event dev_event;
-            dev_event.event_type = WIFI_STA_EVENT_ON_ASSOC_FAIL;
-            drv_event.type = WIFI_DRV_EVENT_STA;
-            drv_event.node.sta_event = dev_event;
-            aw_aic_wifi_event_cb(&drv_event);
-        }
         time_out_flag = false;
     }
   end:

@@ -23,7 +23,6 @@
 #include "ap.h"
 
 #if defined(PLATFORM_ALLWIN_RT_THREAD) || defined(PLATFORM_ALLWIN_FREERTOS)
-#include "wifi_driver_event.h"
 #include "wifi.h"
 #ifdef PLATFORM_ALLWIN_RT_THREAD
 #include <pthread.h>
@@ -351,16 +350,7 @@ static void fhost_wpa_event_process(enum fhost_wpa_event event, void *param,
                 return;
             AIC_LOG_PRINTF("WPA enter FHOST_WPA_STATE_CONNECTED\n");
             wpa_conf->state = FHOST_WPA_STATE_CONNECTED;
-            extern wifi_drv_event_cbk aw_aic_wifi_event_cb;
             AIC_WIFI_MODE mode = aic_wifi_get_mode();
-            if (aw_aic_wifi_event_cb &&  mode == WIFI_MODE_STA) {
-                wifi_drv_event drv_event;
-                struct wifi_sta_event dev_event;
-                dev_event.event_type = WIFI_STA_EVENT_ON_ASSOC;
-                drv_event.type = WIFI_DRV_EVENT_STA;
-                drv_event.node.sta_event = dev_event;
-                aw_aic_wifi_event_cb(&drv_event);
-            }
             if (g_aic_wifi_event_cb &&  (mode == WIFI_MODE_STA)) {
                 aic_wifi_event_data enData = {0};
                 enData.data.join_data.reserved[0] = 0;

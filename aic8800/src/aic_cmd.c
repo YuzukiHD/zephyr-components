@@ -25,7 +25,6 @@
 #include "plat_config.h"
 #include "porting.h"
 #include "aic_log.h"
-#include "wifi_driver_event.h"
 
 extern struct rwnx_hw *g_rwnx_hw;
 
@@ -137,20 +136,6 @@ int aic_start_wl1_dhcpc(const char *ifname)
     return 0;
 }
 
-int aic_wifi_drv_event_cbk(const wifi_drv_event *drv_event)
-{
-    printf("wifi event: %d\n", drv_event->type);
-    switch (drv_event->type) {
-    case WIFI_DRV_EVENT_STA:
-        aic_enable_netif("wl1");
-        aic_start_wl1_dhcpc("wl1");
-        break;
-    default:
-        break;
-    }
-    return 0;
-}
-
 #define CMD_BUF_SIZE 256
 static char cmd_buf[CMD_BUF_SIZE];
 
@@ -177,7 +162,6 @@ int aic_cmd_commands(int argc, char *argv[])
             aic_wifi_reset_power();
             sdio_controller_init(platform_get_sdc_index());
             tcpip_init(NULL, NULL);
-            wifi_drv_event_set_cbk(aic_wifi_drv_event_cbk);
             aic_wifi_init(WIFI_MODE_UNKNOWN, 0, NULL);
             return 0;
         } else if (strcmp(argv[offset], "deinit") == 0) {
@@ -188,7 +172,6 @@ int aic_cmd_commands(int argc, char *argv[])
             rtos_task_suspend(10);
             sdio_controller_init(platform_get_sdc_index());
             tcpip_init(NULL, NULL);
-            wifi_drv_event_set_cbk(aic_wifi_drv_event_cbk);
             aic_wifi_init(WIFI_MODE_RFTEST, 0, NULL);
             return 0;
         }

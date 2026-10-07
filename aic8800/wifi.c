@@ -34,7 +34,6 @@ extern const char aic_wifi_version[];
 
 
 aic_wifi_event_cb g_aic_wifi_event_cb = NULL;
-wifi_drv_event_cbk aw_aic_wifi_event_cb = NULL;
 int dev_mode = WIFI_MODE_UNKNOWN;
 int g_wifi_init = 0;
 
@@ -517,22 +516,6 @@ void aic_wifi_event_register(aic_wifi_event_cb cb)
     g_aic_wifi_event_cb = (aic_wifi_event_cb)cb;
 }
 
-int wifi_drv_event_set_cbk(wifi_drv_event_cbk cbk)
-{
-    aw_aic_wifi_event_cb = cbk;
-    AIC_LOG_PRINTF("%s is called, aw_aic_wifi_event_cb: %p\r\n", __func__, aw_aic_wifi_event_cb);
-
-    return 1;
-}
-
-void wifi_drv_event_reset_cbk(void) {
-    aw_aic_wifi_event_cb = NULL;
-
-    aic_wifi_deinit(WIFI_MODE_AP);
-}
-
-
-static unsigned int aic_p2p_dev_port = 7236; //default port number
 static unsigned char aic_p2p_associating = 0;
 
 static wifi_event_handle g_wifi_event_handler[AIC_WIFI_EVENT_MAX] = {NULL};
@@ -641,7 +624,6 @@ void aic_wifi_event_callback(AIC_WIFI_EVENT enEvent, aic_wifi_event_data *enData
             }
         case PRO_DISC_REQ_EVENT:
             {
-                struct wifi_p2p_event p2p_event;
             	if (aic_p2p_associating) {
 					break;
 				}
@@ -653,24 +635,14 @@ void aic_wifi_event_callback(AIC_WIFI_EVENT enEvent, aic_wifi_event_data *enData
                 {
                     g_wifi_event_handler[PRO_DISC_REQ_EVENT](enData);
                 }
-                if (aw_aic_wifi_event_cb) {
-                    wifi_drv_event drv_event;
-                    p2p_event.event_type = WIFI_P2P_EVENT_GOT_PRO_DISC_REQ_AFTER_GONEGO_OK;
-                    p2p_event.peer_dev_mac_addr[0] = (unsigned char)enData->data.auth_deauth_data.reserved[0];
-                    p2p_event.peer_dev_mac_addr[1] = (unsigned char)enData->data.auth_deauth_data.reserved[1];
-                    p2p_event.peer_dev_mac_addr[2] = (unsigned char)enData->data.auth_deauth_data.reserved[2];
-                    p2p_event.peer_dev_mac_addr[3] = (unsigned char)enData->data.auth_deauth_data.reserved[3];
-                    p2p_event.peer_dev_mac_addr[4] = (unsigned char)enData->data.auth_deauth_data.reserved[4];
-                    p2p_event.peer_dev_mac_addr[5] = (unsigned char)enData->data.auth_deauth_data.reserved[5];
-                    drv_event.type = WIFI_DRV_EVENT_P2P;
-                    drv_event.node.p2p_event = p2p_event;
-
-                    aic_p2p_dev_port = enData->p2p_dev_port_num;
-                    aw_aic_wifi_event_cb(&drv_event);
-                }
                 // user_wps_button_pushed();
                 extern int rwnx_p2p_disc_req(uint8_t *mac_addr);
-                rwnx_p2p_disc_req(p2p_event.peer_dev_mac_addr);
+                uint8_t peer_mac[6];
+
+                for (int i = 0; i < 6; i++) {
+                    peer_mac[i] = (unsigned char)enData->data.auth_deauth_data.reserved[i];
+                }
+                rwnx_p2p_disc_req(peer_mac);
                 break;
             }
         case EAPOL_STA_FIN_EVENT:
@@ -682,22 +654,6 @@ void aic_wifi_event_callback(AIC_WIFI_EVENT enEvent, aic_wifi_event_data *enData
                 {
                     g_wifi_event_handler[EAPOL_STA_FIN_EVENT](enData);
                 }
-                if (aw_aic_wifi_event_cb) {
-                    wifi_drv_event drv_event;
-                    struct wifi_ap_event ap_event;
-                    ap_event.event_type = WIFI_AP_EVENT_ON_ASSOC;
-                    drv_event.type = WIFI_DRV_EVENT_AP;
-                    ap_event.peer_dev_mac_addr[0] = (unsigned char)enData->data.auth_deauth_data.reserved[0];
-                    ap_event.peer_dev_mac_addr[1] = (unsigned char)enData->data.auth_deauth_data.reserved[1];
-                    ap_event.peer_dev_mac_addr[2] = (unsigned char)enData->data.auth_deauth_data.reserved[2];
-                    ap_event.peer_dev_mac_addr[3] = (unsigned char)enData->data.auth_deauth_data.reserved[3];
-                    ap_event.peer_dev_mac_addr[4] = (unsigned char)enData->data.auth_deauth_data.reserved[4];
-                    ap_event.peer_dev_mac_addr[5] = (unsigned char)enData->data.auth_deauth_data.reserved[5];
-                    drv_event.node.ap_event = ap_event;
-
-                    //diag_dump_buf(ap_event.peer_dev_mac_addr, 6);
-                    aw_aic_wifi_event_cb(&drv_event);
-                }
                 break;
             }
         case EAPOL_P2P_FIN_EVENT:
@@ -708,22 +664,6 @@ void aic_wifi_event_callback(AIC_WIFI_EVENT enEvent, aic_wifi_event_data *enData
                 if (g_wifi_event_handler[EAPOL_P2P_FIN_EVENT])
                 {
                     g_wifi_event_handler[EAPOL_P2P_FIN_EVENT](enData);
-                }
-                if (aw_aic_wifi_event_cb) {
-                    wifi_drv_event drv_event;
-                    struct wifi_p2p_event p2p_event;
-                    p2p_event.event_type = WIFI_P2P_EVENT_ON_ASSOC_REQ;
-                    p2p_event.peer_dev_port = aic_p2p_dev_port;
-                    p2p_event.peer_dev_mac_addr[0] = (unsigned char)enData->data.auth_deauth_data.reserved[0];
-                    p2p_event.peer_dev_mac_addr[1] = (unsigned char)enData->data.auth_deauth_data.reserved[1];
-                    p2p_event.peer_dev_mac_addr[2] = (unsigned char)enData->data.auth_deauth_data.reserved[2];
-                    p2p_event.peer_dev_mac_addr[3] = (unsigned char)enData->data.auth_deauth_data.reserved[3];
-                    p2p_event.peer_dev_mac_addr[4] = (unsigned char)enData->data.auth_deauth_data.reserved[4];
-                    p2p_event.peer_dev_mac_addr[5] = (unsigned char)enData->data.auth_deauth_data.reserved[5];
-                    drv_event.type = WIFI_DRV_EVENT_P2P;
-                    drv_event.node.p2p_event = p2p_event;
-
-                    aw_aic_wifi_event_cb(&drv_event);
                 }
                 break;
             }
@@ -769,14 +709,6 @@ void aic_wifi_event_callback(AIC_WIFI_EVENT enEvent, aic_wifi_event_data *enData
                 {
                     g_wifi_event_handler[STA_DISCONNECT_EVENT](enData);
                 }
-                if (aw_aic_wifi_event_cb &&  mode == WIFI_MODE_STA) {
-                    wifi_drv_event drv_event;
-                    struct wifi_sta_event dev_event;
-                    dev_event.event_type = WIFI_STA_EVENT_ON_DISASSOC;
-                    drv_event.type = WIFI_DRV_EVENT_STA;
-                    drv_event.node.sta_event = dev_event;
-                    aw_aic_wifi_event_cb(&drv_event);
-                }
                 break;
             }
         case DISASSOC_STA_IND_EVENT:
@@ -803,21 +735,6 @@ void aic_wifi_event_callback(AIC_WIFI_EVENT enEvent, aic_wifi_event_data *enData
                     WLAN_SYS_StatusCallback(&event);
                 }
                 #endif
-                if(aw_aic_wifi_event_cb) {
-                    wifi_drv_event drv_event;
-                    struct wifi_ap_event ap_event;
-                    ap_event.event_type = WIFI_AP_EVENT_ON_DISASSOC;
-                    ap_event.peer_dev_mac_addr[0] = (unsigned char)enData->data.auth_deauth_data.reserved[0];
-                    ap_event.peer_dev_mac_addr[1] = (unsigned char)enData->data.auth_deauth_data.reserved[1];
-                    ap_event.peer_dev_mac_addr[2] = (unsigned char)enData->data.auth_deauth_data.reserved[2];
-                    ap_event.peer_dev_mac_addr[3] = (unsigned char)enData->data.auth_deauth_data.reserved[3];
-                    ap_event.peer_dev_mac_addr[4] = (unsigned char)enData->data.auth_deauth_data.reserved[4];
-                    ap_event.peer_dev_mac_addr[5] = (unsigned char)enData->data.auth_deauth_data.reserved[5];
-                    drv_event.type = WIFI_DRV_EVENT_AP;
-                    drv_event.node.ap_event = ap_event;
-
-                    aw_aic_wifi_event_cb(&drv_event);
-                }
                 break;
             }
         case DISASSOC_P2P_IND_EVENT:
@@ -844,21 +761,6 @@ void aic_wifi_event_callback(AIC_WIFI_EVENT enEvent, aic_wifi_event_data *enData
                     WLAN_SYS_StatusCallback(&event);
                 }
                 #endif
-                if(aw_aic_wifi_event_cb) {
-                    wifi_drv_event drv_event;
-                    struct wifi_p2p_event p2p_event;
-                    p2p_event.event_type = WIFI_P2P_EVENT_ON_DISASSOC;
-                    p2p_event.peer_dev_mac_addr[0] = (unsigned char)enData->data.auth_deauth_data.reserved[0];
-                    p2p_event.peer_dev_mac_addr[1] = (unsigned char)enData->data.auth_deauth_data.reserved[1];
-                    p2p_event.peer_dev_mac_addr[2] = (unsigned char)enData->data.auth_deauth_data.reserved[2];
-                    p2p_event.peer_dev_mac_addr[3] = (unsigned char)enData->data.auth_deauth_data.reserved[3];
-                    p2p_event.peer_dev_mac_addr[4] = (unsigned char)enData->data.auth_deauth_data.reserved[4];
-                    p2p_event.peer_dev_mac_addr[5] = (unsigned char)enData->data.auth_deauth_data.reserved[5];
-                    drv_event.type = WIFI_DRV_EVENT_P2P;
-                    drv_event.node.p2p_event = p2p_event;
-
-                    aw_aic_wifi_event_cb(&drv_event);
-                }
                 break;
             }
         case AP_STARTED_EVENT:
@@ -945,8 +847,6 @@ int wifi_scan_event_handler(void *enData)
 int aic_wifi_init(int mode, int chip_id, void *param)
 {
     int ret = 0;
-    unsigned char mac_addr[6] = {0};
-    //unsigned int mac_local[6] = {0};
 
     AIC_LOG_PRINTF("aic_wifi_init, mode=%d\r\n", mode);
     AIC_LOG_PRINTF("release version:%s\r\n", aic_wifi_version);
@@ -974,25 +874,6 @@ int aic_wifi_init(int mode, int chip_id, void *param)
     test_main_entry();
     #endif
     AIC_LOG_PRINTF("aic_wifi_init ok\r\n");
-retry:
-    if (aw_aic_wifi_event_cb) {
-        wifi_drv_event drv_event;
-        struct wifi_dev_event dev_event;
-        dev_event.drv_status = WIFI_DEVICE_DRIVER_LOADED;
-        memcpy(mac_addr, get_mac_address(), 6);
-        dev_event.local_mac_addr[0] = mac_addr[0];
-        dev_event.local_mac_addr[1] = mac_addr[1];
-        dev_event.local_mac_addr[2] = mac_addr[2];
-        dev_event.local_mac_addr[3] = mac_addr[3];
-        dev_event.local_mac_addr[4] = mac_addr[4];
-        dev_event.local_mac_addr[5] = mac_addr[5];
-        drv_event.type = WIFI_DRV_EVENT_NET_DEVICE;
-        drv_event.node.dev_event = dev_event;
-        aw_aic_wifi_event_cb(&drv_event);
-    } else {
-        rtos_msleep(5);
-        goto retry;
-    }
 
     return g_rwnx_hw->net_id;
 }
@@ -1006,14 +887,6 @@ void aic_wifi_deinit(int mode)
        aic_wifi_close(mode);
 
        aic_wifi_event_register(NULL);
-    }
-    if(aw_aic_wifi_event_cb) {
-        wifi_drv_event drv_event;
-        struct wifi_dev_event dev_event;
-        dev_event.drv_status = WIFI_DEVICE_DRIVER_UNLOAD;
-        drv_event.type = WIFI_DRV_EVENT_NET_DEVICE;
-        drv_event.node.dev_event = dev_event;
-        aw_aic_wifi_event_cb(&drv_event);
     }
     g_wifi_init = 0;
 

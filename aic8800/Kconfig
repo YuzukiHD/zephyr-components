@@ -101,6 +101,11 @@ config AIC8800_BT
 	  "bt-reset-gpios" property is released when the HCI transport is
 	  opened, after the chip has been started.
 
+# the controller answers Host Buffer Size (sent when the host does ACL flow control) with
+# "unsupported", which fails bt_enable()
+configdefault BT_HCI_ACL_FLOW_CONTROL
+	default n if AIC8800_BT
+
 config AIC8800_WPA3
 	bool "WPA3 (SAE)"
 	depends on MBEDTLS

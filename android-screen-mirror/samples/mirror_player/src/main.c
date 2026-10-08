@@ -45,18 +45,96 @@ static struct fs_mount_t mp = {
 /* ---- WiFi ----------------------------------------------------------------------------- */
 
 static struct net_mgmt_event_callback wifi_cb, ipv4_cb;
-static K_SEM_DEFINE(connected, 0, 1);
+static K_SEM_DEFINE(connect_done, 0, 1);
 static K_SEM_DEFINE(got_ip, 0, 1);
+static volatile int connect_status;
+
+#define MAX_NETS	24
+
+struct net_entry {
+	char ssid[33];
+	int8_t rssi;
+};
+
+static struct net_entry nets[MAX_NETS];
+static int net_count;
+static struct k_work scan_work;
+
+static void scan_run(struct k_work *w)
+{
+	struct net_if *iface = net_if_get_first_wifi();
+
+	net_count = 0;
+	if (iface == NULL || net_mgmt(NET_REQUEST_WIFI_SCAN, iface, NULL, 0) != 0) {
+		printk("wifi: scan request failed\n");
+		ui_wifi_networks("");
+	}
+}
+
+static void scan_start(void)
+{
+	k_work_submit(&scan_work);
+}
+
+/* A scan result: one entry per network name, the strongest signal wins */
+static void scan_result(const struct wifi_scan_result *r)
+{
+	if (r->ssid_length == 0U || r->ssid_length > 32U || memchr(r->ssid, '\n', r->ssid_length)) {
+		return;
+	}
+	for (int i = 0; i < net_count; i++) {
+		if (strlen(nets[i].ssid) == r->ssid_length &&
+		    memcmp(nets[i].ssid, r->ssid, r->ssid_length) == 0) {
+			nets[i].rssi = MAX(nets[i].rssi, r->rssi);
+			return;
+		}
+	}
+	if (net_count < MAX_NETS) {
+		memcpy(nets[net_count].ssid, r->ssid, r->ssid_length);
+		nets[net_count].ssid[r->ssid_length] = '\0';
+		nets[net_count].rssi = r->rssi;
+		net_count++;
+	}
+}
+
+static void scan_done(void)
+{
+	static char opts[1024];
+	size_t w = 0;
+
+	for (int i = 1; i < net_count; i++) {
+		for (int j = i; j > 0 && nets[j].rssi > nets[j - 1].rssi; j--) {
+			struct net_entry t = nets[j];
+
+			nets[j] = nets[j - 1];
+			nets[j - 1] = t;
+		}
+	}
+	opts[0] = '\0';
+	for (int i = 0; i < net_count; i++) {
+		size_t l = strlen(nets[i].ssid);
+
+		if (w + l + 2U >= sizeof(opts)) {
+			break;
+		}
+		w += snprintk(opts + w, sizeof(opts) - w, "%s%s", i > 0 ? "\n" : "", nets[i].ssid);
+	}
+	printk("wifi: %d networks found\n", net_count);
+	ui_wifi_networks(opts);
+}
 
 static void wifi_event(struct net_mgmt_event_callback *cb, uint64_t event, struct net_if *iface)
 {
-	if (event == NET_EVENT_WIFI_CONNECT_RESULT) {
+	if (event == NET_EVENT_WIFI_SCAN_RESULT) {
+		scan_result(cb->info);
+	} else if (event == NET_EVENT_WIFI_SCAN_DONE) {
+		scan_done();
+	} else if (event == NET_EVENT_WIFI_CONNECT_RESULT) {
 		const struct wifi_status *s = cb->info;
 
 		printk("wifi: connect %s (%d)\n", s->status == 0 ? "ok" : "failed", s->status);
-		if (s->status == 0) {
-			k_sem_give(&connected);
-		}
+		connect_status = s->status;
+		k_sem_give(&connect_done);
 	} else if (event == NET_EVENT_WIFI_DISCONNECT_RESULT) {
 		printk("wifi: disconnected\n");
 	}
@@ -72,15 +150,68 @@ static void ipv4_event(struct net_mgmt_event_callback *cb, uint64_t event, struc
 	k_sem_give(&got_ip);
 }
 
+#define WIFI_CFG	"/SD:/wifi.cfg"
+
+static char wifi_ssid[33], wifi_psk[65];
+
+/* The saved network: the name on the first line, the password on the second */
+static void wifi_load(void)
+{
+	struct fs_file_t f;
+	char buf[128] = {0};
+	char *nl;
+	ssize_t n;
+
+	wifi_ssid[0] = wifi_psk[0] = '\0';
+	fs_file_t_init(&f);
+	if (fs_open(&f, WIFI_CFG, FS_O_READ) == 0) {
+		n = fs_read(&f, buf, sizeof(buf) - 1);
+		fs_close(&f);
+		if (n > 0) {
+			buf[n] = '\0';
+			nl = strchr(buf, '\n');
+			if (nl != NULL) {
+				*nl = '\0';
+				strncpy(wifi_ssid, buf, sizeof(wifi_ssid) - 1);
+				strncpy(wifi_psk, nl + 1, sizeof(wifi_psk) - 1);
+				nl = strchr(wifi_psk, '\n');
+				if (nl != NULL) {
+					*nl = '\0';
+				}
+			}
+		}
+	}
+	if (wifi_ssid[0] == '\0') {
+		/* a network given at build time is the starting point */
+		strncpy(wifi_ssid, CONFIG_SAMPLE_MIRROR_WIFI_SSID, sizeof(wifi_ssid) - 1);
+		strncpy(wifi_psk, CONFIG_SAMPLE_MIRROR_WIFI_PSK, sizeof(wifi_psk) - 1);
+	}
+}
+
+static void wifi_save(void)
+{
+	struct fs_file_t f;
+	char buf[128];
+	int n = snprintk(buf, sizeof(buf), "%s\n%s\n", wifi_ssid, wifi_psk);
+
+	fs_file_t_init(&f);
+	if (fs_open(&f, WIFI_CFG, FS_O_CREATE | FS_O_WRITE | FS_O_TRUNC) != 0) {
+		printk("wifi: cannot save the network\n");
+		return;
+	}
+	fs_write(&f, buf, n);
+	fs_close(&f);
+}
+
 static bool wifi_join(void)
 {
 	struct net_if *iface = net_if_get_first_wifi();
 	struct wifi_connect_req_params p = {
-		.ssid = CONFIG_SAMPLE_MIRROR_WIFI_SSID,
-		.ssid_length = strlen(CONFIG_SAMPLE_MIRROR_WIFI_SSID),
-		.psk = CONFIG_SAMPLE_MIRROR_WIFI_PSK,
-		.psk_length = strlen(CONFIG_SAMPLE_MIRROR_WIFI_PSK),
-		.security = WIFI_SECURITY_TYPE_PSK,
+		.ssid = wifi_ssid,
+		.ssid_length = strlen(wifi_ssid),
+		.psk = wifi_psk,
+		.psk_length = strlen(wifi_psk),
+		.security = strlen(wifi_psk) > 0U ? WIFI_SECURITY_TYPE_PSK : WIFI_SECURITY_TYPE_NONE,
 		.channel = WIFI_CHANNEL_ANY,
 		.band = WIFI_FREQ_BAND_UNKNOWN,
 	};
@@ -89,24 +220,52 @@ static bool wifi_join(void)
 		printk("no WiFi interface\n");
 		return false;
 	}
+	ui_set_status("joining the WiFi");
+	printk("wifi: connecting to %s\n", wifi_ssid);
+	k_sem_reset(&connect_done);
+	k_sem_reset(&got_ip);
+	connect_status = -1;
+	if (net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &p, sizeof(p)) != 0) {
+		return false;
+	}
+	if (k_sem_take(&connect_done, K_SECONDS(30)) != 0 || connect_status != 0) {
+		net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
+		return false;
+	}
+
+	return k_sem_take(&got_ip, K_SECONDS(30)) == 0;
+}
+
+/* Joins the saved network; asks for a network when there is none or it cannot be joined */
+static bool wifi_setup(void)
+{
+	struct net_if *iface = net_if_get_first_wifi();
+	const char *note = "Enter the network of the phone";
+
+	if (iface == NULL) {
+		return false;
+	}
+	k_work_init(&scan_work, scan_run);
+	ui_wifi_set_scanner(scan_start);
 	net_mgmt_init_event_callback(&wifi_cb, wifi_event,
-				     NET_EVENT_WIFI_CONNECT_RESULT | NET_EVENT_WIFI_DISCONNECT_RESULT);
+				     NET_EVENT_WIFI_SCAN_RESULT | NET_EVENT_WIFI_SCAN_DONE |
+				     NET_EVENT_WIFI_CONNECT_RESULT |
+				     NET_EVENT_WIFI_DISCONNECT_RESULT);
 	net_mgmt_add_event_callback(&wifi_cb);
 	net_mgmt_init_event_callback(&ipv4_cb, ipv4_event, NET_EVENT_IPV4_ADDR_ADD);
 	net_mgmt_add_event_callback(&ipv4_cb);
 
-	for (int attempt = 0; attempt < 5; attempt++) {
-		ui_set_status("joining the WiFi");
-		printk("wifi: connecting to %s\n", CONFIG_SAMPLE_MIRROR_WIFI_SSID);
-		if (net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &p, sizeof(p)) == 0 &&
-		    k_sem_take(&connected, K_SECONDS(45)) == 0 &&
-		    k_sem_take(&got_ip, K_SECONDS(30)) == 0) {
+	wifi_load();
+	while (true) {
+		if (wifi_ssid[0] != '\0' && wifi_join()) {
+			wifi_save();
 			return true;
 		}
-		k_sleep(K_SECONDS(3));
+		if (wifi_ssid[0] != '\0') {
+			note = "Could not join this network, check the name and the password";
+		}
+		ui_wifi_prompt(wifi_ssid, sizeof(wifi_ssid), wifi_psk, sizeof(wifi_psk), note);
 	}
-
-	return false;
 }
 
 /* ---- video ---------------------------------------------------------------------------- */
@@ -328,7 +487,7 @@ static bool pair_with_phone(void)
 	random_text(name + 7, 6);
 	random_text(pw, 8);
 	snprintk(payload, sizeof(payload), "WIFI:T:ADB;S:%s;P:%s;;", name, pw);
-	ui_set_status("pair: scan the code with the phone");
+	ui_set_status("Waiting for the phone to scan");
 	ui_show_qr(payload);
 	printk("pairing: waiting for the phone to scan %s\n", payload);
 
@@ -338,7 +497,7 @@ static bool pair_with_phone(void)
 		}
 		zsock_inet_ntop(AF_INET, &svc.addr, host, sizeof(host));
 		printk("pairing: phone at %s:%u\n", host, svc.port);
-		ui_set_status("pairing");
+		ui_set_status("Pairing...");
 		ret = adb_pair(host, svc.port, pw, CONFIG_SAMPLE_MIRROR_KEY_FILE, guid, sizeof(guid));
 		printk("pairing: result %d, connect service %s\n", ret, ret == 0 ? guid : "-");
 		break;
@@ -404,7 +563,7 @@ int main(void)
 	if (pkt == NULL) {
 		return 0;
 	}
-	if (!wifi_join()) {
+	if (!wifi_setup()) {
 		ui_set_status("no WiFi");
 		return 0;
 	}

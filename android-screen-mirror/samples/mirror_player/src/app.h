@@ -6,6 +6,7 @@
 #ifndef APP_H_
 #define APP_H_
 
+#include <stddef.h>
 #include <stdint.h>
 #include <mirror_zephyr/scrcpy.h>
 
@@ -15,6 +16,15 @@ void ui_set_status(const char *text);
 /** A QR code with the given text in the middle of the screen, until ui_hide_qr() */
 void ui_show_qr(const char *payload);
 void ui_hide_qr(void);
+/**
+ * Shows the WiFi setup form (names, password, on-screen keyboard) and waits until the user
+ * confirms; @p ssid and @p psk give the values to start with and take the result.
+ */
+int ui_wifi_prompt(char *ssid, size_t ssid_size, char *psk, size_t psk_size, const char *message);
+/** The function the form calls to start a scan for networks (it must not block) */
+void ui_wifi_set_scanner(void (*start)(void));
+/** The networks found, one name per line (strongest first); updates the list of the form */
+void ui_wifi_networks(const char *options);
 /** The session touches are sent to; NULL when there is none */
 void ui_set_session(struct scrcpy *s);
 /** Size of the picture on the screen, for the mapping of touches */

@@ -3,11 +3,14 @@
 mainmenu "Android screen mirror"
 
 config SAMPLE_MIRROR_WIFI_SSID
-	string "SSID to connect to"
+	string "SSID to start with"
 	default ""
+	help
+	  Used only while no network is saved. The network is normally typed on the screen and
+	  kept in /SD:/wifi.cfg.
 
 config SAMPLE_MIRROR_WIFI_PSK
-	string "WPA2 passphrase"
+	string "WPA2 passphrase to start with"
 	default ""
 
 config SAMPLE_MIRROR_PHONE_IP

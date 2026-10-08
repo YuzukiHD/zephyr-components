@@ -98,6 +98,345 @@ void ui_set_video_size(uint16_t w, uint16_t h)
 	video_h = h;
 }
 
+/* ---- look ------------------------------------------------------------------------------- */
+
+/*
+ * Text is drawn on the ARGB plane over the video, and LVGL draws text on a transparent
+ * background as solid boxes: every object that carries text has an opaque background.
+ */
+#define C_BG		lv_color_make(238, 242, 247)
+#define C_TEXT		lv_color_make(31, 42, 60)
+#define C_MUTED		lv_color_make(107, 122, 144)
+#define C_ACCENT	lv_color_make(47, 107, 255)
+#define C_ACCENT_SOFT	lv_color_make(225, 234, 255)
+#define C_LINE		lv_color_make(208, 216, 228)
+
+#define FONT_S		(&lv_font_montserrat_16)
+#define FONT_M		(&lv_font_montserrat_20)
+#define FONT_L		(&lv_font_montserrat_28)
+
+static lv_obj_t *label_make(lv_obj_t *parent, const char *text, const lv_font_t *font,
+			    lv_color_t color, int x, int y)
+{
+	lv_obj_t *l = lv_label_create(parent);
+
+	lv_obj_set_style_text_font(l, font, 0);
+	lv_obj_set_style_text_color(l, color, 0);
+	lv_label_set_text(l, text);
+	lv_obj_set_pos(l, x, y);
+
+	return l;
+}
+
+/* A rounded button with a centered label; the label is returned in @p out_label */
+static lv_obj_t *pill_make(lv_obj_t *parent, const char *text, int x, int y, int w, int h,
+			   lv_color_t bg, lv_color_t fg, lv_obj_t **out_label)
+{
+	lv_obj_t *b = lv_button_create(parent);
+	lv_obj_t *l = lv_label_create(b);
+
+	lv_obj_set_size(b, w, h);
+	lv_obj_set_pos(b, x, y);
+	lv_obj_set_style_radius(b, h / 2, 0);
+	lv_obj_set_style_bg_color(b, bg, 0);
+	lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
+	lv_obj_set_style_shadow_width(b, 0, 0);
+	lv_obj_set_style_border_width(b, 0, 0);
+	lv_obj_set_style_text_font(l, FONT_M, 0);
+	lv_obj_set_style_text_color(l, fg, 0);
+	lv_label_set_text(l, text);
+	lv_obj_center(l);
+	if (out_label != NULL) {
+		*out_label = l;
+	}
+
+	return b;
+}
+
+/* ---- WiFi setup form -------------------------------------------------------------------- */
+
+static char form_ssid[33], form_psk[65], form_msg[96];
+static volatile int wifi_request;
+static K_SEM_DEFINE(wifi_done, 0, 1);
+
+int ui_wifi_prompt(char *ssid, size_t ssid_size, char *psk, size_t psk_size, const char *message)
+{
+	strncpy(form_ssid, ssid, sizeof(form_ssid) - 1);
+	strncpy(form_psk, psk, sizeof(form_psk) - 1);
+	strncpy(form_msg, message, sizeof(form_msg) - 1);
+	wifi_request = 1;
+	k_sem_take(&wifi_done, K_FOREVER);
+	strncpy(ssid, form_ssid, ssid_size - 1);
+	ssid[ssid_size - 1] = '\0';
+	strncpy(psk, form_psk, psk_size - 1);
+	psk[psk_size - 1] = '\0';
+
+	return 0;
+}
+
+static lv_obj_t *form, *form_note, *dd_net, *lbl_scan, *ta_ssid, *ta_psk, *kb;
+
+#define NET_OTHER	"Other network..."
+#define NET_HINT	"Select a network"
+
+static void (*scan_start)(void);
+static char net_options[1024];
+static volatile bool net_dirty;
+
+void ui_wifi_set_scanner(void (*start)(void))
+{
+	scan_start = start;
+}
+
+void ui_wifi_networks(const char *options)
+{
+	strncpy(net_options, options, sizeof(net_options) - 1);
+	net_dirty = true;
+}
+
+static void form_focus(lv_obj_t *ta)
+{
+	lv_obj_remove_state(ta_ssid, LV_STATE_FOCUSED);
+	lv_obj_remove_state(ta_psk, LV_STATE_FOCUSED);
+	lv_obj_add_state(ta, LV_STATE_FOCUSED);
+	lv_keyboard_set_textarea(kb, ta);
+}
+
+/* The name comes from the list, or is typed in place of the list ("Other network...") */
+static void form_name_typed(bool typed)
+{
+	if (typed) {
+		lv_obj_add_flag(dd_net, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_remove_flag(ta_ssid, LV_OBJ_FLAG_HIDDEN);
+	} else {
+		lv_obj_remove_flag(dd_net, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_add_flag(ta_ssid, LV_OBJ_FLAG_HIDDEN);
+	}
+}
+
+static void form_ta_event(lv_event_t *e)
+{
+	form_focus(lv_event_get_target(e));
+}
+
+static void form_submit(void)
+{
+	const char *ssid = lv_textarea_get_text(ta_ssid);
+
+	if (ssid[0] == '\0') {
+		lv_label_set_text(form_note, "Choose a network first");
+		return;
+	}
+	strncpy(form_ssid, ssid, sizeof(form_ssid) - 1);
+	strncpy(form_psk, lv_textarea_get_text(ta_psk), sizeof(form_psk) - 1);
+	lv_obj_add_flag(form, LV_OBJ_FLAG_HIDDEN);
+	k_sem_give(&wifi_done);
+}
+
+static void form_connect_event(lv_event_t *e)
+{
+	form_submit();
+}
+
+static void form_kb_event(lv_event_t *e)
+{
+	if (lv_event_get_code(e) == LV_EVENT_READY) {
+		form_submit();
+	}
+}
+
+static void form_show_event(lv_event_t *e)
+{
+	bool on = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
+
+	lv_textarea_set_password_mode(ta_psk, !on);
+}
+
+static void form_scan_event(lv_event_t *e)
+{
+	form_name_typed(false);
+	if (scan_start != NULL) {
+		lv_label_set_text(lbl_scan, LV_SYMBOL_REFRESH "  Scanning");
+		scan_start();
+	}
+}
+
+static void form_dd_event(lv_event_t *e)
+{
+	lv_event_code_t code = lv_event_get_code(e);
+
+	if (code == LV_EVENT_READY) {
+		/* the list is made when it opens */
+		lv_obj_t *list = lv_dropdown_get_list(dd_net);
+
+		if (list != NULL) {
+			lv_obj_set_style_text_font(list, FONT_M, 0);
+			lv_obj_set_style_text_color(list, C_TEXT, 0);
+			lv_obj_set_style_bg_color(list, lv_color_white(), 0);
+			lv_obj_set_style_bg_opa(list, LV_OPA_COVER, 0);
+			lv_obj_set_style_radius(list, 14, 0);
+			lv_obj_set_style_border_width(list, 2, 0);
+			lv_obj_set_style_border_color(list, C_LINE, 0);
+			lv_obj_set_style_max_height(list, 240, 0);
+			lv_obj_set_style_bg_color(list, C_ACCENT_SOFT,
+						  LV_PART_SELECTED | LV_STATE_CHECKED);
+			lv_obj_set_style_text_color(list, C_ACCENT, LV_PART_SELECTED | LV_STATE_CHECKED);
+		}
+	} else if (code == LV_EVENT_VALUE_CHANGED) {
+		char sel[64];
+
+		/* show what was chosen */
+		lv_dropdown_set_text(dd_net, NULL);
+		lv_dropdown_get_selected_str(dd_net, sel, sizeof(sel));
+		if (strcmp(sel, NET_OTHER) == 0) {
+			form_name_typed(true);
+			lv_textarea_set_text(ta_ssid, "");
+			form_focus(ta_ssid);
+		} else {
+			lv_textarea_set_text(ta_ssid, sel);
+			form_focus(ta_psk);
+		}
+	}
+}
+
+static lv_obj_t *form_textarea(lv_obj_t *parent, int x, int y, int w, int max_len, bool password)
+{
+	lv_obj_t *ta = lv_textarea_create(parent);
+
+	lv_obj_set_size(ta, w, 52);
+	lv_obj_set_pos(ta, x, y);
+	lv_textarea_set_one_line(ta, true);
+	lv_textarea_set_max_length(ta, max_len);
+	lv_textarea_set_password_mode(ta, password);
+	lv_obj_set_style_text_font(ta, FONT_M, 0);
+	lv_obj_set_style_text_color(ta, C_TEXT, 0);
+	lv_obj_set_style_bg_color(ta, lv_color_white(), 0);
+	lv_obj_set_style_bg_opa(ta, LV_OPA_COVER, 0);
+	lv_obj_set_style_radius(ta, 14, 0);
+	lv_obj_set_style_border_width(ta, 2, 0);
+	lv_obj_set_style_border_color(ta, C_LINE, 0);
+	lv_obj_set_style_border_color(ta, C_ACCENT, LV_STATE_FOCUSED);
+	lv_obj_set_style_pad_left(ta, 16, 0);
+	lv_obj_set_style_pad_top(ta, 12, 0);
+	lv_obj_set_style_shadow_width(ta, 0, 0);
+	lv_obj_add_event_cb(ta, form_ta_event, LV_EVENT_CLICKED, NULL);
+
+	return ta;
+}
+
+static void form_build(int pw, int ph)
+{
+	const int kb_h = 320, pad = 28;
+	const int card_w = MIN(pw - 48, 720), card_h = 360;
+	const int iw = card_w - 2 * pad;
+	lv_obj_t *card, *sw;
+
+	form = lv_obj_create(lv_screen_active());
+	lv_obj_set_size(form, pw, ph);
+	lv_obj_set_pos(form, 0, 0);
+	lv_obj_set_style_bg_color(form, C_BG, 0);
+	lv_obj_set_style_bg_opa(form, LV_OPA_COVER, 0);
+	lv_obj_set_style_radius(form, 0, 0);
+	lv_obj_set_style_border_width(form, 0, 0);
+	lv_obj_set_style_pad_all(form, 0, 0);
+	lv_obj_remove_flag(form, LV_OBJ_FLAG_SCROLLABLE);
+
+	card = lv_obj_create(form);
+	lv_obj_set_size(card, card_w, card_h);
+	lv_obj_set_pos(card, (pw - card_w) / 2, (ph - kb_h - card_h) / 2);
+	lv_obj_set_style_bg_color(card, lv_color_white(), 0);
+	lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
+	lv_obj_set_style_radius(card, 24, 0);
+	lv_obj_set_style_border_width(card, 0, 0);
+	lv_obj_set_style_pad_all(card, 0, 0);
+	lv_obj_set_style_shadow_width(card, 30, 0);
+	lv_obj_set_style_shadow_color(card, lv_color_make(120, 140, 170), 0);
+	lv_obj_set_style_shadow_opa(card, LV_OPA_30, 0);
+	lv_obj_remove_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+
+	label_make(card, LV_SYMBOL_WIFI "  Connect to WiFi", FONT_L, C_TEXT, pad, 24);
+	pill_make(card, "Connect", card_w - pad - 170, 20, 170, 52, C_ACCENT, lv_color_white(), NULL);
+	lv_obj_add_event_cb(lv_obj_get_child(card, -1), form_connect_event, LV_EVENT_CLICKED, NULL);
+	form_note = label_make(card, "", FONT_S, C_MUTED, pad, 84);
+	lv_obj_set_width(form_note, iw);
+
+	label_make(card, "Network", FONT_S, C_MUTED, pad, 122);
+	dd_net = lv_dropdown_create(card);
+	lv_obj_set_size(dd_net, iw - 176, 52);
+	lv_obj_set_pos(dd_net, pad, 146);
+	lv_obj_set_style_text_font(dd_net, FONT_M, 0);
+	lv_obj_set_style_text_color(dd_net, C_TEXT, 0);
+	lv_obj_set_style_bg_color(dd_net, lv_color_white(), 0);
+	lv_obj_set_style_bg_opa(dd_net, LV_OPA_COVER, 0);
+	lv_obj_set_style_radius(dd_net, 14, 0);
+	lv_obj_set_style_border_width(dd_net, 2, 0);
+	lv_obj_set_style_border_color(dd_net, C_LINE, 0);
+	lv_obj_set_style_pad_left(dd_net, 16, 0);
+	lv_obj_set_style_pad_top(dd_net, 12, 0);
+	lv_obj_set_style_shadow_width(dd_net, 0, 0);
+	lv_dropdown_set_options(dd_net, NET_OTHER);
+	lv_dropdown_set_text(dd_net, NET_HINT);
+	lv_obj_add_event_cb(dd_net, form_dd_event, LV_EVENT_ALL, NULL);
+
+	/* typed name: takes the place of the list */
+	ta_ssid = form_textarea(card, pad, 146, iw - 176, 32, false);
+	lv_obj_add_flag(ta_ssid, LV_OBJ_FLAG_HIDDEN);
+
+	pill_make(card, LV_SYMBOL_REFRESH "  Scan", card_w - pad - 160, 146, 160, 52, C_ACCENT_SOFT,
+		  C_ACCENT, &lbl_scan);
+	lv_obj_add_event_cb(lv_obj_get_child(card, -1), form_scan_event, LV_EVENT_CLICKED, NULL);
+
+	label_make(card, "Password", FONT_S, C_MUTED, pad, 222);
+	ta_psk = form_textarea(card, pad, 246, iw - 176, 64, true);
+
+	sw = lv_switch_create(card);
+	lv_obj_set_pos(sw, card_w - pad - 150, 256);
+	lv_obj_set_style_bg_color(sw, C_LINE, 0);
+	lv_obj_set_style_bg_color(sw, C_ACCENT, LV_PART_INDICATOR | LV_STATE_CHECKED);
+	lv_obj_add_event_cb(sw, form_show_event, LV_EVENT_VALUE_CHANGED, NULL);
+	label_make(card, "Show", FONT_M, C_TEXT, card_w - pad - 70, 258);
+
+	kb = lv_keyboard_create(form);
+	lv_obj_set_size(kb, pw, kb_h);
+	lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+	lv_obj_set_style_bg_color(kb, lv_color_make(214, 220, 232), 0);
+	lv_obj_set_style_bg_opa(kb, LV_OPA_COVER, 0);
+	lv_obj_set_style_radius(kb, 0, 0);
+	lv_obj_set_style_border_width(kb, 0, 0);
+	lv_obj_set_style_pad_all(kb, 10, 0);
+	lv_obj_set_style_pad_gap(kb, 8, 0);
+	lv_obj_set_style_text_font(kb, FONT_M, LV_PART_ITEMS);
+	lv_obj_set_style_text_color(kb, C_TEXT, LV_PART_ITEMS);
+	lv_obj_set_style_bg_color(kb, lv_color_white(), LV_PART_ITEMS);
+	lv_obj_set_style_bg_opa(kb, LV_OPA_COVER, LV_PART_ITEMS);
+	lv_obj_set_style_radius(kb, 10, LV_PART_ITEMS);
+	lv_obj_set_style_border_width(kb, 0, LV_PART_ITEMS);
+	lv_obj_set_style_shadow_width(kb, 0, LV_PART_ITEMS);
+	lv_obj_set_style_bg_color(kb, C_ACCENT_SOFT, LV_PART_ITEMS | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(kb, C_ACCENT_SOFT, LV_PART_ITEMS | LV_STATE_CHECKED);
+	lv_obj_add_event_cb(kb, form_kb_event, LV_EVENT_ALL, NULL);
+	lv_keyboard_set_textarea(kb, ta_psk);
+}
+
+static void form_open(void)
+{
+	if (form == NULL) {
+		form_build(lv_display_get_horizontal_resolution(NULL),
+			   lv_display_get_vertical_resolution(NULL));
+	}
+	lv_textarea_set_text(ta_ssid, form_ssid);
+	lv_textarea_set_text(ta_psk, form_psk);
+	lv_dropdown_set_text(dd_net, form_ssid[0] != '\0' ? form_ssid : NET_HINT);
+	form_name_typed(false);
+	if (scan_start != NULL) {
+		lv_label_set_text(lbl_scan, LV_SYMBOL_REFRESH "  Scanning");
+		scan_start();
+	}
+	lv_label_set_text(form_note, form_msg);
+	lv_obj_remove_flag(form, LV_OBJ_FLAG_HIDDEN);
+	form_focus(ta_psk);
+}
+
 /* ---- geometry ------------------------------------------------------------------------- */
 
 struct geom {
@@ -269,19 +608,23 @@ static void ui_main(void *a, void *b, void *c)
 		.panel_w = lv_display_get_horizontal_resolution(NULL),
 		.panel_h = lv_display_get_vertical_resolution(NULL),
 	};
-	lv_obj_t *label, *qr_box = NULL, *qr = NULL;
+	lv_obj_t *label, *qr_box = NULL, *qr = NULL, *qr_status = NULL;
+	bool qr_shown = false;
 	uint8_t shown = 0;
 
 	lv_obj_set_style_bg_opa(lv_screen_active(), LV_OPA_TRANSP, 0);
 	label = lv_label_create(lv_screen_active());
-	lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
-	lv_obj_set_style_text_color(label, lv_color_white(), 0);
-	lv_obj_align(label, LV_ALIGN_TOP_LEFT, 12, 8);
+	lv_obj_set_style_text_font(label, FONT_M, 0);
+	lv_obj_set_style_text_color(label, C_TEXT, 0);
+	lv_obj_align(label, LV_ALIGN_TOP_LEFT, 16, 14);
 	/* text needs an opaque background: on the transparent ARGB layer it turns into boxes */
-	lv_obj_set_style_bg_color(label, lv_color_black(), 0);
+	lv_obj_set_style_bg_color(label, lv_color_white(), 0);
 	lv_obj_set_style_bg_opa(label, LV_OPA_COVER, 0);
-	lv_obj_set_style_pad_all(label, 6, 0);
-	lv_obj_set_style_radius(label, 6, 0);
+	lv_obj_set_style_pad_hor(label, 20, 0);
+	lv_obj_set_style_pad_ver(label, 10, 0);
+	lv_obj_set_style_radius(label, 22, 0);
+	lv_obj_set_style_border_width(label, 2, 0);
+	lv_obj_set_style_border_color(label, C_LINE, 0);
 	lv_label_set_text(label, "");
 	lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
 
@@ -295,16 +638,18 @@ static void ui_main(void *a, void *b, void *c)
 		lv_obj_set_size(key_obj[k], KEY_SIZE, KEY_SIZE);
 		lv_obj_align(key_obj[k], LV_ALIGN_TOP_LEFT, x, y);
 		lv_obj_set_style_radius(key_obj[k], LV_RADIUS_CIRCLE, 0);
-		lv_obj_set_style_bg_color(key_obj[k], lv_color_make(48, 48, 48), 0);
+		lv_obj_set_style_bg_color(key_obj[k], lv_color_make(250, 251, 253), 0);
 		lv_obj_set_style_bg_opa(key_obj[k], LV_OPA_COVER, 0);
-		lv_obj_set_style_bg_color(key_obj[k], lv_color_make(255, 200, 60),
-					  LV_STATE_PRESSED);
+		lv_obj_set_style_bg_color(key_obj[k], C_ACCENT, LV_STATE_PRESSED);
 		lv_obj_set_style_bg_opa(key_obj[k], LV_OPA_COVER, LV_STATE_PRESSED);
-		lv_obj_set_style_border_width(key_obj[k], 0, 0);
+		lv_obj_set_style_border_width(key_obj[k], 2, 0);
+		lv_obj_set_style_border_color(key_obj[k], C_LINE, 0);
 		lv_obj_set_style_shadow_width(key_obj[k], 0, 0);
+		/* the icon takes its color from the key, white while it is pressed */
+		lv_obj_set_style_text_color(key_obj[k], C_TEXT, 0);
+		lv_obj_set_style_text_color(key_obj[k], lv_color_white(), LV_STATE_PRESSED);
 		l = lv_label_create(key_obj[k]);
-		lv_obj_set_style_text_font(l, &lv_font_montserrat_16, 0);
-		lv_obj_set_style_text_color(l, lv_color_white(), 0);
+		lv_obj_set_style_text_font(l, FONT_M, 0);
 		lv_label_set_text(l, symbols[k]);
 		lv_obj_center(l);
 	}
@@ -314,12 +659,35 @@ static void ui_main(void *a, void *b, void *c)
 
 		if (status_dirty) {
 			status_dirty = false;
-			lv_label_set_text(label, status_text);
-			if (status_text[0] != '\0') {
-				lv_obj_remove_flag(label, LV_OBJ_FLAG_HIDDEN);
+			if (qr_shown) {
+				/* the code page has its own place for it, the top strip would overlap */
+				lv_label_set_text(qr_status, status_text);
 			} else {
-				lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
+				lv_label_set_text(label, status_text);
+				if (status_text[0] != '\0') {
+					lv_obj_remove_flag(label, LV_OBJ_FLAG_HIDDEN);
+				} else {
+					lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
+				}
 			}
+		}
+		if (net_dirty && form != NULL) {
+			net_dirty = false;
+			char opts[1100];
+
+			snprintk(opts, sizeof(opts), "%s%s%s", net_options,
+				 net_options[0] != '\0' ? "\n" : "", NET_OTHER);
+			lv_dropdown_set_options(dd_net, opts);
+			{
+				const char *cur = lv_textarea_get_text(ta_ssid);
+
+				lv_dropdown_set_text(dd_net, cur[0] != '\0' ? cur : NET_HINT);
+			}
+			lv_label_set_text(lbl_scan, LV_SYMBOL_REFRESH "  Scan");
+		}
+		if (wifi_request != 0) {
+			wifi_request = 0;
+			form_open();
 		}
 		if (qr_request != 0) {
 			int req = qr_request;
@@ -330,26 +698,28 @@ static void ui_main(void *a, void *b, void *c)
 					lv_obj_t *t, *h;
 
 					qr_box = lv_obj_create(lv_screen_active());
-					lv_obj_set_size(qr_box, 600, 700);
+					lv_obj_set_size(qr_box, 600, 720);
 					lv_obj_center(qr_box);
 					lv_obj_set_style_bg_color(qr_box, lv_color_white(), 0);
 					lv_obj_set_style_bg_opa(qr_box, LV_OPA_COVER, 0);
-					lv_obj_set_style_radius(qr_box, 16, 0);
+					lv_obj_set_style_radius(qr_box, 28, 0);
 					lv_obj_set_style_border_width(qr_box, 0, 0);
 					lv_obj_set_flex_flow(qr_box, LV_FLEX_FLOW_COLUMN);
 					lv_obj_set_flex_align(qr_box, LV_FLEX_ALIGN_START,
 							      LV_FLEX_ALIGN_CENTER,
 							      LV_FLEX_ALIGN_CENTER);
 					lv_obj_set_style_pad_row(qr_box, 14, 0);
+					lv_obj_set_style_pad_top(qr_box, 24, 0);
+					lv_obj_set_style_shadow_width(qr_box, 0, 0);
 					lv_obj_remove_flag(qr_box, LV_OBJ_FLAG_SCROLLABLE);
 
 					t = lv_label_create(qr_box);
-					lv_obj_set_style_text_font(t, &lv_font_montserrat_16, 0);
-					lv_obj_set_style_text_color(t, lv_color_black(), 0);
+					lv_obj_set_style_text_font(t, FONT_L, 0);
+					lv_obj_set_style_text_color(t, C_TEXT, 0);
 					lv_label_set_text(t, "Scan to connect");
 
 					qr = lv_qrcode_create(qr_box);
-					lv_qrcode_set_size(qr, 520);
+					lv_qrcode_set_size(qr, 480);
 					lv_qrcode_set_dark_color(qr, lv_color_black());
 					lv_qrcode_set_light_color(qr, lv_color_white());
 					lv_obj_set_style_border_color(qr, lv_color_white(), 0);
@@ -358,16 +728,30 @@ static void ui_main(void *a, void *b, void *c)
 					h = lv_label_create(qr_box);
 					lv_obj_set_width(h, 560);
 					lv_label_set_long_mode(h, LV_LABEL_LONG_WRAP);
-					lv_obj_set_style_text_font(h, &lv_font_montserrat_16, 0);
-					lv_obj_set_style_text_color(h, lv_color_black(), 0);
+					lv_obj_set_style_text_font(h, FONT_S, 0);
+					lv_obj_set_style_text_color(h, C_MUTED, 0);
+					lv_obj_set_style_text_align(h, LV_TEXT_ALIGN_CENTER, 0);
 					lv_label_set_text(h, "Phone: Settings > Developer options > "
 							     "Wireless debugging > Pair device "
 							     "with QR code");
+
+					qr_status = lv_label_create(qr_box);
+					lv_obj_set_style_text_font(qr_status, FONT_M, 0);
+					lv_obj_set_style_text_color(qr_status, C_ACCENT, 0);
+					lv_label_set_text(qr_status, "");
 				}
 				lv_qrcode_update(qr, qr_payload, strlen(qr_payload));
 				lv_obj_remove_flag(qr_box, LV_OBJ_FLAG_HIDDEN);
+				qr_shown = true;
+				lv_label_set_text(qr_status, status_text);
+				lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
 			} else if (qr_box != NULL) {
 				lv_obj_add_flag(qr_box, LV_OBJ_FLAG_HIDDEN);
+				qr_shown = false;
+				lv_label_set_text(label, status_text);
+				if (status_text[0] != '\0') {
+					lv_obj_remove_flag(label, LV_OBJ_FLAG_HIDDEN);
+				}
 			}
 		}
 		if (now != shown) {

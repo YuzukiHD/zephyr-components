@@ -1,0 +1,7 @@
+/* LVGL reads the touch panel as a pointer (the on-screen keyboard of the WiFi setup) */
+/ {
+	lvgl_pointer {
+		compatible = "zephyr,lvgl-pointer-input";
+		input = <&touch>;
+	};
+};

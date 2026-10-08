@@ -17,7 +17,7 @@ config SAMPLE_IOS_HOLD_FRAMES
 	int "Pictures the decoder keeps besides its two working ones"
 	default 4
 	help
-	  Every picture takes memory, which limits the picture size: with 4 the portrait stream
-	  of the phone (448x972) fits, larger values run out of memory.
+	  Every picture takes memory (650 KB for the portrait stream of the phone, 448x972), but
+	  with fewer the decoder runs out of pictures to decode into and stops: 2 deadlocks.
 
 source "Kconfig.zephyr"

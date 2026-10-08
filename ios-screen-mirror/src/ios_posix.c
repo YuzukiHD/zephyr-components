@@ -46,7 +46,11 @@ struct ios_thread *ios_thread_create(void *(*func)(void *), void *arg)
 	t->arg = arg;
 	k_thread_create(&t->thread, t->stack, CONFIG_IOS_MIRROR_THREAD_STACK, thread_entry, t, NULL,
 			NULL, CONFIG_IOS_MIRROR_THREAD_PRIORITY, 0, K_NO_WAIT);
-	k_thread_name_set(&t->thread, "airplay");
+	static int serial;
+	char name[16];
+
+	snprintk(name, sizeof(name), "airplay%d", serial++);
+	k_thread_name_set(&t->thread, name);
 
 	return t;
 }

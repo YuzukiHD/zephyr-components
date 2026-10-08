@@ -44,7 +44,9 @@ config IOS_MIRROR_HEIGHT
 
 config IOS_MIRROR_THREAD_STACK
 	int "Stack of the threads of the AirPlay library (bytes)"
-	default 32768
+	default 10240
+	help
+	  The busiest thread (the HTTP/RTSP server with the FairPlay handshake) uses about 6 KB.
 
 config IOS_MIRROR_THREAD_PRIORITY
 	int "Priority of the threads of the AirPlay library"

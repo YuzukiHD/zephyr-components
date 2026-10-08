@@ -16,3 +16,6 @@
 [submodule "bochs/Bochs"]
 	path = bochs/Bochs
 	url = https://github.com/bochs-emu/Bochs.git
+[submodule "ios-screen-mirror/rpiplay"]
+	path = ios-screen-mirror/rpiplay
+	url = https://github.com/FD-/RPiPlay.git

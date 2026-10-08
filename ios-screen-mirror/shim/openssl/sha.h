@@ -1,0 +1,1 @@
+#define SHA512_DIGEST_LENGTH 64

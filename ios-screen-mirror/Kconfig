@@ -1,0 +1,53 @@
+# Copyright (c) 2026 Yuzuki Tsuru
+# SPDX-License-Identifier: Apache-2.0
+
+config IOS_MIRROR
+	bool "iOS screen mirror (AirPlay receiver)"
+	depends on NETWORKING && NET_TCP && NET_UDP
+	select MDNS_RESPONDER
+	select DNS_SD
+	select NET_HOSTNAME_ENABLE
+	select DNS_RESOLVER
+	select MBEDTLS
+	select MBEDTLS_SHA512
+	select MBEDTLS_CIPHER_AES_ENABLED
+	select MBEDTLS_CIPHER_MODE_CTR_ENABLED
+	select MBEDTLS_CIPHER_MODE_CBC_ENABLED
+	help
+	  An AirPlay screen mirroring receiver. The iPhone finds the board
+	  in the Screen Mirroring list of the control center and sends its
+	  screen as an H.264 stream, which the application decodes and shows.
+	  The protocol library is RPiPlay (GPL-3.0, git submodule) with its
+	  FairPlay handshake; this module is therefore GPL-3.0 as a whole.
+
+if IOS_MIRROR
+
+config IOS_MIRROR_NAME
+	string "Name shown in the Screen Mirroring list"
+	default "F101 Mirror"
+
+config IOS_MIRROR_PORT
+	int "TCP port of the AirPlay server (0: any free port)"
+	default 7000
+	range 0 65535
+
+config IOS_MIRROR_WIDTH
+	int "Display width announced to the phone (pixels)"
+	default 1920
+	help
+	  The phone picks the size of its stream from this one; the largest portrait stream the
+	  decoder has the memory for is about 450x970, a landscape one of 1920x1080 is refused.
+
+config IOS_MIRROR_HEIGHT
+	int "Display height announced to the phone (pixels)"
+	default 1080
+
+config IOS_MIRROR_THREAD_STACK
+	int "Stack of the threads of the AirPlay library (bytes)"
+	default 32768
+
+config IOS_MIRROR_THREAD_PRIORITY
+	int "Priority of the threads of the AirPlay library"
+	default 8
+
+endif # IOS_MIRROR

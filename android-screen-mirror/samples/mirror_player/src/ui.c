@@ -40,6 +40,8 @@ static K_SEM_DEFINE(touch_wake, 0, 1);
 static struct scrcpy *volatile session;
 static volatile uint16_t video_w, video_h;
 static volatile uint8_t keys_pressed;
+static volatile bool menu_open;
+static volatile enum ui_action pending_action;
 
 static char status_text[64];
 static volatile bool status_dirty;
@@ -437,6 +439,94 @@ static void form_open(void)
 	form_focus(ta_psk);
 }
 
+/* ---- settings menu ---------------------------------------------------------------------- */
+
+static lv_obj_t *menu;
+
+enum ui_action ui_take_action(void)
+{
+	enum ui_action a = pending_action;
+
+	pending_action = UI_ACT_NONE;
+
+	return a;
+}
+
+bool ui_action_pending(void)
+{
+	return pending_action != UI_ACT_NONE;
+}
+
+static void menu_event(lv_event_t *e)
+{
+	enum ui_action a = (enum ui_action)(uintptr_t)lv_event_get_user_data(e);
+	struct scrcpy *s = session;
+
+	lv_obj_add_flag(menu, LV_OBJ_FLAG_HIDDEN);
+	menu_open = false;
+	if (a != UI_ACT_NONE) {
+		pending_action = a;
+		if (s != NULL) {
+			/* the reader of the video returns and the mirror ends */
+			scrcpy_abort(s);
+		}
+	}
+}
+
+static void menu_build(int pw, int ph)
+{
+	static const struct {
+		const char *text;
+		enum ui_action action;
+		bool primary;
+	} items[] = {
+		{LV_SYMBOL_WIFI "  Change WiFi network", UI_ACT_CHANGE_WIFI, true},
+		{LV_SYMBOL_PLUS "  Pair a new phone", UI_ACT_PAIR, false},
+		{"Close", UI_ACT_NONE, false},
+	};
+	const int w = 460, h = 380;
+	lv_obj_t *l;
+
+	menu = lv_obj_create(lv_screen_active());
+	lv_obj_set_size(menu, w, h);
+	lv_obj_set_pos(menu, (pw - w) / 2, (ph - h) / 2);
+	lv_obj_set_style_bg_color(menu, lv_color_white(), 0);
+	lv_obj_set_style_bg_opa(menu, LV_OPA_COVER, 0);
+	lv_obj_set_style_radius(menu, 28, 0);
+	lv_obj_set_style_border_width(menu, 2, 0);
+	lv_obj_set_style_border_color(menu, C_LINE, 0);
+	lv_obj_set_style_pad_all(menu, 0, 0);
+	lv_obj_remove_flag(menu, LV_OBJ_FLAG_SCROLLABLE);
+
+	l = label_make(menu, "Settings", FONT_L, C_TEXT, 0, 28);
+	lv_obj_align(l, LV_ALIGN_TOP_MID, 0, 28);
+	for (int i = 0; i < 3; i++) {
+		lv_obj_t *b = pill_make(menu, items[i].text, (w - 380) / 2, 100 + i * 80, 380, 60,
+					items[i].primary ? C_ACCENT : (items[i].action == UI_ACT_NONE
+									   ? lv_color_make(232, 236, 243)
+									   : C_ACCENT_SOFT),
+					items[i].primary ? lv_color_white()
+							 : (items[i].action == UI_ACT_NONE ? C_MUTED
+											    : C_ACCENT),
+					NULL);
+
+		lv_obj_add_event_cb(b, menu_event, LV_EVENT_CLICKED,
+				    (void *)(uintptr_t)items[i].action);
+	}
+	lv_obj_add_flag(menu, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void gear_event(lv_event_t *e)
+{
+	if (menu == NULL) {
+		menu_build(lv_display_get_horizontal_resolution(NULL),
+			   lv_display_get_vertical_resolution(NULL));
+	}
+	lv_obj_remove_flag(menu, LV_OBJ_FLAG_HIDDEN);
+	lv_obj_move_foreground(menu);
+	menu_open = true;
+}
+
 /* ---- geometry ------------------------------------------------------------------------- */
 
 struct geom {
@@ -451,8 +541,23 @@ static void key_rect(const struct geom *g, int k, int *x, int *y)
 	*y = g->panel_h / 2 - (NKEYS * (KEY_SIZE + KEY_GAP)) / 2 + k * (KEY_SIZE + KEY_GAP);
 }
 
+/* The settings key sits in the top right corner; it is handled by LVGL, the relay only keeps the
+ * touch from reaching the phone */
+static void gear_rect(const struct geom *g, int *x, int *y)
+{
+	*x = g->panel_w - KEY_SIZE - KEY_GAP;
+	*y = KEY_GAP;
+}
+
 static int key_hit(const struct geom *g, int px, int py)
 {
+	int gx, gy;
+
+	gear_rect(g, &gx, &gy);
+	if (px >= gx - KEY_GAP / 2 && px < gx + KEY_SIZE + KEY_GAP / 2 && py >= gy - KEY_GAP / 2 &&
+	    py < gy + KEY_SIZE + KEY_GAP / 2) {
+		return NKEYS;
+	}
 	for (int k = 0; k < NKEYS; k++) {
 		int x, y;
 
@@ -543,14 +648,16 @@ static void relay_main(void *a, void *b, void *c)
 
 			switch (owner[i]) {
 			case OWNER_NONE:
-				if (down) {
+				if (down && !menu_open) {
 					int k = key_hit(&g, fx, fy);
 
 					if (k >= 0) {
 						owner[i] = OWNER_KEY;
 						key_of[i] = k;
-						keys_pressed |= BIT(k);
-						scrcpy_send_key(s, true, key_codes[k]);
+						if (k < NKEYS) {
+							keys_pressed |= BIT(k);
+							scrcpy_send_key(s, true, key_codes[k]);
+						}
 					} else if (fx >= g.x && fx < g.x + g.w && fy >= g.y &&
 						   fy < g.y + g.h) {
 						owner[i] = OWNER_TOUCH;
@@ -581,8 +688,10 @@ static void relay_main(void *a, void *b, void *c)
 			case OWNER_KEY:
 				if (!held) {
 					owner[i] = OWNER_NONE;
-					keys_pressed &= ~BIT(key_of[i]);
-					scrcpy_send_key(s, false, key_codes[key_of[i]]);
+					if (key_of[i] < NKEYS) {
+						keys_pressed &= ~BIT(key_of[i]);
+						scrcpy_send_key(s, false, key_codes[key_of[i]]);
+					}
 				}
 				break;
 			}
@@ -652,6 +761,20 @@ static void ui_main(void *a, void *b, void *c)
 		lv_obj_set_style_text_font(l, FONT_M, 0);
 		lv_label_set_text(l, symbols[k]);
 		lv_obj_center(l);
+	}
+
+	{
+		int gx, gy;
+		lv_obj_t *gear_btn;
+
+		gear_rect(&g, &gx, &gy);
+		gear_btn = pill_make(lv_screen_active(), LV_SYMBOL_SETTINGS, gx, gy, KEY_SIZE, KEY_SIZE,
+				     lv_color_make(250, 251, 253), C_TEXT, NULL);
+		lv_obj_set_style_border_width(gear_btn, 2, 0);
+		lv_obj_set_style_border_color(gear_btn, C_LINE, 0);
+		lv_obj_set_style_bg_color(gear_btn, C_ACCENT, LV_STATE_PRESSED);
+		lv_obj_set_style_text_color(gear_btn, C_TEXT, 0);
+		lv_obj_add_event_cb(gear_btn, gear_event, LV_EVENT_CLICKED, NULL);
 	}
 
 	while (true) {

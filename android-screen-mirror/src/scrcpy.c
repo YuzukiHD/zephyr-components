@@ -141,6 +141,11 @@ fail:
 	return ret < 0 ? ret : -EIO;
 }
 
+void scrcpy_abort(struct scrcpy *s)
+{
+	adb_abort(s->adb);
+}
+
 void scrcpy_stop(struct scrcpy *s)
 {
 	adb_close(s->control);

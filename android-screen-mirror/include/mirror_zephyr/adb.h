@@ -54,6 +54,9 @@ void adb_disconnect(struct adb_conn *conn);
 int adb_open(struct adb_conn *conn, const char *service, adb_sink_t sink, void *sink_arg,
 	     struct adb_stream **stream);
 
+/** @brief Make every blocked reader or writer of the connection return (the streams count as closed) */
+void adb_abort(struct adb_conn *conn);
+
 /** @brief Close a stream */
 void adb_close(struct adb_stream *stream);
 

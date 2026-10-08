@@ -6,6 +6,7 @@
 #ifndef APP_H_
 #define APP_H_
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <mirror_zephyr/scrcpy.h>
@@ -25,6 +26,15 @@ int ui_wifi_prompt(char *ssid, size_t ssid_size, char *psk, size_t psk_size, con
 void ui_wifi_set_scanner(void (*start)(void));
 /** The networks found, one name per line (strongest first); updates the list of the form */
 void ui_wifi_networks(const char *options);
+/** What the user asked for in the settings menu (the mirror is interrupted for it) */
+enum ui_action {
+	UI_ACT_NONE,
+	UI_ACT_CHANGE_WIFI,
+	UI_ACT_PAIR,
+};
+/** The pending request, cleared by the call */
+enum ui_action ui_take_action(void);
+bool ui_action_pending(void);
 /** The session touches are sent to; NULL when there is none */
 void ui_set_session(struct scrcpy *s);
 /** Size of the picture on the screen, for the mapping of touches */

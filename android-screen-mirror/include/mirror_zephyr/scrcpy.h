@@ -74,6 +74,8 @@ struct scrcpy_touch {
 
 int scrcpy_start(struct scrcpy *s, const struct scrcpy_config *cfg);
 void scrcpy_stop(struct scrcpy *s);
+/** Makes scrcpy_read_packet() of another thread return -ECONNRESET; scrcpy_stop() still follows */
+void scrcpy_abort(struct scrcpy *s);
 
 /**
  * @brief Read the next H.264 packet (Annex B)

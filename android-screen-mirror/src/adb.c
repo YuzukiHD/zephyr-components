@@ -328,6 +328,19 @@ int adb_open(struct adb_conn *c, const char *service, adb_sink_t sink, void *sin
 	return 0;
 }
 
+void adb_abort(struct adb_conn *c)
+{
+	if (c == NULL) {
+		return;
+	}
+	/* readers of the streams return at once; the connection itself is closed by its owner */
+	for (int i = 0; i < MAX_STREAMS; i++) {
+		if (c->streams[i].used) {
+			stream_mark_closed(&c->streams[i]);
+		}
+	}
+}
+
 void adb_close(struct adb_stream *s)
 {
 	if (s == NULL || !s->used) {

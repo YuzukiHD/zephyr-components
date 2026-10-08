@@ -237,35 +237,51 @@ static bool wifi_join(void)
 }
 
 /* Joins the saved network; asks for a network when there is none or it cannot be joined */
-static bool wifi_setup(void)
+static bool wifi_setup(bool ask_first)
 {
+	static bool registered;
 	struct net_if *iface = net_if_get_first_wifi();
 	const char *note = "Enter the network of the phone";
 
 	if (iface == NULL) {
 		return false;
 	}
-	k_work_init(&scan_work, scan_run);
-	ui_wifi_set_scanner(scan_start);
-	net_mgmt_init_event_callback(&wifi_cb, wifi_event,
-				     NET_EVENT_WIFI_SCAN_RESULT | NET_EVENT_WIFI_SCAN_DONE |
-				     NET_EVENT_WIFI_CONNECT_RESULT |
-				     NET_EVENT_WIFI_DISCONNECT_RESULT);
-	net_mgmt_add_event_callback(&wifi_cb);
-	net_mgmt_init_event_callback(&ipv4_cb, ipv4_event, NET_EVENT_IPV4_ADDR_ADD);
-	net_mgmt_add_event_callback(&ipv4_cb);
-
-	wifi_load();
+	if (!registered) {
+		k_work_init(&scan_work, scan_run);
+		ui_wifi_set_scanner(scan_start);
+		net_mgmt_init_event_callback(&wifi_cb, wifi_event,
+					     NET_EVENT_WIFI_SCAN_RESULT | NET_EVENT_WIFI_SCAN_DONE |
+					     NET_EVENT_WIFI_CONNECT_RESULT |
+					     NET_EVENT_WIFI_DISCONNECT_RESULT);
+		net_mgmt_add_event_callback(&wifi_cb);
+		net_mgmt_init_event_callback(&ipv4_cb, ipv4_event, NET_EVENT_IPV4_ADDR_ADD);
+		net_mgmt_add_event_callback(&ipv4_cb);
+		registered = true;
+		wifi_load();
+	}
 	while (true) {
-		if (wifi_ssid[0] != '\0' && wifi_join()) {
-			wifi_save();
-			return true;
-		}
-		if (wifi_ssid[0] != '\0') {
+		if (!ask_first && wifi_ssid[0] != '\0') {
+			if (wifi_join()) {
+				wifi_save();
+				return true;
+			}
 			note = "Could not join this network, check the name and the password";
 		}
+		ask_first = false;
 		ui_wifi_prompt(wifi_ssid, sizeof(wifi_ssid), wifi_psk, sizeof(wifi_psk), note);
 	}
+}
+
+/* The settings menu: leave the network and ask for another one */
+static void wifi_change(void)
+{
+	struct net_if *iface = net_if_get_first_wifi();
+
+	ui_set_status("");
+	if (iface != NULL) {
+		net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
+	}
+	wifi_setup(true);
 }
 
 /* ---- video ---------------------------------------------------------------------------- */
@@ -491,7 +507,7 @@ static bool pair_with_phone(void)
 	ui_show_qr(payload);
 	printk("pairing: waiting for the phone to scan %s\n", payload);
 
-	while (k_uptime_get() < end) {
+	while (k_uptime_get() < end && !ui_action_pending()) {
 		if (mdns_find(SERVICE_PAIRING, name, &svc, 5000) != 0) {
 			continue;
 		}
@@ -563,15 +579,27 @@ int main(void)
 	if (pkt == NULL) {
 		return 0;
 	}
-	if (!wifi_setup()) {
+	if (!wifi_setup(false)) {
 		ui_set_status("no WiFi");
 		return 0;
 	}
 
 	while (true) {
+		enum ui_action a = ui_take_action();
+
+		if (a == UI_ACT_CHANGE_WIFI) {
+			wifi_change();
+			continue;
+		}
+		if (a == UI_ACT_PAIR) {
+			pair_with_phone();
+			continue;
+		}
 		connect_round(pkt);
-		ui_set_status("connection lost, retrying");
-		k_sleep(K_SECONDS(3));
+		if (!ui_action_pending()) {
+			ui_set_status("connection lost, retrying");
+			k_sleep(K_SECONDS(3));
+		}
 	}
 
 	return 0;

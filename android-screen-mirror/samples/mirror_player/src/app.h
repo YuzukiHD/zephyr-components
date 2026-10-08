@@ -35,6 +35,8 @@ enum ui_action {
 /** The pending request, cleared by the call */
 enum ui_action ui_take_action(void);
 bool ui_action_pending(void);
+/** When the last request was made (uptime in ms) */
+int64_t ui_action_time(void);
 /** The session touches are sent to; NULL when there is none */
 void ui_set_session(struct scrcpy *s);
 /** Size of the picture on the screen, for the mapping of touches */

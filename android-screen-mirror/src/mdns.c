@@ -174,7 +174,8 @@ static void parse(const uint8_t *p, size_t len, const char *type, const char *in
 	}
 }
 
-int mdns_find(const char *type, const char *instance, struct mdns_service *out, int timeout_ms)
+int mdns_find(const char *type, const char *instance, struct mdns_service *out, int timeout_ms,
+	      bool (*cancel)(void))
 {
 	struct sockaddr_in group = {.sin_family = AF_INET, .sin_port = htons(MDNS_PORT)};
 	struct sockaddr_in local = {.sin_family = AF_INET, .sin_port = htons(MDNS_PORT)};
@@ -213,6 +214,10 @@ int mdns_find(const char *type, const char *instance, struct mdns_service *out, 
 	while (k_uptime_get() < end) {
 		struct zsock_pollfd pfd = {.fd = fd, .events = ZSOCK_POLLIN};
 
+		if (cancel != NULL && cancel()) {
+			ret = -ECANCELED;
+			break;
+		}
 		if (k_uptime_get() >= next_query) {
 			size_t n = build_query(pkt, type);
 

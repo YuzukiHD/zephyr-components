@@ -190,6 +190,24 @@ static void stream_mark_closed(struct adb_stream *s)
 	k_sem_give(&s->open_sem);
 }
 
+/*
+ * Waits until the connection has something to read, looking at the shutdown flag every 200 ms:
+ * a thread blocked in a read does not notice a shutdown of the socket by another thread.
+ */
+static void rx_wait(struct adb_conn *c)
+{
+	while (!c->down) {
+		struct zsock_pollfd pfd = {.fd = c->fd, .events = ZSOCK_POLLIN};
+
+		if (c->tls && mbedtls_ssl_get_bytes_avail(&c->tls_io.ssl) > 0U) {
+			return;
+		}
+		if (zsock_poll(&pfd, 1, 200) != 0) {
+			return;
+		}
+	}
+}
+
 static void rx_main(void *a, void *b, void *d)
 {
 	struct adb_conn *c = a;
@@ -197,7 +215,13 @@ static void rx_main(void *a, void *b, void *d)
 
 	while (!c->down) {
 		struct adb_stream *s;
-		int ret = recv_header(c, &h, -1);
+		int ret;
+
+		rx_wait(c);
+		if (c->down) {
+			break;
+		}
+		ret = recv_header(c, &h, -1);
 
 		if (ret != 0) {
 			break;
@@ -621,7 +645,11 @@ void adb_disconnect(struct adb_conn *c)
 	}
 	c->down = true;
 	zsock_shutdown(c->fd, ZSOCK_SHUT_RDWR);
-	k_thread_join(&c->rx_thread, K_SECONDS(5));
+	if (k_thread_join(&c->rx_thread, K_SECONDS(5)) != 0) {
+		/* it is still using the structures: leak them rather than free them under it */
+		printk("adb: the receive thread did not stop\n");
+		return;
+	}
 	if (c->tls) {
 		tls_io_free(&c->tls_io);
 	}

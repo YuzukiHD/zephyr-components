@@ -30,9 +30,12 @@ struct mdns_service {
  *
  * @param instance wanted instance name, NULL for any
  * @retval 0 found
+ * @param cancel looked at every 200 ms, the search ends when it returns true (may be NULL)
  * @retval -ETIMEDOUT nothing found
+ * @retval -ECANCELED @p cancel asked to stop
  */
-int mdns_find(const char *type, const char *instance, struct mdns_service *out, int timeout_ms);
+int mdns_find(const char *type, const char *instance, struct mdns_service *out, int timeout_ms,
+	      bool (*cancel)(void));
 
 #ifdef __cplusplus
 }

@@ -153,6 +153,7 @@ static void ipv4_event(struct net_mgmt_event_callback *cb, uint64_t event, struc
 #define WIFI_CFG	"/SD:/wifi.cfg"
 
 static char wifi_ssid[33], wifi_psk[65];
+static bool wifi_up;
 
 /* The saved network: the name on the first line, the password on the second */
 static void wifi_load(void)
@@ -222,6 +223,11 @@ static bool wifi_join(void)
 	}
 	ui_set_status("joining the WiFi");
 	printk("wifi: connecting to %s\n", wifi_ssid);
+	if (wifi_up) {
+		/* leave the network joined before */
+		net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
+		wifi_up = false;
+	}
 	k_sem_reset(&connect_done);
 	k_sem_reset(&got_ip);
 	connect_status = -1;
@@ -233,7 +239,9 @@ static bool wifi_join(void)
 		return false;
 	}
 
-	return k_sem_take(&got_ip, K_SECONDS(30)) == 0;
+	wifi_up = k_sem_take(&got_ip, K_SECONDS(30)) == 0;
+
+	return wifi_up;
 }
 
 /* Joins the saved network; asks for a network when there is none or it cannot be joined */
@@ -275,12 +283,8 @@ static bool wifi_setup(bool ask_first)
 /* The settings menu: leave the network and ask for another one */
 static void wifi_change(void)
 {
-	struct net_if *iface = net_if_get_first_wifi();
-
+	/* the form comes first; the old network is left when the new one is joined */
 	ui_set_status("");
-	if (iface != NULL) {
-		net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
-	}
 	wifi_setup(true);
 }
 
@@ -508,7 +512,7 @@ static bool pair_with_phone(void)
 	printk("pairing: waiting for the phone to scan %s\n", payload);
 
 	while (k_uptime_get() < end && !ui_action_pending()) {
-		if (mdns_find(SERVICE_PAIRING, name, &svc, 5000) != 0) {
+		if (mdns_find(SERVICE_PAIRING, name, &svc, 5000, ui_action_pending) != 0) {
 			continue;
 		}
 		zsock_inet_ntop(AF_INET, &svc.addr, host, sizeof(host));
@@ -537,7 +541,10 @@ static void connect_round(uint8_t *pkt)
 		return;
 	}
 	ui_set_status("looking for the phone (turn on Wireless debugging)");
-	if (mdns_find(SERVICE_CONNECT, NULL, &svc, 6000) != 0) {
+	if (mdns_find(SERVICE_CONNECT, NULL, &svc, 6000, ui_action_pending) != 0) {
+		if (ui_action_pending()) {
+			return;
+		}
 		/* nothing known to connect to: offer the code, the phone then pairs and shows up */
 		printk("mirror: no wireless debugging service found, showing the pairing code\n");
 		pair_with_phone();
@@ -587,6 +594,10 @@ int main(void)
 	while (true) {
 		enum ui_action a = ui_take_action();
 
+		if (a != UI_ACT_NONE) {
+			printk("mirror: settings action %d, %lld ms after the request\n", a,
+			       k_uptime_get() - ui_action_time());
+		}
 		if (a == UI_ACT_CHANGE_WIFI) {
 			wifi_change();
 			continue;

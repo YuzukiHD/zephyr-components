@@ -42,6 +42,7 @@ static volatile uint16_t video_w, video_h;
 static volatile uint8_t keys_pressed;
 static volatile bool menu_open;
 static volatile enum ui_action pending_action;
+static volatile int64_t action_requested;
 
 static char status_text[64];
 static volatile bool status_dirty;
@@ -452,6 +453,11 @@ enum ui_action ui_take_action(void)
 	return a;
 }
 
+int64_t ui_action_time(void)
+{
+	return action_requested;
+}
+
 bool ui_action_pending(void)
 {
 	return pending_action != UI_ACT_NONE;
@@ -465,6 +471,9 @@ static void menu_event(lv_event_t *e)
 	lv_obj_add_flag(menu, LV_OBJ_FLAG_HIDDEN);
 	menu_open = false;
 	if (a != UI_ACT_NONE) {
+		/* the picture stays up for a moment while the connection is taken down */
+		ui_set_status(a == UI_ACT_CHANGE_WIFI ? "Opening WiFi settings..." : "Opening pairing...");
+		action_requested = k_uptime_get();
 		pending_action = a;
 		if (s != NULL) {
 			/* the reader of the video returns and the mirror ends */

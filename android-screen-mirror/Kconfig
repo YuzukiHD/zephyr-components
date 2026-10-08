@@ -1,0 +1,46 @@
+# Copyright (c) 2026 Yuzuki Tsuru
+# SPDX-License-Identifier: Apache-2.0
+
+config MIRROR
+	bool "Android screen mirror client"
+	depends on NETWORKING && NET_TCP && FILE_SYSTEM
+	select MBEDTLS
+	select MBEDTLS_RSA_C
+	select MBEDTLS_PKCS1_V15
+	select MBEDTLS_GENPRIME_ENABLED
+	select MBEDTLS_SHA1
+	select MBEDTLS_MD
+	select MBEDTLS_PK_WRITE_C
+	select RING_BUFFER
+	select RING_BUFFER_LARGE
+	select MBEDTLS_HKDF_C
+	select MBEDTLS_SHA256
+	select MBEDTLS_SHA512
+	select MBEDTLS_CIPHER_GCM_ENABLED
+	select MBEDTLS_USER_CONFIG_ENABLE
+	help
+	  An ADB client over TCP and a client of the scrcpy server: starts the
+	  server on the phone and delivers its H.264 stream and a control
+	  channel for touch and key events. The application sets
+	  CONFIG_MBEDTLS_USER_CONFIG_FILE="mirror_mbedtls.h".
+
+if MIRROR
+
+config MIRROR_ADB_MAX_PAYLOAD
+	int "Largest ADB payload the client accepts (bytes)"
+	default 65536
+	range 4096 262144
+
+config MIRROR_ADB_RX_BUFFER
+	int "Receive buffer of a data stream (bytes)"
+	default 262144
+	help
+	  The video stream is buffered here while the decoder works; when it is
+	  full the TCP window closes.
+
+config MIRROR_ADB_TRACE
+	int "Print every received ADB packet header (0 or 1)"
+	default 0
+	range 0 1
+
+endif # MIRROR

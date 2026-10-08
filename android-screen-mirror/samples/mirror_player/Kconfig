@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "Android screen mirror"
+
+config SAMPLE_MIRROR_WIFI_SSID
+	string "SSID to connect to"
+	default ""
+
+config SAMPLE_MIRROR_WIFI_PSK
+	string "WPA2 passphrase"
+	default ""
+
+config SAMPLE_MIRROR_PHONE_IP
+	string "IPv4 address of the phone, empty to use wireless debugging"
+	default ""
+	help
+	  Empty: the phone is found by its wireless debugging service and paired with a QR
+	  code shown on the screen (Developer options, Wireless debugging, Pair device with
+	  QR code). Otherwise the phone has to listen for ADB on TCP: run "adb tcpip 5555"
+	  once from a computer while it is connected by USB.
+
+config SAMPLE_MIRROR_PHONE_PORT
+	int "ADB port of the phone"
+	default 5555
+
+config SAMPLE_MIRROR_KEY_FILE
+	string "RSA key file of this client"
+	default "/SD:/adbkey"
+	help
+	  Created on the first start when it does not exist. The adbkey file of a computer
+	  works as well, then the phone does not ask again.
+
+config SAMPLE_MIRROR_SERVER_FILE
+	string "scrcpy server on the card, copied to the phone"
+	default "/SD:/scrcpy-server.jar"
+
+config SAMPLE_MIRROR_SERVER_VERSION
+	string "Version of that server"
+	default "3.3.1"
+
+config SAMPLE_MIRROR_MAX_SIZE
+	int "Longest side of the picture in pixels"
+	default 1024
+
+config SAMPLE_MIRROR_MAX_FPS
+	int "Frame rate limit"
+	default 30
+
+config SAMPLE_MIRROR_BIT_RATE
+	int "Video bit rate"
+	default 4000000
+
+source "Kconfig.zephyr"

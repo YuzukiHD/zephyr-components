@@ -1,0 +1,4 @@
+name: android-screen-mirror
+build:
+  cmake: .
+  kconfig: Kconfig

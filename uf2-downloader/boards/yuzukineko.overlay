@@ -1,0 +1,59 @@
+/*
+ * The SPI NOR flash (16 MiB) is on PC0..PC5, the pins of spi0.
+ *
+ *   0x000000  three copies of the boot loader (160 KiB)
+ *   0x02f000  saved sample point of the flash controller
+ *   0x030000  this program: header page, then the image (tune data = its first words)
+ *   0x200000  applications (header page, then the image)
+ */
+
+#include <zephyr/dt-bindings/pinctrl/allwinner-pinctrl.h>
+
+&pio {
+	spif_pins: spif_pins {
+		spif_data {
+			pinmux = <ALLWINNER_PINMUX(ALLWINNER_PIO_PC, 0, 4)
+				  ALLWINNER_PINMUX(ALLWINNER_PIO_PC, 4, 4)
+				  ALLWINNER_PINMUX(ALLWINNER_PIO_PC, 2, 4)>;
+			bias-disable;
+			allwinner,drive-level = <3>;
+		};
+		spif_control {
+			pinmux = <ALLWINNER_PINMUX(ALLWINNER_PIO_PC, 1, 4)
+				  ALLWINNER_PINMUX(ALLWINNER_PIO_PC, 3, 4)
+				  ALLWINNER_PINMUX(ALLWINNER_PIO_PC, 5, 4)>;
+			bias-pull-up;
+			allwinner,drive-level = <3>;
+		};
+	};
+};
+
+&spi0 {
+	status = "disabled";
+};
+
+&spif {
+	status = "okay";
+	pinctrl-0 = <&spif_pins>;
+	pinctrl-names = "default";
+	clock-frequency = <100000000>;
+	quad;
+	clear-block-protect;
+	params-partition = "spif_params";
+	tune-partition = "spif_tune";
+
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		spif_params: partition@2f000 {
+			label = "params";
+			reg = <0x2f000 0x1000>;
+		};
+		spif_tune: partition@31000 {
+			label = "tune";
+			reg = <0x31000 0x1000>;
+		};
+	};
+};

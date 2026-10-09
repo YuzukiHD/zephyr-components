@@ -56,7 +56,7 @@ def main():
     if a.kind == "loader":
         image, address, family = data, 0, FAMILY_SYS
     else:
-        max_size = 0x4CF000 if a.kind == "app" else 0x1CF000
+        max_size = 0x9F0000 if a.kind == "app" else 0x1CF000
         if len(data) > max_size:
             sys.exit(f"{a.input}: {len(data)} bytes, the limit is {max_size}")
         image = header_page(a.load, len(data), a.id) + data

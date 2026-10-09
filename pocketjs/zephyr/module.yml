@@ -1,0 +1,4 @@
+name: pocketjs
+build:
+  cmake: .
+  kconfig: Kconfig

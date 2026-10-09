@@ -1,0 +1,15 @@
+{
+  "$schema": "https://pocketjs.dev/schema/pocket-idf-host-1.json",
+  "version": 1,
+  "id": "f101-player",
+  "platform": "esp-idf",
+  "form": "takeover",
+  "tickHz": 60,
+  "display": {
+    "physicalViewport": [480, 272],
+    "logicalViewports": [[480, 272]],
+    "presentations": ["integer-fit"],
+    "rasterDensity": 1
+  },
+  "capabilities": ["input.buttons", "input.touch", "text.glyphs.baked"]
+}

@@ -1,0 +1,55 @@
+# Copyright (c) 2026 Yuzuki Tsuru
+# SPDX-License-Identifier: Apache-2.0
+
+config POCKETJS
+	bool "PocketJS UI runtime (QuickJS guest, Rust UI core, RGB565 renderer)"
+	depends on RISCV && !64BIT
+	help
+	  Build the caller-driven PocketJS components: .pocket package parser,
+	  QuickJS-ng guest, retained UI core and the software RGB565 renderer
+	  (the pocketjs submodule, hosts/esp-idf). The UI core and the renderer
+	  are Rust static libraries built with cargo for riscv32imac-unknown-none-elf,
+	  so cargo and that rustup target must be installed:
+	    rustup target add riscv32imac-unknown-none-elf
+
+if POCKETJS
+
+config POCKETJS_GUEST_HEAP_LIMIT
+	int "Default JavaScript heap limit (bytes)"
+	range 1 2147483647
+	default 4194304
+	help
+	  QuickJS memory limit of a guest; the native UI objects and the frame
+	  buffers come on top of it.
+
+config POCKETJS_RUST_RVV
+	bool "Let the Rust code use the vector extension"
+	depends on FPU && SUN252I_F101_RVV
+	default y
+	help
+	  Build the Rust libraries with the V extension, so the compiler may vectorise loops
+	  (fills, blends). The image saves the vector registers in every interrupt.
+
+config POCKETJS_G2D
+	bool "Draw big fills and blends with the G2D"
+	depends on G2D
+	default y
+	help
+	  Provides pocketjs_g2d_accelerator() for the RGB565 renderer.
+
+config POCKETJS_G2D_MIN_FILL
+	int "Smallest opaque fill (pixels) done by the G2D"
+	depends on POCKETJS_G2D
+	default 4096
+
+config POCKETJS_G2D_MIN_BLEND
+	int "Smallest coverage blend (pixels) done by the G2D"
+	depends on POCKETJS_G2D
+	default 8192
+
+config POCKETJS_CARGO_OFFLINE
+	bool "Build the Rust archives with cargo --offline"
+	help
+	  Use only the crates already in the cargo registry cache.
+
+endif # POCKETJS

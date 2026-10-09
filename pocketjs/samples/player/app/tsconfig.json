@@ -1,0 +1,5 @@
+{
+  "extends": "../../../pocketjs/tsconfig.json",
+  "compilerOptions": { "typeRoots": ["../../../pocketjs/node_modules/@types"] },
+  "include": ["*.tsx"]
+}

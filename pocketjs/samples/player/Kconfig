@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "PocketJS player"
+
+config SAMPLE_POCKETJS_CPU_MHZ
+	int "CPU clock in MHz, 0 keeps what the boot loader set up (600)"
+	default 960
+	help
+	  The CPU PLL is raised in steps of 72 MHz and the memory is checked after each
+	  step. The voltage is not changed; the limit of the PLL is 1008 MHz, two hangs were
+	  seen above 960 MHz in another application.
+
+config SAMPLE_POCKETJS_PROFILE
+	bool "Sample the program counter of the main thread and print the busiest code blocks"
+
+source "Kconfig.zephyr"

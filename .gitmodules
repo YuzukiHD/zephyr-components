@@ -19,3 +19,9 @@
 [submodule "ios-screen-mirror/rpiplay"]
 	path = ios-screen-mirror/rpiplay
 	url = https://github.com/FD-/RPiPlay.git
+[submodule "pocketjs/pocketjs"]
+	path = pocketjs/pocketjs
+	url = https://github.com/pocket-nexus/pocketjs.git
+[submodule "pocketjs/quickjs-ng"]
+	path = pocketjs/quickjs-ng
+	url = https://github.com/quickjs-ng/quickjs.git

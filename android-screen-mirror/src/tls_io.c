@@ -93,6 +93,11 @@ int tls_io_start(struct tls_io *t, int fd, int timeout_ms)
 #endif
 	mbedtls_ssl_conf_min_tls_version(&t->conf, MBEDTLS_SSL_VERSION_TLS1_3);
 	mbedtls_ssl_conf_max_tls_version(&t->conf, MBEDTLS_SSL_VERSION_TLS1_3);
+	/*
+	 * adbd and the pairing service present a self-signed certificate made on the phone; there is
+	 * no CA and no fingerprint known in advance, so the phone is not authenticated by TLS. The
+	 * phone checks the client by the key stored at pairing.
+	 */
 	mbedtls_ssl_conf_authmode(&t->conf, MBEDTLS_SSL_VERIFY_NONE);
 	mbedtls_ssl_conf_rng(&t->conf, adb_rng, NULL);
 	mbedtls_ssl_conf_ciphersuites(&t->conf, suites);

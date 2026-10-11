@@ -14,17 +14,42 @@
 
 /* ---- palette ---------------------------------------------------------------------------- */
 
-#define C_BG		0x0B0F17
-#define C_SURFACE	0x151B28
-#define C_SURFACE2	0x1F2740
-#define C_BORDER	0x2A3350
-#define C_TEXT		0xE8ECF4
-#define C_DIM		0x8B95A8
-#define C_ACCENT	0x6C8CFF
-#define C_ACCENT2	0x9B6CFF
-#define C_OK		0x3DDC97
-#define C_WARN		0xFFB547
-#define C_PINK		0xFF6C9B
+/* The colours of the user interface: they change with the theme (dark or light, and the accent) */
+struct palette {
+	uint32_t bg, surface, surface2, border, text, dim, accent, accent2, ok, warn, pink;
+};
+
+extern struct palette ui_pal;
+
+#define C_BG		(ui_pal.bg)
+#define C_SURFACE	(ui_pal.surface)
+#define C_SURFACE2	(ui_pal.surface2)
+#define C_BORDER	(ui_pal.border)
+#define C_TEXT		(ui_pal.text)
+#define C_DIM		(ui_pal.dim)
+#define C_ACCENT	(ui_pal.accent)
+#define C_ACCENT2	(ui_pal.accent2)
+#define C_OK		(ui_pal.ok)
+#define C_WARN		(ui_pal.warn)
+#define C_PINK		(ui_pal.pink)
+
+/** The theme: dark or light and one of the accent colours */
+#define UI_ACCENTS	6
+bool ui_theme_dark(void);
+int ui_theme_accent(void);
+const char *ui_theme_accent_name(int index);
+uint32_t ui_theme_accent_color(int index);
+/** Sets the theme, saves it and builds the screens again */
+void ui_theme_set(bool dark, int accent);
+
+/* ---- settings kept on the card ---------------------------------------------------------- */
+
+/** Reads the settings file of the card (call after the card is mounted) */
+void cfg_load(void);
+/** The value of a key, NULL when it is not set */
+const char *cfg_get(const char *key);
+/** Sets a key (NULL deletes it) and writes the file */
+void cfg_set(const char *key, const char *value);
 
 /* ---- screens ---------------------------------------------------------------------------- */
 
@@ -37,6 +62,7 @@ enum screen_id {
 	SCR_RECENT,
 	SCR_GAME,
 	SCR_SETTINGS,
+	SCR_WIFI,
 	SCR_COUNT,
 };
 
@@ -100,6 +126,7 @@ extern const struct screen_ops files_ops;
 extern const struct screen_ops recent_ops;
 extern const struct screen_ops game_ops;
 extern const struct screen_ops settings_ops;
+extern const struct screen_ops wifi_ops;
 extern const struct screen_ops photos_ops;
 extern const struct screen_ops usb_ops;
 extern const struct screen_ops player_ops;
@@ -109,12 +136,35 @@ void cpu_clock_setup(void);
 
 /* ---- network ---- */
 
-/** One line about the Wi-Fi link, for the settings */
-const char *net_status(void);
-/** One line about the last time from the network */
-const char *net_sync_status(void);
+/** Starts the network worker; with a saved network it joins it and sets the clock */
+void app_net_init(void);
+/** One line about the Wi-Fi link and about the last time from the network, for the settings */
+void app_net_status(char *buf, size_t size);
+void app_net_sync_status(char *buf, size_t size);
 /** Asks the network for the time and sets the clock with the answer */
-void net_sync_time(void);
+void app_net_sync_time(void);
+/** One line about Bluetooth: ready, or the device that is connected */
+void bt_status(char *buf, size_t size);
+/** True when a device is connected over Bluetooth */
+bool bt_connected(void);
+
+struct net_ap {
+	char ssid[33];
+	int8_t rssi;
+	bool secured;
+};
+
+/** Starts a scan; the results come in while it runs */
+void app_net_scan(void);
+bool app_net_scanning(void);
+/** Copies the access points found so far, strongest first; returns how many */
+int app_net_scan_results(struct net_ap *out, int max);
+/** Joins a network (psk may be empty for an open one) and saves it */
+void app_net_connect(const char *ssid, const char *psk);
+void app_net_disconnect(void);
+bool app_net_connected(void);
+/** True when the board has a Wi-Fi module that answered */
+bool app_net_available(void);
 
 /* ---- statistics, printed when they happen ---- */
 

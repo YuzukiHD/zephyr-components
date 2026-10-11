@@ -68,4 +68,13 @@ config SAMPLE_MP5_HOT_RAM
 	  The decoder driver and the AAC decoder run on every frame, so their text is copied to RAM
 	  at boot; the rest (kernel, other drivers, LVGL, file system) stays in the flash.
 
+config SAMPLE_MP5_UTC_OFFSET_MIN
+	int "Offset of the local time from UTC in minutes (the clock shows local time)"
+	default 480
+	range -720 840
+
+config SAMPLE_MP5_NTP_SERVER
+	string "Time server"
+	default "ntp.aliyun.com"
+
 source "Kconfig.zephyr"

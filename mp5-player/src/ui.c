@@ -11,6 +11,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "mp5.h"
 
 static const struct screen_ops *screen_ops[SCR_COUNT];
@@ -18,8 +22,94 @@ static lv_obj_t *screens[SCR_COUNT];
 static enum screen_id current = SCR_COUNT;
 static const char *const screen_names[SCR_COUNT] = {
 	[SCR_HOME] = "home", [SCR_FILES] = "files", [SCR_PHOTOS] = "photos",
-	[SCR_PLAYER] = "player", [SCR_USB] = "usb", [SCR_RECENT] = "videos", [SCR_GAME] = "game", [SCR_SETTINGS] = "settings",
+	[SCR_PLAYER] = "player", [SCR_USB] = "usb", [SCR_RECENT] = "videos", [SCR_GAME] = "game", [SCR_SETTINGS] = "settings", [SCR_WIFI] = "wifi",
 };
+
+/* ---- theme ---------------------------------------------------------------------------- */
+
+static const struct {
+	const char *name;
+	uint32_t accent, accent2;
+} accents[UI_ACCENTS] = {
+	{"Blue", 0x6C8CFF, 0x9B6CFF},
+	{"Purple", 0x9B6CFF, 0xD443A8},
+	{"Green", 0x3DDC97, 0x1FA97A},
+	{"Orange", 0xFFB547, 0xF2822C},
+	{"Pink", 0xFF6C9B, 0xD443A8},
+	{"Red", 0xE5484D, 0xB02A37},
+};
+
+struct palette ui_pal = {
+	.bg = 0x0B0F17, .surface = 0x151B28, .surface2 = 0x1F2740, .border = 0x2A3350,
+	.text = 0xE8ECF4, .dim = 0x8B95A8, .accent = 0x6C8CFF, .accent2 = 0x9B6CFF,
+	.ok = 0x3DDC97, .warn = 0xFFB547, .pink = 0xFF6C9B,
+};
+static bool theme_dark = true;
+static int theme_accent;
+
+bool ui_theme_dark(void)
+{
+	return theme_dark;
+}
+
+int ui_theme_accent(void)
+{
+	return theme_accent;
+}
+
+const char *ui_theme_accent_name(int index)
+{
+	return accents[CLAMP(index, 0, UI_ACCENTS - 1)].name;
+}
+
+uint32_t ui_theme_accent_color(int index)
+{
+	return accents[CLAMP(index, 0, UI_ACCENTS - 1)].accent;
+}
+
+static void palette_make(bool dark, int accent)
+{
+	theme_dark = dark;
+	theme_accent = CLAMP(accent, 0, UI_ACCENTS - 1);
+	if (dark) {
+		ui_pal = (struct palette){
+			.bg = 0x0B0F17, .surface = 0x151B28, .surface2 = 0x1F2740, .border = 0x2A3350,
+			.text = 0xE8ECF4, .dim = 0x8B95A8,
+			.ok = 0x3DDC97, .warn = 0xFFB547, .pink = 0xFF6C9B,
+		};
+	} else {
+		ui_pal = (struct palette){
+			.bg = 0xF1F3F9, .surface = 0xFFFFFF, .surface2 = 0xDFE5F2, .border = 0xCBD3E4,
+			.text = 0x1B2233, .dim = 0x5C687F,
+			.ok = 0x1FA97A, .warn = 0xD9830A, .pink = 0xE0457B,
+		};
+	}
+	ui_pal.accent = accents[theme_accent].accent;
+	ui_pal.accent2 = accents[theme_accent].accent2;
+}
+
+/* the saved theme, before the screens are built */
+static void theme_load(void)
+{
+	const char *mode = cfg_get("theme");
+	const char *acc = cfg_get("accent");
+
+	palette_make(mode == NULL || strcmp(mode, "light") != 0, acc != NULL ? atoi(acc) : 0);
+}
+
+static void ui_rebuild(void *unused);
+
+void ui_theme_set(bool dark, int accent)
+{
+	char buf[8];
+
+	palette_make(dark, accent);
+	cfg_set("theme", dark ? "dark" : "light");
+	snprintf(buf, sizeof(buf), "%d", theme_accent);
+	cfg_set("accent", buf);
+	/* the screen that asks is one of those to be deleted: do it after its event */
+	lv_async_call(ui_rebuild, NULL);
+}
 
 lv_obj_t *ui_screen_new(bool transparent)
 {
@@ -123,8 +213,40 @@ void ui_goto(enum screen_id id)
 	ui_goto_arg(id, NULL);
 }
 
+/* every screen is made again with the new colours */
+static void ui_rebuild(void *unused)
+{
+	enum screen_id cur = current;
+	bool made[SCR_COUNT];
+	lv_obj_t *tmp = lv_obj_create(NULL);
+
+	ARG_UNUSED(unused);
+	if (cur < SCR_COUNT && screen_ops[cur]->leave != NULL) {
+		screen_ops[cur]->leave();
+	}
+	lv_screen_load(tmp);
+	for (int i = 0; i < SCR_COUNT; i++) {
+		made[i] = screens[i] != NULL;
+		if (made[i]) {
+			lv_obj_delete(screens[i]);
+			screens[i] = NULL;
+		}
+	}
+	/* the screens that have timers of their own must have their objects again at once */
+	for (int i = 0; i < SCR_COUNT; i++) {
+		if (made[i]) {
+			screens[i] = screen_ops[i]->create();
+		}
+	}
+	current = SCR_COUNT;
+	ui_goto(cur < SCR_COUNT ? cur : SCR_HOME);
+	lv_obj_delete_async(tmp);
+}
+
 void ui_init(void)
 {
+	cfg_load();
+	theme_load();
 	ui_stats_init();
 	ui_register(SCR_HOME, &home_ops);
 	ui_register(SCR_FILES, &files_ops);
@@ -133,6 +255,7 @@ void ui_init(void)
 	ui_register(SCR_PHOTOS, &photos_ops);
 	ui_register(SCR_USB, &usb_ops);
 	ui_register(SCR_SETTINGS, &settings_ops);
+	ui_register(SCR_WIFI, &wifi_ops);
 	ui_register(SCR_PLAYER, &player_ops);
 	ui_goto(SCR_HOME);
 }

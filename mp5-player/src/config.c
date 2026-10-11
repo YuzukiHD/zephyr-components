@@ -1,0 +1,135 @@
+/*
+ * Copyright (c) 2026 Yuzuki Tsuru
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * The settings that stay across power cycles: a text file on the SD card with one "key value"
+ * line per setting (the theme, the Wi-Fi network).
+ */
+
+#include <stdio.h>
+#include <string.h>
+#include <zephyr/fs/fs.h>
+#include <zephyr/kernel.h>
+
+#include "mp5.h"
+
+#define CFG_FILE	"/SD:/.mp5_settings"
+#define CFG_MAX		12
+#define KEY_LEN		16
+#define VAL_LEN		96
+
+static struct {
+	char key[KEY_LEN];
+	char val[VAL_LEN];
+} items[CFG_MAX];
+static int count;
+static K_MUTEX_DEFINE(lock);
+
+static void save(void)
+{
+	struct fs_file_t f;
+	char line[KEY_LEN + VAL_LEN + 4];
+
+	if (!storage_ready()) {
+		return;
+	}
+	fs_file_t_init(&f);
+	if (fs_open(&f, CFG_FILE, FS_O_CREATE | FS_O_WRITE | FS_O_TRUNC) != 0) {
+		return;
+	}
+	for (int i = 0; i < count; i++) {
+		int n = snprintf(line, sizeof(line), "%s %s\n", items[i].key, items[i].val);
+
+		if (fs_write(&f, line, n) < 0) {
+			break;
+		}
+	}
+	fs_close(&f);
+}
+
+void cfg_load(void)
+{
+	struct fs_file_t f;
+	char buf[1024];
+	ssize_t n;
+
+	k_mutex_lock(&lock, K_FOREVER);
+	count = 0;
+	fs_file_t_init(&f);
+	if (storage_ready() && fs_open(&f, CFG_FILE, FS_O_READ) == 0) {
+		n = fs_read(&f, buf, sizeof(buf) - 1);
+		fs_close(&f);
+		if (n > 0) {
+			char *line = buf, *next;
+
+			buf[n] = '\0';
+			for (; line != NULL && *line != '\0' && count < CFG_MAX; line = next) {
+				char *sp;
+
+				next = strchr(line, '\n');
+				if (next != NULL) {
+					*next++ = '\0';
+				}
+				sp = strchr(line, ' ');
+				if (sp == NULL || sp == line || (sp - line) >= KEY_LEN) {
+					continue;
+				}
+				*sp++ = '\0';
+				strncpy(items[count].key, line, KEY_LEN - 1);
+				strncpy(items[count].val, sp, VAL_LEN - 1);
+				count++;
+			}
+		}
+	}
+	k_mutex_unlock(&lock);
+}
+
+const char *cfg_get(const char *key)
+{
+	const char *ret = NULL;
+
+	k_mutex_lock(&lock, K_FOREVER);
+	for (int i = 0; i < count; i++) {
+		if (strcmp(items[i].key, key) == 0) {
+			ret = items[i].val;
+			break;
+		}
+	}
+	k_mutex_unlock(&lock);
+
+	return ret;
+}
+
+void cfg_set(const char *key, const char *value)
+{
+	int at = -1;
+
+	k_mutex_lock(&lock, K_FOREVER);
+	for (int i = 0; i < count; i++) {
+		if (strcmp(items[i].key, key) == 0) {
+			at = i;
+			break;
+		}
+	}
+	if (value == NULL) {
+		if (at >= 0) {
+			items[at] = items[count - 1];
+			count--;
+		}
+	} else {
+		if (at < 0 && count < CFG_MAX) {
+			at = count++;
+		}
+		if (at >= 0) {
+			strncpy(items[at].key, key, KEY_LEN - 1);
+			items[at].key[KEY_LEN - 1] = '\0';
+			strncpy(items[at].val, value, VAL_LEN - 1);
+			items[at].val[VAL_LEN - 1] = '\0';
+		}
+	}
+	save();
+	k_mutex_unlock(&lock);
+}

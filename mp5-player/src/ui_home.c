@@ -119,6 +119,8 @@ static void clock_refresh(void)
 			      month_names[tm.tm_mon], tm.tm_year + 1900);
 }
 
+static lv_timer_t *clock_tmr;
+
 static void clock_timer(lv_timer_t *t)
 {
 	ARG_UNUSED(t);
@@ -357,7 +359,9 @@ static lv_obj_t *home_create(void)
 	lv_obj_set_style_text_color(storage_label, lv_color_hex(C_DIM), 0);
 	lv_obj_set_style_pad_top(storage_label, 6, 0);
 
-	lv_timer_create(clock_timer, 1000, NULL);
+	if (clock_tmr == NULL) {
+		clock_tmr = lv_timer_create(clock_timer, 1000, NULL);
+	}
 	clock_refresh();
 	storage_refresh();
 

@@ -650,8 +650,10 @@ static lv_obj_t *photos_create(void)
 	lv_obj_align(message, LV_ALIGN_CENTER, 0, 0);
 	lv_obj_add_flag(message, LV_OBJ_FLAG_HIDDEN);
 
-	view_timer = lv_timer_create(view_tick, VIEW_MS, NULL);
-	lv_timer_pause(view_timer);
+	if (view_timer == NULL) {
+		view_timer = lv_timer_create(view_tick, VIEW_MS, NULL);
+		lv_timer_pause(view_timer);
+	}
 
 	return scr;
 }

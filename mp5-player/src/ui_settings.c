@@ -14,7 +14,7 @@
 
 #define ROW_H	96
 
-static lv_obj_t *time_value, *net_value, *sync_value;
+static lv_obj_t *time_value, *net_value, *sync_value, *bt_value;
 static lv_timer_t *refresh_timer;
 
 static void back_clicked(lv_event_t *e)
@@ -77,22 +77,84 @@ static void time_clicked(lv_event_t *e)
 static void refresh(lv_timer_t *t)
 {
 	struct tm tm;
-	char buf[64];
+	char buf[64], line[96];
 
 	ARG_UNUSED(t);
 	clock_now(&tm);
 	snprintf(buf, sizeof(buf), "%04d-%02d-%02d  %02d:%02d:%02d", tm.tm_year + 1900,
 		 tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 	lv_label_set_text(time_value, buf);
-	lv_label_set_text(net_value, net_status());
-	lv_label_set_text(sync_value, net_sync_status());
+	app_net_status(line, sizeof(line));
+	lv_label_set_text(net_value, line);
+	app_net_sync_status(line, sizeof(line));
+	lv_label_set_text(sync_value, line);
+	bt_status(line, sizeof(line));
+	lv_label_set_text(bt_value, line);
+}
+
+static void wifi_clicked(lv_event_t *e)
+{
+	ARG_UNUSED(e);
+	ui_goto(SCR_WIFI);
 }
 
 static void sync_clicked(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	net_sync_time();
+	app_net_sync_time();
 	refresh(NULL);
+}
+
+static void dark_changed(lv_event_t *e)
+{
+	lv_obj_t *sw = lv_event_get_target(e);
+
+	/* the screens are made again, the switch with them */
+	ui_theme_set(lv_obj_has_state(sw, LV_STATE_CHECKED), ui_theme_accent());
+}
+
+static void accent_clicked(lv_event_t *e)
+{
+	ui_theme_set(ui_theme_dark(), (int)(uintptr_t)lv_event_get_user_data(e));
+}
+
+/* a row with a switch for dark or light */
+static void dark_row(lv_obj_t *list)
+{
+	lv_obj_t *value;
+	lv_obj_t *row = row_create(list, LV_SYMBOL_EYE_OPEN, "Dark mode", &value, NULL);
+	lv_obj_t *sw = lv_switch_create(row);
+
+	lv_obj_add_flag(value, LV_OBJ_FLAG_HIDDEN);
+	lv_obj_set_style_bg_color(sw, lv_color_hex(C_ACCENT), LV_PART_INDICATOR | LV_STATE_CHECKED);
+	if (ui_theme_dark()) {
+		lv_obj_add_state(sw, LV_STATE_CHECKED);
+	}
+	lv_obj_add_event_cb(sw, dark_changed, LV_EVENT_VALUE_CHANGED, NULL);
+}
+
+/* a row with the accent colours to choose from */
+static void accent_row(lv_obj_t *list)
+{
+	lv_obj_t *value;
+	lv_obj_t *row = row_create(list, LV_SYMBOL_IMAGE, "Accent color", &value, NULL);
+
+	lv_obj_add_flag(value, LV_OBJ_FLAG_HIDDEN);
+	for (int i = 0; i < UI_ACCENTS; i++) {
+		lv_obj_t *dot = lv_button_create(row);
+
+		lv_obj_remove_style_all(dot);
+		lv_obj_set_size(dot, 48, 48);
+		lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+		lv_obj_set_style_bg_color(dot, lv_color_hex(ui_theme_accent_color(i)), 0);
+		lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+		if (i == ui_theme_accent()) {
+			lv_obj_set_style_border_width(dot, 4, 0);
+			lv_obj_set_style_border_color(dot, lv_color_hex(C_TEXT), 0);
+		}
+		lv_obj_set_ext_click_area(dot, 6);
+		lv_obj_add_event_cb(dot, accent_clicked, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
+	}
 }
 
 static lv_obj_t *settings_create(void)
@@ -113,9 +175,13 @@ static lv_obj_t *settings_create(void)
 	lv_obj_set_scroll_dir(list, LV_DIR_VER);
 
 	row_create(list, LV_SYMBOL_BELL, "Date and time", &time_value, time_clicked);
-	row_create(list, LV_SYMBOL_WIFI, "Wi-Fi", &net_value, NULL);
+	row_create(list, LV_SYMBOL_WIFI, "Wi-Fi", &net_value, wifi_clicked);
+	row_create(list, LV_SYMBOL_BLUETOOTH, "Bluetooth", &bt_value, NULL);
 	row_create(list, LV_SYMBOL_REFRESH, "Set the time from the network", &sync_value,
 		   sync_clicked);
+
+	dark_row(list);
+	accent_row(list);
 
 	snprintf(buf, sizeof(buf), "Built %s %s", __DATE__, __TIME__);
 	row_create(list, LV_SYMBOL_SETTINGS, "About", &about, NULL);

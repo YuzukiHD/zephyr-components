@@ -2209,6 +2209,18 @@ bool sdio_host_init(struct rwnx_hw *rwnx_hw, void (*sdio_isr)(void))
         }
         sdio_function[FUNC_1] = sdio_find_func(0x7, 0xc8a1, 0xc08d);
 		if(!sdio_function[FUNC_1]){
+			for (int k = FUNC_1; k < SDIOM_MAX_FUNCS; k++) {
+				struct sdio_func *f = &sdio_func_inst[k];
+				uint8_t fbr = 0xff;
+
+				if (f->card == NULL) {
+					continue;
+				}
+				sdio_read_byte(&f->card->func0, SDIO_FBR_BASE(k), &fbr);
+				AIC_LOG_PRINTF("sdio func %d: class %02x, own tuple %04x/%04x, card tuple %04x/%04x\n",
+					       k, fbr, f->cis.manf_id, f->cis.manf_code,
+					       f->card->func0.cis.manf_id, f->card->func0.cis.manf_code);
+			}
 			ret = -ENODEV;
 			AIC_LOG_PRINTF("%s: sdio_find_func func1 failed!!(%d)\n", __func__, ret);
 			return FALSE;

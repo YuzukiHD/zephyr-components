@@ -147,6 +147,7 @@ int main(void)
 	lv_g2d_init();
 #endif
 	ui_init();
+	app_net_init();
 #ifdef CONFIG_SAMPLE_MP5_SELFTEST
 	list_root();
 	ui_goto(SCR_PLAYER);

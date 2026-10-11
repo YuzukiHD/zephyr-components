@@ -343,7 +343,8 @@ struct bx_file {
 
 static bool is_std(FILE *f)
 {
-	return (uintptr_t)f <= 3U;
+	/* minimal libc: stdin/stdout/stderr are the small integers 0..2; picolibc: real pointers */
+	return (uintptr_t)f <= 3U || f == stdin || f == stdout || f == stderr;
 }
 
 FILE *bx_fopen(const char *path, const char *mode)

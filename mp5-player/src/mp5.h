@@ -73,6 +73,7 @@ enum files_filter {
 	FILES_ALL,
 	FILES_NES,	/**< .nes */
 	FILES_GB,	/**< .gb .gbc .gba */
+	FILES_VIDEO,	/**< .mp4 .h264 .264 */
 };
 
 /** Opens the file browser in @p dir (NULL: the root of the card) listing only @p filter */

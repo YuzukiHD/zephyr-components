@@ -79,7 +79,7 @@ static char rom_path[192], save_path[200];
 static uint8_t *buf[NBUF];
 static unsigned int cur;
 static atomic_t ready_idx;
-static unsigned int ready_w, ready_h;
+static unsigned int ready_w, ready_h, ready_stride;
 static atomic_t pad_bits;		/* BIT(K_...) of the fingers on the pad */
 
 static lv_obj_t *pad_objs[K_COUNT], *msg_label, *load_label, *gba_only_l, *gba_only_r;
@@ -168,7 +168,7 @@ static void video_main(void *a, void *b, void *c)
 		img.data = buf[atomic_get(&ready_idx)];
 		img.width = ready_w;
 		img.height = ready_h;
-		img.stride = BUF_STRIDE;
+		img.stride = ready_stride;
 		img.nonblock = false;
 		display_sunxi_show_rgb(disp, &img);
 	}
@@ -179,10 +179,17 @@ static uint16_t *video_acquire(void)
 	return (uint16_t *)buf[(cur + 1) % NBUF];
 }
 
+/*
+ * The rows of the picture are NES: 256 pixels apart; Game Boy and Game Boy Advance: 240 apart (a
+ * Game Boy picture of 160 pixels sits in the left of them), whatever the width of the picture.
+ */
 static void video_present(unsigned int w, unsigned int h)
 {
+	unsigned int stride = (core == CORE_NES ? 256 : 240) * 2;
+
 	cur = (cur + 1) % NBUF;
-	sys_cache_data_flush_range(buf[cur], BUF_STRIDE * h);
+	sys_cache_data_flush_range(buf[cur], stride * h);
+	ready_stride = stride;
 	ready_w = w;
 	ready_h = h;
 	atomic_set(&ready_idx, cur);

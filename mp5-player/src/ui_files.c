@@ -38,7 +38,7 @@ struct entry {
 static struct entry *entries;
 static int count;
 static enum files_filter filter = FILES_ALL;
-static lv_obj_t *title_label;
+static lv_obj_t *title_label, *recent_btn;
 static char dir_path[PATH_MAX_LEN] = ROOT;
 static lv_obj_t *path_label, *list, *spacer, *empty_label;
 static lv_obj_t *rows[POOL];
@@ -125,6 +125,9 @@ static bool shown_by_filter(const struct fs_dirent *d)
 	}
 	if (filter == FILES_NES) {
 		return has_ext(d->name, ".nes");
+	}
+	if (filter == FILES_VIDEO) {
+		return is_video(d->name);
 	}
 
 	return has_ext(d->name, ".gb") || has_ext(d->name, ".gbc") || has_ext(d->name, ".gba");
@@ -241,6 +244,12 @@ static void row_clicked(lv_event_t *e)
 	} else if (ui_game_ext(entries[idx].name)) {
 		ui_game_open(path, SCR_FILES);
 	}
+}
+
+static void recent_clicked(lv_event_t *e)
+{
+	ARG_UNUSED(e);
+	ui_goto(SCR_RECENT);
 }
 
 static void back_clicked(lv_event_t *e)
@@ -366,12 +375,31 @@ static lv_obj_t *files_create(void)
 
 	title_label = lv_obj_get_child(bar, 1);
 
+	recent_btn = lv_button_create(bar);
+	{
+		lv_obj_t *l = lv_label_create(recent_btn);
+
+		lv_obj_remove_style_all(recent_btn);
+		lv_obj_set_size(recent_btn, 190, 56);
+		lv_obj_set_style_radius(recent_btn, LV_RADIUS_CIRCLE, 0);
+		lv_obj_set_style_bg_color(recent_btn, lv_color_hex(C_ACCENT), 0);
+		lv_obj_set_style_bg_opa(recent_btn, LV_OPA_COVER, 0);
+		lv_obj_set_style_bg_color(recent_btn, lv_color_hex(C_ACCENT2), LV_STATE_PRESSED);
+		lv_obj_set_style_text_color(l, lv_color_hex(C_TEXT), 0);
+		lv_obj_set_style_text_font(l, &lv_font_montserrat_20, 0);
+		lv_label_set_text(l, LV_SYMBOL_LIST "  Recent");
+		lv_obj_center(l);
+		lv_obj_add_event_cb(recent_btn, recent_clicked, LV_EVENT_CLICKED, NULL);
+	}
+
 	path_label = lv_label_create(bar);
 	lv_obj_set_flex_grow(path_label, 1);
 	lv_label_set_long_mode(path_label, LV_LABEL_LONG_DOT);
 	lv_obj_set_style_text_align(path_label, LV_TEXT_ALIGN_RIGHT, 0);
 	lv_obj_set_style_text_color(path_label, lv_color_hex(C_DIM), 0);
 	lv_obj_set_style_text_font(path_label, &lv_font_montserrat_20, 0);
+	/* the button at the right end of the bar */
+	lv_obj_move_to_index(recent_btn, -1);
 
 	list = lv_obj_create(scr);
 	lv_obj_remove_style_all(list);
@@ -422,7 +450,13 @@ static void files_enter(void *arg)
 	} else {
 		strcpy(dir_path, ROOT);
 	}
-	lv_label_set_text(title_label, filter == FILES_NES ? "NES" : filter == FILES_GB ? "Game Boy" : "Files");
+	if (filter == FILES_VIDEO) {
+		lv_obj_remove_flag(recent_btn, LV_OBJ_FLAG_HIDDEN);
+	} else {
+		lv_obj_add_flag(recent_btn, LV_OBJ_FLAG_HIDDEN);
+	}
+	lv_label_set_text(title_label, filter == FILES_NES ? "NES" : filter == FILES_GB ? "Game Boy" :
+				       filter == FILES_VIDEO ? "Videos" : "Files");
 	if (!storage_ready() || dir_load() != 0) {
 		strcpy(dir_path, ROOT);
 		if (!storage_ready() || dir_load() != 0) {

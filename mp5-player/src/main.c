@@ -17,9 +17,15 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/display.h>
 #include <zephyr/fs/fs.h>
+#include <stdlib.h>
+#include <zephyr/cache.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
+#include "lv_rvv.h"
+#ifdef CONFIG_SAMPLE_MP5_G2D
+#include "lv_g2d.h"
+#endif
 #include "mp5.h"
 #include "player.h"
 
@@ -124,6 +130,11 @@ int main(void)
 	const struct device *disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 	int ret;
 
+	cpu_clock_setup();
+	if (!lv_rvv_selftest()) {
+		printk("mp5: the vector blends differ from LVGL, switched off\n");
+		lv_rvv_enable(false);
+	}
 	if (!device_is_ready(disp)) {
 		printk("mp5: the display is not ready\n");
 		return 0;
@@ -132,6 +143,9 @@ int main(void)
 	mounted = ret == 0;
 	printk("mp5: SD card %s (%d)\n", mounted ? "mounted" : "not available", ret);
 
+#ifdef CONFIG_SAMPLE_MP5_G2D
+	lv_g2d_init();
+#endif
 	ui_init();
 #ifdef CONFIG_SAMPLE_MP5_SELFTEST
 	list_root();
@@ -140,6 +154,42 @@ int main(void)
 #endif
 	lv_timer_handler();
 	display_blanking_off(disp);
+#ifdef CONFIG_SAMPLE_MP5_UI_BENCH
+	/* a full redraw of the home screen, with and without the vector blends */
+	for (int pass = 0; pass < 2; pass++) {
+		int64_t t0;
+
+		lv_rvv_enable(pass == 0);
+		lv_obj_invalidate(lv_screen_active());
+		lv_refr_now(NULL);
+		t0 = k_uptime_get();
+		for (int i = 0; i < 10; i++) {
+			lv_obj_invalidate(lv_screen_active());
+			lv_refr_now(NULL);
+		}
+		printk("mp5: 10 full redraws of the home screen, vector blends %s: %d ms\n",
+		       pass == 0 ? "on" : "off", (int)(k_uptime_get() - t0));
+#ifdef CONFIG_SAMPLE_MP5_G2D
+		lv_g2d_report();
+#endif
+	}
+	lv_rvv_enable(true);
+#endif
+#ifdef CONFIG_SAMPLE_MP5_UI_PROFILE
+	{
+		extern void ui_profile_start(struct k_thread *target);
+		int64_t t0 = k_uptime_get();
+
+		ui_profile_start(k_current_get());
+		while (k_uptime_get() - t0 < 9000) {
+			lv_obj_invalidate(lv_screen_active());
+			lv_refr_now(NULL);
+		}
+	}
+#endif
+#ifdef CONFIG_SAMPLE_MP5_UI_DEMO
+	ui_stats_demo();
+#endif
 	printk("mp5: %d x %d\n", (int)lv_display_get_horizontal_resolution(NULL),
 	       (int)lv_display_get_vertical_resolution(NULL));
 

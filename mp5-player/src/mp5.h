@@ -34,6 +34,7 @@ enum screen_id {
 	SCR_PHOTOS,
 	SCR_PLAYER,
 	SCR_USB,
+	SCR_RECENT,
 	SCR_COUNT,
 };
 
@@ -62,8 +63,29 @@ struct screen_ops {
 void ui_register(enum screen_id id, const struct screen_ops *ops);
 void ui_goto_arg(enum screen_id id, void *arg);
 
+/** Plays a video; the back button of the player returns to @p from (SCR_FILES or SCR_RECENT) */
+void ui_player_open(const char *path, enum screen_id from);
+
 extern const struct screen_ops home_ops;
+extern const struct screen_ops files_ops;
+extern const struct screen_ops recent_ops;
 extern const struct screen_ops player_ops;
+
+/** Raises the CPU clock to CONFIG_SAMPLE_MP5_CPU_MHZ, each step checked */
+void cpu_clock_setup(void);
+
+/* ---- statistics, printed when they happen ---- */
+
+void ui_stats_init(void);
+void ui_stats_scroll_begin(const char *name);
+void ui_stats_scroll_end(void);
+void ui_stats_page_begin(const char *name);
+void ui_stats_page_set_up(uint32_t us);
+void ui_stats_demo(void);
+void ui_stats_scroll_summary(void);
+
+/** Scrolls the file list by @p dy pixels with the animation of a swipe (for the demo) */
+void files_demo_scroll(int32_t dy);
 
 /* ---- clock ------------------------------------------------------------------------------ */
 

@@ -25,7 +25,7 @@ struct tile {
 };
 
 static const struct tile tiles[] = {
-	{LV_SYMBOL_VIDEO, "Videos", "MP4 player", 0x6C8CFF, 0x4A5DE8, SCR_PLAYER},
+	{LV_SYMBOL_VIDEO, "Videos", "Recently played", 0x6C8CFF, 0x4A5DE8, SCR_RECENT},
 	{LV_SYMBOL_DIRECTORY, "Files", "Browse the SD card", 0xFFB547, 0xF2822C, SCR_FILES},
 	{LV_SYMBOL_IMAGE, "Photos", "JPEG and PNG", 0x3DDC97, 0x1FA97A, SCR_PHOTOS},
 	{LV_SYMBOL_USB, "USB Display", "Second screen for a PC", 0xFF6C9B, 0xD443A8, SCR_USB},

@@ -6,6 +6,8 @@
 
 /* Shared pieces of the user interface: screen switching and the building blocks of the bars */
 
+#include <zephyr/device.h>
+#include <zephyr/drivers/display/display_sunxi.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
@@ -14,6 +16,10 @@
 static const struct screen_ops *screen_ops[SCR_COUNT];
 static lv_obj_t *screens[SCR_COUNT];
 static enum screen_id current = SCR_COUNT;
+static const char *const screen_names[SCR_COUNT] = {
+	[SCR_HOME] = "home", [SCR_FILES] = "files", [SCR_PHOTOS] = "photos",
+	[SCR_PLAYER] = "player", [SCR_USB] = "usb", [SCR_RECENT] = "videos",
+};
 
 lv_obj_t *ui_screen_new(bool transparent)
 {
@@ -72,8 +78,22 @@ void ui_register(enum screen_id id, const struct screen_ops *ops)
 	screen_ops[id] = ops;
 }
 
+/*
+ * A new screen is drawn band by band into the frame buffer the display engine is scanning out,
+ * which shows as a wipe from the top. The plane is kept off until the whole screen is drawn.
+ */
+static void screen_drawn(lv_event_t *e)
+{
+	static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+
+	lv_display_remove_event_cb_with_user_data(lv_event_get_target(e), screen_drawn, NULL);
+	display_sunxi_fb_enable(disp, true);
+}
+
 void ui_goto_arg(enum screen_id id, void *arg)
 {
+	static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+
 	if (id >= SCR_COUNT || screen_ops[id] == NULL) {
 		return;
 	}
@@ -84,9 +104,17 @@ void ui_goto_arg(enum screen_id id, void *arg)
 		screen_ops[current]->leave();
 	}
 	current = id;
-	if (screen_ops[id]->enter != NULL) {
-		screen_ops[id]->enter(arg);
+	ui_stats_page_begin(screen_names[id]);
+	{
+		uint32_t c0 = k_cycle_get_32();
+
+		if (screen_ops[id]->enter != NULL) {
+			screen_ops[id]->enter(arg);
+		}
+		ui_stats_page_set_up(k_cyc_to_us_floor32(k_cycle_get_32() - c0));
 	}
+	display_sunxi_fb_enable(disp, false);
+	lv_display_add_event_cb(lv_display_get_default(), screen_drawn, LV_EVENT_REFR_READY, NULL);
 	lv_screen_load(screens[id]);
 }
 
@@ -97,7 +125,10 @@ void ui_goto(enum screen_id id)
 
 void ui_init(void)
 {
+	ui_stats_init();
 	ui_register(SCR_HOME, &home_ops);
+	ui_register(SCR_FILES, &files_ops);
+	ui_register(SCR_RECENT, &recent_ops);
 	ui_register(SCR_PLAYER, &player_ops);
 	ui_goto(SCR_HOME);
 }

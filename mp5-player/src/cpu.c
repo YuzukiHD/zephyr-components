@@ -1,0 +1,66 @@
+/*
+ * Copyright (c) 2026 Yuzuki Tsuru
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* Raises the CPU clock above what the boot stub sets up (600 MHz) */
+
+#include <zephyr/device.h>
+#include <zephyr/drivers/clock_control.h>
+#include <zephyr/dt-bindings/clock/sun252i-f101-ccu.h>
+#include <zephyr/kernel.h>
+#include <zephyr/sys/printk.h>
+
+#include "mp5.h"
+
+/* A busy loop over a checksummed block of memory: a CPU that is too fast corrupts it */
+static bool cpu_selftest(void)
+{
+	static uint32_t blk[16 * 1024];
+	uint32_t sum = 0, ref = 0;
+
+	for (unsigned int i = 0; i < ARRAY_SIZE(blk); i++) {
+		blk[i] = i * 2654435761U;
+	}
+	for (int round = 0; round < 50; round++) {
+		sum = 0;
+		for (unsigned int i = 0; i < ARRAY_SIZE(blk); i++) {
+			sum = (sum << 1 | sum >> 31) ^ blk[i] ^ (sum * 3U);
+		}
+		if (round == 0) {
+			ref = sum;
+		} else if (sum != ref) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void cpu_clock_setup(void)
+{
+	const struct device *cctl = DEVICE_DT_GET(DT_NODELABEL(cctl));
+	uint32_t rate, target = CONFIG_SAMPLE_MP5_CPU_MHZ * 1000000U;
+
+	clock_control_get_rate(cctl, (clock_control_subsys_t)CLK_CPU, &rate);
+	/* in steps, each one checked: the voltage is not changed */
+	while (target != 0U && rate < target) {
+		uint32_t next = MIN(rate + 72000000U, target);
+
+		if (clock_control_set_rate(cctl, (clock_control_subsys_t)CLK_CPU,
+					   (clock_control_subsys_rate_t)next) != 0) {
+			printk("cpu: %u MHz refused\n", next / 1000000U);
+			break;
+		}
+		if (!cpu_selftest()) {
+			printk("cpu: %u MHz BAD\n", next / 1000000U);
+			clock_control_set_rate(cctl, (clock_control_subsys_t)CLK_CPU,
+					       (clock_control_subsys_rate_t)rate);
+			printk("cpu: back to %u MHz\n", rate / 1000000U);
+			return;
+		}
+		rate = next;
+	}
+	printk("cpu: %u MHz\n", rate / 1000000U);
+}

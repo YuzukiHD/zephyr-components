@@ -37,7 +37,11 @@
 #define PCM_BLOCK	(AAC_FRAMES * 2 * sizeof(int16_t))
 #define PCM_BLOCKS	12
 #define PREFILL		6
-/* pictures later than this behind the sound are not shown */
+/*
+ * Pictures later than this behind the sound are not shown. Dropping one does not make the
+ * decoder faster; a wider limit (8 frames) was tried and left the picture a quarter of a second
+ * behind the sound for the rest of the film, which is worse than a missing picture.
+ */
 #define DROP_US		(2 * 33367)
 /* pictures are put up this much before their time, the display waits for a refresh */
 #define LEAD_US		8000
@@ -70,6 +74,35 @@ K_MEM_SLAB_DEFINE_STATIC(pcm_slab, PCM_BLOCK, PCM_BLOCKS, 4);
 K_THREAD_STACK_DEFINE(audio_stack, 8192);
 K_THREAD_STACK_DEFINE(video_stack, 8192);
 static struct k_thread audio_thread, video_thread;
+
+#ifdef CONFIG_SAMPLE_MP5_THREAD_STATS
+static uint64_t cpu_ms(struct k_thread *t)
+{
+	k_thread_runtime_stats_t st;
+
+	if (k_thread_runtime_stats_get(t, &st) != 0) {
+		return 0;
+	}
+	return k_cyc_to_ms_floor64(st.execution_cycles);
+}
+#else
+struct stats_none {
+	uint64_t execution_cycles, idle_cycles;
+};
+#define k_thread_runtime_stats_t struct stats_none
+
+static uint64_t cpu_ms(struct k_thread *t)
+{
+	ARG_UNUSED(t);
+	return 0;
+}
+
+static inline void stats_none_all_get(struct stats_none *s)
+{
+	s->execution_cycles = s->idle_cycles = 0;
+}
+#define k_thread_runtime_stats_all_get stats_none_all_get
+#endif
 
 static const struct device *const codec_i2s = DEVICE_DT_GET(DT_NODELABEL(audio_codec));
 static const struct device *const codec_ctl = DEVICE_DT_GET(DT_NODELABEL(codec_analog));
@@ -476,6 +509,23 @@ static size_t avcc_to_annexb(const uint8_t *in, size_t len, uint8_t *out, bool w
 	return w;
 }
 
+/* The first NAL unit types of an Annex B unit, for the log: 5 is an IDR slice, 1 a plain one */
+static void nal_types(const uint8_t *p, size_t len, int *idr, int *other)
+{
+	*idr = *other = 0;
+	for (size_t i = 0; i + 4 < len; i++) {
+		if (p[i] == 0 && p[i + 1] == 0 && p[i + 2] == 0 && p[i + 3] == 1) {
+			int t = p[i + 4] & 0x1f;
+
+			if (t == 5) {
+				(*idr)++;
+			} else if (t >= 1 && t <= 4) {
+				(*other)++;
+			}
+		}
+	}
+}
+
 static void show(const struct vdec_frame *f)
 {
 	struct display_sunxi_yuv yuv = {
@@ -486,11 +536,63 @@ static void show(const struct vdec_frame *f)
 		.stride_y = f->stride[0],
 		.stride_uv = f->stride[1],
 		.bt709 = true,
-		/* the picture is up at the next refresh, the decoder does not wait for it */
-		.nonblock = true,
+		/* the display thread waits for the flip, nothing else does */
+		.nonblock = false,
 	};
 
 	display_sunxi_show_yuv(disp, &yuv);
+}
+
+/*
+ * Pictures go to the display through a thread: committing one waits for the flip of the previous
+ * one (up to two refreshes), which would stall the decoder. The thread hands a picture back once
+ * the one after it is up, and the video thread releases it, so the decoder state stays single
+ * threaded. A picture without a buffer ends a session: the thread returns what it still holds.
+ */
+K_MSGQ_DEFINE(disp_q, sizeof(struct vdec_frame), 1, 4);
+K_MSGQ_DEFINE(done_q, sizeof(struct vdec_frame), 4, 4);
+K_SEM_DEFINE(disp_flushed, 0, 1);
+
+static void disp_main(void *a, void *b, void *c)
+{
+	struct vdec_frame f, shown = {0};
+
+	ARG_UNUSED(a);
+	ARG_UNUSED(b);
+	ARG_UNUSED(c);
+	for (;;) {
+		k_msgq_get(&disp_q, &f, K_FOREVER);
+		if (f.priv == NULL) {
+			/* the plane scans the shown picture out: take it off the screen before its
+			 * memory goes back to the pool, or the next session decodes into a picture
+			 * that is being displayed
+			 */
+			if (shown.priv != NULL) {
+				display_sunxi_hide_yuv(disp);
+				k_msgq_put(&done_q, &shown, K_FOREVER);
+			}
+			shown = (struct vdec_frame){0};
+			k_sem_give(&disp_flushed);
+			continue;
+		}
+		/* the commit returns when the new picture is up: the one before is off the screen */
+		show(&f);
+		if (shown.priv != NULL) {
+			k_msgq_put(&done_q, &shown, K_FOREVER);
+		}
+		shown = f;
+	}
+}
+
+K_THREAD_DEFINE(disp_tid, 16384, disp_main, NULL, NULL, NULL, 5, 0, 0);
+
+static void release_done(void)
+{
+	struct vdec_frame f;
+
+	while (k_msgq_get(&done_q, &f, K_NO_WAIT) == 0) {
+		vdec_frame_release(vdec_dev, &f);
+	}
 }
 
 enum wait_result {
@@ -540,14 +642,18 @@ static void video_session(const struct request *r, uint8_t *raw, uint8_t *ab)
 		.codec = VDEC_CODEC_H264,
 		.format = VDEC_FORMAT_NV12,
 		.buffer_size = 1024 * 1024,
+		/* only the display engine reads the pictures: no cache maintenance for each one */
+		.no_cache_ops = true,
 	};
-	struct vdec_frame frame, shown = {0}, older = {0};
+	struct vdec_frame frame;
 	struct vdec_stream *stream;
 	struct mp4_iter it;
 	struct mp4_sample s;
+	uint32_t it_first;
 	size_t ab_len = 0, ab_used = 0;
-	int64_t pending_pts = -1, start_ms = k_uptime_get();
+	int64_t pending_pts = -1, start_ms = k_uptime_get(), key_pts_us = 0;
 	bool eof = false, flushed = false, first = true, held = false, shown_any = false;
+	bool any_shown = false;
 	int ret;
 
 	printk("player: session %u at %d ms, %s\n", r->seq, (int)(r->pos_us / 1000),
@@ -566,21 +672,41 @@ static void video_session(const struct request *r, uint8_t *raw, uint8_t *ab)
 		return;
 	}
 
+	it_first = it.next;
+	int64_t stat_ms = k_uptime_get(), wait_ms = 0, feed_ms = 0;
+	uint32_t st_shown = 0, st_late = 0;
+	uint64_t st_audio = cpu_ms(&audio_thread), st_video = cpu_ms(&video_thread);
+	k_thread_runtime_stats_t st_all0;
+
+	k_thread_runtime_stats_all_get(&st_all0);
+	int64_t st_worst_us = 0;
+	uint32_t get_us = 0, busy_n = 0, idle_ms = 0;
 	while (!req_changed(r->seq)) {
+		uint32_t c0;
+
+		release_done();
+		c0 = k_cycle_get_32();
 		ret = vdec_stream_get_frame(vdec_dev, stream, &frame);
+		get_us += k_cyc_to_us_floor32(k_cycle_get_32() - c0);
 		if (ret == 0) {
 			int64_t pts_us = frame.pts >= 0 ? frame.pts : 0;
 			enum wait_result w;
 
-			/* the pictures from the key frame up to the position are not shown */
-			if (pts_us + 1000 < r->pos_us) {
+			/* the pictures from the key frame up to the position are not shown, nor the
+			 * ones that come before the key frame in display order: they refer to
+			 * pictures the decoder never saw
+			 */
+			if (pts_us + 1000 < r->pos_us || pts_us + 1000 < key_pts_us) {
 				vdec_frame_release(vdec_dev, &frame);
 				continue;
 			}
 			if (r->play) {
 				video_ready_seq = r->seq;
 			}
+			int64_t t0 = k_uptime_get();
+
 			w = r->play ? wait_for(r->seq, pts_us, r->pos_us, start_ms) : WAIT_ON_TIME;
+			wait_ms += k_uptime_get() - t0;
 			if (w == WAIT_ABORT) {
 				vdec_frame_release(vdec_dev, &frame);
 				break;
@@ -591,13 +717,9 @@ static void video_session(const struct request *r, uint8_t *raw, uint8_t *ab)
 					printk("player: session %u first picture at %d ms, %d ms after the start\n",
 					       r->seq, (int)(pts_us / 1000), (int)(k_uptime_get() - start_ms));
 				}
-				show(&frame);
-				/* the picture before the last may still be scanned out */
-				if (older.priv != NULL) {
-					vdec_frame_release(vdec_dev, &older);
-				}
-				older = shown;
-				shown = frame;
+				k_msgq_put(&disp_q, &frame, K_FOREVER);
+				any_shown = true;
+				st_shown++;
 				pos_publish(r->seq, pts_us / 1000);
 				if (!r->play) {
 					/* a paused session shows the picture at its position and holds */
@@ -605,7 +727,28 @@ static void video_session(const struct request *r, uint8_t *raw, uint8_t *ab)
 					break;
 				}
 			} else {
+				st_late++;
 				vdec_frame_release(vdec_dev, &frame);
+			}
+			if (r->play && k_uptime_get() - stat_ms >= 5000) {
+				k_thread_runtime_stats_t all;
+				uint64_t a = cpu_ms(&audio_thread), vd = cpu_ms(&video_thread);
+
+				k_thread_runtime_stats_all_get(&all);
+				printk("player: per %d ms: %u shown, %u late, wait %d ms, feed %d ms, a/v offset %d ms, get %d ms, %u busy polls, cpu: audio %d video %d busy %d ms\n",
+				       (int)(k_uptime_get() - stat_ms), st_shown, st_late, (int)wait_ms,
+				       (int)feed_ms, (int)((pts_us - audio_clock_us()) / 1000),
+				       get_us / 1000, busy_n, (int)(a - st_audio), (int)(vd - st_video),
+				       (int)k_cyc_to_ms_floor64(all.execution_cycles - all.idle_cycles -
+								st_all0.execution_cycles + st_all0.idle_cycles));
+				get_us = 0;
+				busy_n = 0;
+				st_audio = a;
+				st_video = vd;
+				st_all0 = all;
+				stat_ms = k_uptime_get();
+				wait_ms = feed_ms = 0;
+				st_shown = st_late = 0;
 			}
 			continue;
 		}
@@ -623,6 +766,7 @@ static void video_session(const struct request *r, uint8_t *raw, uint8_t *ab)
 			break;
 		}
 		if (ret == -EBUSY) {
+			busy_n++;
 			k_msleep(2);
 			continue;
 		}
@@ -651,13 +795,24 @@ static void video_session(const struct request *r, uint8_t *raw, uint8_t *ab)
 				if (pending_pts < 0) {
 					pending_pts = 0;
 				}
+				if (ab_len > 0 && s.index == it_first) {
+					int idr, other;
+
+					key_pts_us = pending_pts;
+					nal_types(ab, ab_len, &idr, &other);
+					printk("player: session %u starts at sample %u (sync %d, pts %d ms, %d IDR, %d other slices)\n",
+					       r->seq, s.index, s.sync, (int)(pending_pts / 1000), idr, other);
+				}
 			}
 		}
 		if (ab_used < ab_len) {
 			size_t used = 0;
 
+			int64_t f0 = k_uptime_get();
+
 			ret = vdec_stream_feed(vdec_dev, stream, ab + ab_used, ab_len - ab_used,
 					       pending_pts, &used);
+			feed_ms += k_uptime_get() - f0;
 			if (ret != 0 && ret != -EAGAIN) {
 				ab_used = ab_len;
 			} else {
@@ -673,12 +828,13 @@ static void video_session(const struct request *r, uint8_t *raw, uint8_t *ab)
 	while (held && !req_changed(r->seq)) {
 		k_msleep(20);
 	}
-	if (older.priv != NULL) {
-		vdec_frame_release(vdec_dev, &older);
+	if (any_shown) {
+		struct vdec_frame end = {0};
+
+		k_msgq_put(&disp_q, &end, K_FOREVER);
+		k_sem_take(&disp_flushed, K_FOREVER);
 	}
-	if (shown.priv != NULL) {
-		vdec_frame_release(vdec_dev, &shown);
-	}
+	release_done();
 	vdec_stream_close(vdec_dev, stream);
 }
 

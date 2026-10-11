@@ -8,10 +8,13 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/display/display_sunxi.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
 #include "mp5.h"
+#include "history.h"
 #include "player.h"
 
 #define HIDE_AFTER_MS	4000
@@ -28,6 +31,13 @@ static bool dragging, controls_visible = true;
 static int64_t last_touch_ms;
 static uint32_t duration_ms;
 static char current_path[256];
+static enum screen_id origin = SCR_HOME;
+static int64_t saved_ms;
+static const char *open_path;
+
+#define SAVE_EVERY_MS	10000
+#define RESUME_MIN_MS	5000
+#define RESUME_END_MS	10000
 static int volume_before_mute = 70;
 static uint32_t shown_seconds = UINT32_MAX;
 static enum player_state shown_state = PLAYER_IDLE;
@@ -45,7 +55,13 @@ static void format_time(char *buf, size_t size, uint32_t ms)
 
 static void controls_show(bool show)
 {
+	static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+
 	controls_visible = show;
+	/* the display engine reads the whole frame buffer plane 60 times a second, which takes
+	 * memory bandwidth from the decoder: with nothing to draw the plane is switched off
+	 */
+	display_sunxi_fb_enable(disp, show);
 	if (show) {
 		lv_obj_remove_flag(top_bar, LV_OBJ_FLAG_HIDDEN);
 		lv_obj_remove_flag(panel, LV_OBJ_FLAG_HIDDEN);
@@ -72,7 +88,38 @@ static void screen_clicked(lv_event_t *e)
 static void back_clicked(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	ui_goto(SCR_HOME);
+	if (origin == SCR_FILES) {
+		char dir[sizeof(current_path)];
+		char *slash;
+
+		strcpy(dir, current_path);
+		slash = strrchr(dir, '/');
+		if (slash != NULL) {
+			*slash = '\0';
+		}
+		ui_goto_arg(SCR_FILES, dir);
+	} else {
+		ui_goto(origin);
+	}
+}
+
+/* where the video is now goes to the list of the videos played last */
+static void history_save(void)
+{
+	enum player_state st = player_state();
+	uint32_t pos = st == PLAYER_ENDED ? 0 : player_position_ms();
+
+	if (current_path[0] != '\0' && duration_ms > 0 && st != PLAYER_ERROR) {
+		history_update(current_path, pos, duration_ms);
+		saved_ms = k_uptime_get();
+	}
+}
+
+void ui_player_open(const char *path, enum screen_id from)
+{
+	origin = from;
+	open_path = path;
+	ui_goto_arg(SCR_PLAYER, (void *)path);
 }
 
 static void play_clicked(lv_event_t *e)
@@ -186,6 +233,13 @@ static void tick_cb(lv_timer_t *t)
 		if (st != PLAYER_PLAYING) {
 			controls_show(true);
 		}
+		if (st == PLAYER_ERROR) {
+			lv_label_set_text(message, LV_SYMBOL_WARNING "\nThis video cannot be decoded\n(not enough memory for its size?)");
+			lv_obj_remove_flag(message, LV_OBJ_FLAG_HIDDEN);
+		}
+	}
+	if (st == PLAYER_PLAYING && k_uptime_get() - saved_ms > SAVE_EVERY_MS) {
+		history_save();
 	}
 	if (st == PLAYER_PLAYING && controls_visible && !dragging &&
 	    k_uptime_get() - last_touch_ms > HIDE_AFTER_MS) {
@@ -337,6 +391,9 @@ static void player_enter(void *arg)
 	char buf[16];
 	int ret;
 
+	if (arg == NULL) {
+		origin = SCR_HOME;
+	}
 	strncpy(current_path, path, sizeof(current_path) - 1);
 	name = name != NULL ? name + 1 : path;
 	lv_label_set_text(title_label, name);
@@ -369,6 +426,15 @@ static void player_enter(void *arg)
 			      info.has_audio ? "  AAC" : "");
 	lv_slider_set_value(vol_slider, player_volume(), LV_ANIM_OFF);
 	lv_label_set_text(vol_icon, volume_symbol(player_volume()));
+	{
+		/* go on from where the video was left, unless that was the start or the end */
+		const struct history_entry *h = history_find(path);
+
+		if (h != NULL && h->pos_ms > RESUME_MIN_MS && h->pos_ms + RESUME_END_MS < duration_ms) {
+			player_seek(h->pos_ms);
+		}
+	}
+	saved_ms = k_uptime_get();
 	controls_show(true);
 	if (tick == NULL) {
 		tick = lv_timer_create(tick_cb, 100, NULL);
@@ -378,9 +444,11 @@ static void player_enter(void *arg)
 
 static void player_leave(void)
 {
+	display_sunxi_fb_enable(DEVICE_DT_GET(DT_CHOSEN(zephyr_display)), true);
 	if (tick != NULL) {
 		lv_timer_pause(tick);
 	}
+	history_save();
 	player_close();
 }
 

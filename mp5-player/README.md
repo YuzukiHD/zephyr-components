@@ -47,6 +47,10 @@ make O=../out/syterkit CROSS_COMPILE=$CROSS yuzukineko_rv32_sram_defconfig
 make -j8 O=../out/syterkit CROSS_COMPILE=$CROSS xip-boot
 ```
 
+The PSRAM clock of the `yuzukineko` board file of SyterKit is 312 MHz (it was 252 MHz): the video
+decoder shares the memory bus with the display and is slower at the lower clock, a 540p film at
+30 fps then drops pictures in heavy scenes.
+
 With the board in FEL mode:
 
 ```sh

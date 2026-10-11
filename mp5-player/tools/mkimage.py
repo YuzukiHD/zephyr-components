@@ -8,8 +8,8 @@ One file for the whole flash up to the end of the application, written with
 
     xfel spinor write 0 mp5-full.img
 
-The BROM looks for the stub at the start of the flash; it is stored three times (0, 64 KiB, 128 KiB)
-like the loader of the other applications.
+The BROM looks for the stub at the start of the flash; it is stored up to three times (0, 64 KiB, 128 KiB)
+like the loader of the other applications when the application offset leaves room for them.
 """
 import argparse
 import sys
@@ -22,7 +22,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--boot", required=True, help="xip-boot_spi.bin")
     ap.add_argument("--app", required=True, help="zephyr.bin of the application")
-    ap.add_argument("--offset", type=lambda x: int(x, 0), default=0x40000,
+    ap.add_argument("--offset", type=lambda x: int(x, 0), default=0x8000,
                     help="flash offset of the application (matches the XIP window of the build)")
     ap.add_argument("-o", "--output", required=True)
     a = ap.parse_args()
@@ -35,11 +35,16 @@ def main():
         sys.exit("the boot stub does not fit before its next copy")
     size = a.offset + (len(app) + SECTOR - 1) // SECTOR * SECTOR
     img = bytearray(b"\xff" * size)
-    for off in STUB_COPIES:
+    # the copies of the stub that fit in front of the application (the first one is the one the
+    # boot ROM starts)
+    copies = [off for off in STUB_COPIES if off + len(boot) <= a.offset]
+    if not copies:
+        sys.exit("the application offset leaves no room for the boot stub")
+    for off in copies:
         img[off:off + len(boot)] = boot
     img[a.offset:a.offset + len(app)] = app
     open(a.output, "wb").write(img)
-    print(f"{a.output}: {size} bytes, stub {len(boot)} bytes x{len(STUB_COPIES)}, "
+    print(f"{a.output}: {size} bytes, stub {len(boot)} bytes x{len(copies)}, "
           f"application {len(app)} bytes at {a.offset:#x}")
 
 

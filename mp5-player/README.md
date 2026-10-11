@@ -33,7 +33,7 @@ The image runs in place from the SPI NOR flash: it is linked into the window of 
 (`CONFIG_XIP`, `boards/yuzukineko.overlay`, 6 MiB), code and read only data are fetched from the
 flash and only `.data`, `.bss` and the heap are in the RAM. The window has to be mapped before the
 first instruction, which the SyterKit application `xip-boot` does: it brings up the PSRAM and the
-flash, maps the flash from the offset `0x40000` at `0x0e000000` and jumps there. `xip-boot` is not
+flash, maps the flash from the offset `0x8000` at `0x0e000000` and jumps there. `xip-boot` is not
 started by the flash loader yet, so the image does not start by itself at power on.
 
 ```sh
@@ -54,7 +54,7 @@ decoder shares the memory bus with the display and is slower at the lower clock,
 With the board in FEL mode:
 
 ```sh
-xfel spinor write 0x40000 build/mp5/zephyr/zephyr.bin
+xfel spinor write 0x8000 build/mp5/zephyr/zephyr.bin
 xfel write 0x20000 out/syterkit/build/yuzukineko/app_sram/xip-boot/xip-boot_fel.bin
 xfel exec 0x20000
 ```
@@ -62,7 +62,7 @@ xfel exec 0x20000
 ### Complete flash image (starts by itself at power on)
 
 `tools/mkimage.py` puts the boot stub (`xip-boot_spi.bin`, the SPL image for the flash, three copies at
-0, 64 KiB and 128 KiB) and the application at `0x40000` into one file for the whole flash up to the end
+0, 64 KiB and 128 KiB) and the application at `0x8000` into one file for the whole flash up to the end
 of the application. Everything in front of the application is overwritten.
 
 ```sh
@@ -74,10 +74,10 @@ xfel spinor write 0 mp5-full.img
 
 After the next power cycle the BROM starts the stub from the flash, which maps the window and jumps to the
 application; the log of the stub and of the application is on the console of the board. To change only the
-application write `zephyr.bin` at `0x40000` as above (FEL mode is still needed, the board no longer
+application write `zephyr.bin` at `0x8000` as above (FEL mode is still needed, the board no longer
 enters it by itself).
 
-The console is UART1 (PB0/PB1), 115200 8N1. `0x40000` to the end of the flash is used by the image;
+The console is UART1 (PB0/PB1), 115200 8N1. `0x8000` to the end of the flash is used by the image;
 the UF2 application area (`0x200000`) overlaps it, so do not use both.
 
 ## Options

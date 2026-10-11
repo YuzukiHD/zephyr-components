@@ -15,7 +15,7 @@ and the minimal one does not provide (`sscanf`, a clock, `usleep`, file stubs).
 
 ```
 git submodule update --init ncnn/ncnn
-west build -b f101_evb -d build/ncnn zephyr-components/ncnn/samples/benchmark
+west build -b yuzukineko -d build/ncnn zephyr-components/ncnn/samples/benchmark
 ```
 
 or, in another application, add the module and enable it:

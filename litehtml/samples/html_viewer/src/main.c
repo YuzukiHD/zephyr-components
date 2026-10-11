@@ -394,7 +394,11 @@ int main(void)
 		printk("paged heap of %d MiB: %d\n", CONFIG_SAMPLE_HTML_PAGED_MB, r);
 	}
 #endif
-	if (mounted == 0 && pick_file(path, sizeof(path))) {
+	if (mounted != 0) {
+		printk("cannot mount the SD card: %d\n", mounted);
+	} else if (!pick_file(path, sizeof(path))) {
+		printk("no .html file on the SD card\n");
+	} else {
 		assets_init(path);
 #if CONFIG_SAMPLE_HTML_CHUNK_KB > 0
 		/* returns only when the page cannot be shown piece by piece */
@@ -405,8 +409,6 @@ int main(void)
 		if (html != NULL) {
 			source = path;
 		}
-	} else {
-		printk("no SD card\n");
 	}
 #ifdef CONFIG_SAMPLE_HTML_BENCH
 	if (mounted == 0) {

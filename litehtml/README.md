@@ -17,8 +17,10 @@ them), exceptions are off and `std::__throw_*` end in `abort()` (`ext/src/lh_stu
 ## Use
 
 ```
-git submodule update --init litehtml/litehtml
-west build -b f101_evb -d build/html zephyr-components/litehtml/samples/html_viewer
+cd ~/f101-zephyr/zephyr-components
+git submodule update --init litehtml/litehtml   # the litehtml sources are not in the tree until this is run
+cd ~/f101-zephyr
+west build -b yuzukineko -d build/html zephyr-components/litehtml/samples/html_viewer
 ```
 
 or in another application: add the module to `ZEPHYR_EXTRA_MODULES` and set `CONFIG_CPP=y`,

@@ -13,19 +13,24 @@ operating system are separate directories named `zephyr` next to the original on
 | `host/rtos_al/zephyr` | tasks, queues, semaphores, mutexes, timers on Zephyr kernel objects |
 | `host/platform/zephyr` | SDIO transport on the Zephyr `sd` subsystem, power pin, interrupt pin |
 | `host/net_al/zephyr` | network interface, replacing the TCP/IP stack the driver was written against |
-| `compat/` | small headers for what the minimal C library lacks |
+| `compat/` | small headers for what the C library lacks |
 
-Status: **builds, not run on hardware** (no module was available). Check the first bring-up with the
-sample, watching for the firmware download and the chip ID in the log.
+Status: builds and runs on the `yuzukineko` board. Chip identification, firmware download and
+scanning are checked on the hardware; joining a network needs an access point and its credentials.
+
+The board file of `yuzukineko` already has the `aic8800` node under `smhc2` (SDIO on PE0..PE5, mux 9, 4 bit),
+REG_ON on PE10 and the Bluetooth reset on PD8, so the samples need no overlay. PE2 is the SDIO clock, so
+the USB host (VBUS switch) is not available on this board and the I2S0 pins are taken.
 
 ```
-west build -b f101_evb -d build/wifi zephyr-components/aic8800/samples/wifi_scan \
-    -- -DCONFIG_SAMPLE_WIFI_SSID=\"name\" -DCONFIG_SAMPLE_WIFI_PSK=\"secret\"
+west build -b yuzukineko -d build/wifi zephyr-components/aic8800/samples/wifi_scan
+west build -b yuzukineko -d build/wifi-iperf zephyr-components/aic8800/samples/wifi_iperf3
+west build -b yuzukineko -d build/bt-scan zephyr-components/aic8800/samples/bt_scan
 ```
 
-The F101 EVB wires the module to SMHC2 on PE0..PE5 (mux 9), the power pin is PA00 and the wake
-pin PF06. PE02 is also the USB host VBUS switch and PE0..PE4 are I2S0, so the overlay of the
-sample turns the USB host off.
+`wifi_scan` joins a network after the scan when `CONFIG_SAMPLE_WIFI_SSID` and `CONFIG_SAMPLE_WIFI_PSK` are set
+(`-- -DCONFIG_SAMPLE_WIFI_SSID=\"name\" -DCONFIG_SAMPLE_WIFI_PSK=\"secret\"`); without them it only scans.
+The driver does not print the passphrase in the log.
 
 The firmware images are the large headers in `host/drv/fw` and are linked into the image.
 The licence of the driver files is the one in their headers; the glue is Apache-2.0.

@@ -221,6 +221,10 @@ int gba_open(const char *rom_path, const char *save_path, unsigned int out_rate)
 		ret = -ENOMEM;
 		goto fail;
 	}
+	if (g.is_gb) {
+		/* the Super Game Boy border makes the picture 256x224, the buffers hold 240x160 */
+		((struct GB *)g.core->board)->video.sgbBorders = false;
+	}
 	g.own_frame = true;
 	g.frame = aligned_alloc(64, GBA_WIDTH * GBA_HEIGHT * sizeof(uint16_t));
 	if (g.frame == NULL) {

@@ -4,19 +4,28 @@ Zephyr module for the [Bochs](https://github.com/bochs-emu/Bochs) x86 PC emulato
 `Bochs/`, LGPL-2.1-or-later; the glue in this directory is Apache-2.0). The goal is a 386/486 class PC
 on the 16 MB board that runs an old guest such as Windows 3.1 or Windows 95.
 
-State: **Windows 3.1 boots on the board and is shown on the panel.** Bochs runs a 486 (`i486dx4`, with
-the x87 emulation) and plain VGA; the guest has 10 MB; the disk is a flat image on the SD card; the
-panel shows the VGA output (`src/bochs_gui.cc`); the guest text screen can be mirrored to the serial console
-as `|row|text` lines (`CONFIG_BOCHS_TEXT_MIRROR`, off by default, noise in graphics modes) and the serial
-console is the keyboard (keys are fed one at a time, a whole line at
-once overflows the guest's key queue). Windows 95 (`windows95b.img`) boots to the desktop on the board; select it with
-`-DCONFIG_SAMPLE_PC_DISK=\"/SD:/windows95b.img\" -DCONFIG_SAMPLE_PC_DISK_CYLINDERS=507` (the sample
-default is Windows 3.1). The disk images are the Bochs ones of
-[archive.org/details/bochs_windows_images](https://archive.org/details/bochs_windows_images)
-(Windows 3.1: 260/16/63 cylinders/heads/sectors, Windows 95: 507/16/63), copied to the card as
-`Win31.img` and `windows95b.img`; their licence is not stated there, check yours.
+State, as checked on the yuzukineko board with `west build -b yuzukineko -d build/win95 zephyr-components/bochs/samples/pc`
+(no extra options, `samples/pc/prj.conf` selects the Windows 95 image `/SD:/windows95b.img`, 507/16/63):
 
-Not done: mouse (the sample has the serial keyboard only: no arrow or function keys), the v86 demo image of Windows 95 after the BIOS address fix (below), sound, speed (below).
+- Bochs runs a 486 (`i486dx4`, with the x87 emulation) and plain VGA; the guest has 10 MB; the disk is a flat
+  image on the SD card.
+- Serial log (checked): Bochs banner, VGA BIOS and BIOS messages, `ata0 master ... ( 249 MBytes)`,
+  `Booting from Hard Disk...`, `Starting Windows 95...`. The text screen is mirrored to the serial console as
+  `|row|text` lines (`CONFIG_BOCHS_TEXT_MIRROR`, on in the sample; noise in graphics modes).
+- Panel (`src/bochs_gui.cc`): the VGA output is shown on the video plane. The user watched the board and
+  reported that Windows 95 starts normally; the desktop was not photographed and the serial log
+  cannot show it (graphics mode).
+- Keyboard: the serial console, one key at a time (a whole line at once overflows the guest's key queue).
+  Letters, digits, common punctuation, Enter, Backspace, Tab and Esc only.
+- Windows 3.1 (`Win31.img`, 260/16/63, set `CONFIG_SAMPLE_PC_DISK` and `CONFIG_SAMPLE_PC_DISK_CYLINDERS`)
+  is not part of the latest check.
+
+The disk images are the Bochs ones of
+[archive.org/details/bochs_windows_images](https://archive.org/details/bochs_windows_images), copied to the
+card as `Win31.img` and `windows95b.img`; their licence is not stated there, check yours.
+
+Not done: mouse (`mouse: enabled=0`), arrow and function keys, CD-ROM, sound, network, PCI, VBE, the v86 demo
+image of Windows 95 after the BIOS address fix (below), speed (below).
 
 Speed: the board executes about 1..3 million guest instructions per second (a native Bochs on a PC
 does 23 million), waiting loops that read ports about 0.65 million. The guest clock has to be set to
@@ -41,7 +50,7 @@ stubs, speaker, plain VGA. The legacy BIOS and the VGA BIOS are linked into the 
 | Display and serial keyboard | `src/bochs_gui.cc` |
 | Entry points of devices that are not built, socket stubs, C++ runtime, self tests, heartbeat | `src/bochs_stubs.cc` |
 | Changes to the Bochs tree, applied by CMake | `patches/` |
-| Sample (`west build -b f101_evb -d build/bochs zephyr-components/bochs/samples/pc`) | `samples/pc` |
+| Sample (`west build -b yuzukineko -d build/win95 zephyr-components/bochs/samples/pc`) | `samples/pc` |
 
 Patches to the submodule (applied once at configure time with `git apply`, the submodule worktree stays
 modified): `0001` sizes of the instruction cache, the trace cache and the self modifying code table,

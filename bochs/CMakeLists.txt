@@ -3,7 +3,7 @@
 
 # Zephyr module for the Bochs x86 emulator (bochs/Bochs, the emulator is in its
 # bochs/ subdirectory). Our config.h is a configured 32 bit rv32 build: 486
-# level CPU without FPU, no PCI, no plugins, no GUI, no networking.
+# level CPU with x87 (softfloat), no PCI, no plugins, no GUI, no networking.
 
 if(NOT CONFIG_BOCHS)
   return()

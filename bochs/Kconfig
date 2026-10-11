@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config BOCHS
-	bool "Bochs x86 PC emulator (386/486 class, no FPU)"
+	bool "Bochs x86 PC emulator (486 class, with x87)"
 	depends on RISCV && CPP
 	select FILE_SYSTEM
 	help
 	  Build the Bochs emulator (git submodule bochs/Bochs, LGPL-2.1+) as a
-	  library: the 486 level CPU without FPU, the ISA PC devices (PIC,
+	  library: the 486 level CPU with the x87 emulation (softfloat), the ISA PC devices (PIC,
 	  PIT, DMA, CMOS, keyboard controller, floppy, IDE disk, serial, VGA),
 	  no GUI, no plugins, no networking. Disk images and the BIOS are read
 	  through the Zephyr file system.

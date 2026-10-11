@@ -17,7 +17,7 @@
 #include "mp5.h"
 
 #define CFG_FILE	"/SD:/.mp5_settings"
-#define CFG_MAX		12
+#define CFG_MAX		28
 #define KEY_LEN		16
 #define VAL_LEN		96
 
@@ -53,7 +53,7 @@ static void save(void)
 void cfg_load(void)
 {
 	struct fs_file_t f;
-	char buf[1024];
+	char buf[3072];
 	ssize_t n;
 
 	k_mutex_lock(&lock, K_FOREVER);

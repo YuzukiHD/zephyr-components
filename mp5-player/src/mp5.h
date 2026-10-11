@@ -39,6 +39,11 @@ bool ui_theme_dark(void);
 int ui_theme_accent(void);
 const char *ui_theme_accent_name(int index);
 uint32_t ui_theme_accent_color(int index);
+/** Brightness of the backlight, 10..255 */
+int ui_brightness(void);
+/** Sets the brightness; @p save also writes it to the settings */
+void ui_brightness_set(int value, bool save);
+
 /** Sets the theme, saves it and builds the screens again */
 void ui_theme_set(bool dark, int accent);
 
@@ -159,6 +164,8 @@ void app_net_scan(void);
 bool app_net_scanning(void);
 /** Copies the access points found so far, strongest first; returns how many */
 int app_net_scan_results(struct net_ap *out, int max);
+/** The password saved for a network that was joined before; false when there is none */
+bool app_net_saved_psk(const char *ssid, char *psk, size_t size);
 /** Joins a network (psk may be empty for an open one) and saves it */
 void app_net_connect(const char *ssid, const char *psk);
 void app_net_disconnect(void);

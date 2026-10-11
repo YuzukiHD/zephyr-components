@@ -37,7 +37,7 @@ static void test_step(lv_timer_t *t)
 	static const int accent[] = {0, 3, 3, 5, 0};
 
 	/* first what the previous step asked for, then the next request */
-	if (step >= 2) {
+	if (step >= 2 && step <= 6) {
 		int i = step - 2;
 
 		check(ui_theme_dark() == dark[i] && ui_theme_accent() == accent[i],
@@ -53,10 +53,62 @@ static void test_step(lv_timer_t *t)
 		ui_goto(SCR_SETTINGS);
 	} else if (step <= 5) {
 		ui_theme_set(dark[step - 1], accent[step - 1]);
-	} else {
+	} else if (step == 6) {
+		char psk[65];
+		int old = ui_brightness();
+
+		ui_brightness_set(120, true);
+		check(ui_brightness() == 120 && cfg_get("brightness") != NULL &&
+		      atoi(cfg_get("brightness")) == 120, "brightness set and saved");
+		ui_brightness_set(old, true);
+		check(ui_brightness() == old, "brightness restored");
+		if (app_net_connected()) {
+			check(app_net_saved_psk("ChinaNet-K5ii", psk, sizeof(psk)) && strlen(psk) > 0,
+			      "password of the joined network is kept");
+			check(!app_net_saved_psk("no such network", psk, sizeof(psk)),
+			      "no password for an unknown network");
+		} else {
+			printk("theme: not online, the saved password is not checked\n");
+		}
+	} else if (step == 7) {
+		/* the Wi-Fi screen scans for networks while the board is online */
+		ui_goto(SCR_WIFI);
+		/* what the Scan button does */
+		app_net_scan();
+	} else if (step >= 10 && step <= 16) {
+		/* the Scan button again and again, with the list made again each time */
+		app_net_scan();
+	} else if (step == 9) {
+		struct net_ap list[24];
+		char psk[65];
+
+		/* the same network again, as a second tap on it */
+		if (app_net_connected() && app_net_saved_psk("ChinaNet-K5ii", psk, sizeof(psk))) {
+			printk("theme: connecting to the network that is joined already\n");
+			app_net_connect("ChinaNet-K5ii", psk);
+		}
+		int n = app_net_scan_results(list, ARRAY_SIZE(list));
+
+		printk("theme: the Wi-Fi screen found %d networks\n", n);
+		check(n > 0, "scan while online lists networks");
+	} else if (step == 8) {
+		/* wait for the scan */
+	} else if (step == 17) {
+		ui_goto(SCR_SETTINGS);
+	} else if (step == 18) {
+		/* a game with sound, then leaving it: the amplifier must go off */
+		ui_game_open("/SD:/Legend-of-Zelda.gb", SCR_HOME);
+	} else if (step == 21) {
+		ui_goto(SCR_HOME);
+	} else if (step == 19 || step == 20) {
+		/* the game runs */
+	} else if (step == 23) {
 		check(failures == 0, "no step failed");
 		printk("theme: %s\n", failures == 0 ? "PASS (0 failures)" : "FAIL");
 		lv_timer_delete(t);
+		return;
+	}
+	if (step > 23) {
 		return;
 	}
 	step++;

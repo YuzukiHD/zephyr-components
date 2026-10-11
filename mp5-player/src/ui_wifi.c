@@ -21,7 +21,8 @@
 #define LIST_Y		(88 + 56)
 
 static lv_obj_t *status_label, *list, *scan_btn, *scan_label, *empty_label;
-static lv_obj_t *dialog, *dialog_title, *pass_area, *keyboard;
+static lv_obj_t *dialog, *dialog_title, *pass_area, *keyboard, *eye_label;
+static bool pass_shown;
 static lv_timer_t *timer;
 static struct net_ap shown[MAX_ROWS];
 static int shown_count = -1;
@@ -62,14 +63,32 @@ static void row_clicked(lv_event_t *e)
 {
 	const struct net_ap *ap = lv_event_get_user_data(e);
 
+	char saved[65];
+
 	snprintf(pending_ssid, sizeof(pending_ssid), "%s", ap->ssid);
 	if (!ap->secured) {
 		app_net_connect(ap->ssid, "");
 		return;
 	}
+	/* a network that was joined before does not ask again */
+	if (app_net_saved_psk(ap->ssid, saved, sizeof(saved))) {
+		app_net_connect(ap->ssid, saved);
+		return;
+	}
 	lv_label_set_text_fmt(dialog_title, "Password of %s", ap->ssid);
 	lv_textarea_set_text(pass_area, "");
+	pass_shown = false;
+	lv_textarea_set_password_mode(pass_area, true);
+	lv_label_set_text(eye_label, LV_SYMBOL_EYE_CLOSE);
 	lv_obj_remove_flag(dialog, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void eye_clicked(lv_event_t *e)
+{
+	ARG_UNUSED(e);
+	pass_shown = !pass_shown;
+	lv_textarea_set_password_mode(pass_area, !pass_shown);
+	lv_label_set_text(eye_label, pass_shown ? LV_SYMBOL_EYE_OPEN : LV_SYMBOL_EYE_CLOSE);
 }
 
 static void disconnect_clicked(lv_event_t *e)
@@ -213,12 +232,30 @@ static lv_obj_t *wifi_create(void)
 	lv_obj_set_style_text_color(dialog_title, lv_color_hex(C_TEXT), 0);
 	lv_obj_set_pos(dialog_title, 48, 40);
 	pass_area = lv_textarea_create(dialog);
-	lv_obj_set_size(pass_area, 928, 72);
+	lv_obj_set_size(pass_area, 840, 72);
 	lv_obj_set_pos(pass_area, 48, 110);
 	lv_textarea_set_one_line(pass_area, true);
-	lv_textarea_set_password_mode(pass_area, false);
+	/* shown as dots until the eye is tapped */
+	lv_textarea_set_password_mode(pass_area, true);
 	lv_textarea_set_placeholder_text(pass_area, "Password");
 	lv_obj_set_style_text_font(pass_area, &lv_font_montserrat_24, 0);
+	lv_obj_set_style_bg_color(pass_area, lv_color_hex(C_SURFACE), 0);
+	lv_obj_set_style_bg_opa(pass_area, LV_OPA_COVER, 0);
+	lv_obj_set_style_text_color(pass_area, lv_color_hex(C_TEXT), 0);
+	lv_obj_set_style_text_color(pass_area, lv_color_hex(C_DIM), LV_PART_TEXTAREA_PLACEHOLDER);
+	lv_obj_set_style_border_color(pass_area, lv_color_hex(C_BORDER), 0);
+	lv_obj_set_style_border_color(pass_area, lv_color_hex(C_ACCENT), LV_STATE_FOCUSED);
+	lv_obj_set_style_border_width(pass_area, 2, 0);
+	lv_obj_set_style_radius(pass_area, 16, 0);
+	lv_obj_set_style_bg_color(pass_area, lv_color_hex(C_ACCENT), LV_PART_CURSOR);
+	lv_obj_set_style_bg_opa(pass_area, LV_OPA_COVER, LV_PART_CURSOR);
+	{
+		lv_obj_t *eye = ui_icon_button(dialog, LV_SYMBOL_EYE_CLOSE, 72);
+
+		lv_obj_set_pos(eye, 904, 110);
+		eye_label = lv_obj_get_child(eye, 0);
+		lv_obj_add_event_cb(eye, eye_clicked, LV_EVENT_CLICKED, NULL);
+	}
 	keyboard = lv_keyboard_create(dialog);
 	lv_obj_set_size(keyboard, LV_PCT(100), 400);
 	lv_obj_align(keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);

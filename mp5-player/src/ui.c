@@ -7,6 +7,7 @@
 /* Shared pieces of the user interface: screen switching and the building blocks of the bars */
 
 #include <zephyr/device.h>
+#include <zephyr/drivers/display.h>
 #include <zephyr/drivers/display/display_sunxi.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
@@ -95,6 +96,26 @@ static void theme_load(void)
 	const char *acc = cfg_get("accent");
 
 	palette_make(mode == NULL || strcmp(mode, "light") != 0, acc != NULL ? atoi(acc) : 0);
+}
+
+static int brightness = 255;
+
+int ui_brightness(void)
+{
+	return brightness;
+}
+
+void ui_brightness_set(int value, bool save)
+{
+	static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+	char buf[8];
+
+	brightness = CLAMP(value, 10, 255);
+	display_set_brightness(disp, brightness);
+	if (save) {
+		snprintf(buf, sizeof(buf), "%d", brightness);
+		cfg_set("brightness", buf);
+	}
 }
 
 static void ui_rebuild(void *unused);
@@ -247,6 +268,13 @@ void ui_init(void)
 {
 	cfg_load();
 	theme_load();
+	{
+		const char *b = cfg_get("brightness");
+
+		if (b != NULL) {
+			ui_brightness_set(atoi(b), false);
+		}
+	}
 	ui_stats_init();
 	ui_register(SCR_HOME, &home_ops);
 	ui_register(SCR_FILES, &files_ops);

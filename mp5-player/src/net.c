@@ -215,6 +215,32 @@ static bool time_sync(void)
 
 /* ---- Wi-Fi commands -------------------------------------------------------------------- */
 
+/* the password of every network that was joined is kept, under a key made from its name */
+static void psk_key(const char *ssid, char *key, size_t size)
+{
+	uint32_t h = 2166136261U;
+
+	for (const char *p = ssid; *p != '\0'; p++) {
+		h = (h ^ (uint8_t)*p) * 16777619U;
+	}
+	snprintf(key, size, "wp%08x", (unsigned int)h);
+}
+
+bool app_net_saved_psk(const char *ssid, char *psk, size_t size)
+{
+	char key[16];
+	const char *v;
+
+	psk_key(ssid, key, sizeof(key));
+	v = cfg_get(key);
+	if (v == NULL) {
+		return false;
+	}
+	snprintf(psk, size, "%s", v);
+
+	return true;
+}
+
 static void fail(const char *text)
 {
 	k_mutex_lock(&lock, K_FOREVER);
@@ -254,6 +280,14 @@ static void do_connect(struct net_if *iface, const char *ssid, const char *psk)
 		.band = WIFI_FREQ_BAND_UNKNOWN,
 	};
 
+	if (link == LINK_ONLINE || link == LINK_CONNECTED) {
+		/* the same network again is nothing to do; another one replaces the current */
+		if (strcmp(ssid_now, ssid) == 0) {
+			return;
+		}
+		net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
+		k_msleep(500);
+	}
 	k_mutex_lock(&lock, K_FOREVER);
 	snprintf(ssid_now, sizeof(ssid_now), "%s", ssid);
 	k_mutex_unlock(&lock);
@@ -267,6 +301,13 @@ static void do_connect(struct net_if *iface, const char *ssid, const char *psk)
 	if (k_sem_take(&connect_done, K_SECONDS(CONNECT_WAIT_S)) != 0 || connect_status != 0) {
 		net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
 		fail(connect_status != 0 ? "Wrong password or no answer" : "No answer from the network");
+		if (connect_status != 0) {
+			char key[16];
+
+			/* a password that did not work is not kept */
+			psk_key(ssid, key, sizeof(key));
+			cfg_set(key, NULL);
+		}
 		return;
 	}
 	link = LINK_CONNECTED;
@@ -275,8 +316,16 @@ static void do_connect(struct net_if *iface, const char *ssid, const char *psk)
 		return;
 	}
 	link = LINK_ONLINE;
-	cfg_set("wifi_ssid", ssid);
-	cfg_set("wifi_psk", psk);
+	{
+		char key[16];
+
+		psk_key(ssid, key, sizeof(key));
+		cfg_set("wifi_ssid", ssid);
+		cfg_set("wifi_psk", psk);
+		if (psk[0] != '\0') {
+			cfg_set(key, psk);
+		}
+	}
 	time_sync();
 }
 
@@ -379,6 +428,13 @@ static void net_main(void *a, void *b, void *c)
 			break;
 		case CMD_DISCONNECT:
 			net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
+			{
+				char key[16];
+
+				/* forgetting the network forgets its password too */
+				psk_key(ssid_now, key, sizeof(key));
+				cfg_set(key, NULL);
+			}
 			cfg_set("wifi_ssid", NULL);
 			cfg_set("wifi_psk", NULL);
 			link = LINK_IDLE;

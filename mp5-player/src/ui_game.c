@@ -144,6 +144,9 @@ static void audio_main(void *a, void *b, void *c)
 		}
 	}
 	i2s_trigger(i2s, I2S_DIR_TX, I2S_TRIGGER_DROP);
+	/* the amplifier and the headphone driver off, or they hiss with nothing playing */
+	audio_codec_stop_output(ctl);
+	printk("game: sound output off\n");
 }
 
 static size_t audio_queued(void)

@@ -11,6 +11,7 @@
  */
 
 #include <errno.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +20,7 @@
 #include <zephyr/drivers/display/display_sunxi.h>
 #include <zephyr/drivers/vdec.h>
 #include <zephyr/fs/fs.h>
+#include <zephyr/input/input.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
@@ -190,6 +192,246 @@ static int rgba_to_xrgb(const struct vdec_frame *f)
 	return 0;
 }
 
+/* ---- zoom: two fingers pinch, one finger pans, a double tap toggles --------------------------- */
+
+#define SCREEN_W	1024
+#define SCREEN_H	768
+#define TOUCH_SLOTS	5
+#define ZOOM_MAX	8.0f
+#define ZOOM_DOUBLE	3.0f
+#define DOUBLE_TAP_MS	400
+#define TAP_MS		250
+#define TAP_SLOP	25
+#define SUPPRESS_MS	300
+#define VIEW_MS		33
+
+static struct {
+	int x, y;
+	bool down;
+} fingers[TOUCH_SLOTS];
+static int cur_slot;
+static volatile uint32_t suppress_until;
+static volatile bool zoomed;
+
+static uint16_t pic_w, pic_h;
+static float zoom = 1.0f, view_cx, view_cy;	/* zoom 1: the picture fits the screen */
+static bool view_dirty;
+static lv_timer_t *view_timer;
+
+static void touch_event(struct input_event *evt, void *user_data)
+{
+	int down = 0;
+
+	ARG_UNUSED(user_data);
+	switch (evt->code) {
+	case INPUT_ABS_MT_SLOT:
+		cur_slot = CLAMP(evt->value, 0, TOUCH_SLOTS - 1);
+		return;
+	case INPUT_ABS_X:
+		fingers[cur_slot].x = evt->value;
+		break;
+	case INPUT_ABS_Y:
+		fingers[cur_slot].y = evt->value;
+		break;
+	case INPUT_BTN_TOUCH:
+		fingers[cur_slot].down = evt->value != 0;
+		break;
+	default:
+		return;
+	}
+	for (int i = 0; i < TOUCH_SLOTS; i++) {
+		down += fingers[i].down;
+	}
+	/* the clicks and swipes the user interface derives from such a touch are not wanted */
+	if (down >= 2 || (zoomed && down >= 1)) {
+		suppress_until = k_uptime_get_32() + SUPPRESS_MS;
+	}
+}
+INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_CHOSEN(zephyr_touch)), touch_event, NULL);
+
+static bool suppressed(void)
+{
+	return (int32_t)(suppress_until - k_uptime_get_32()) > 0;
+}
+
+/* pixels of the screen per pixel of the picture */
+static float scale_now(void)
+{
+	float fit = MIN((float)SCREEN_W / pic_w, (float)SCREEN_H / pic_h);
+
+	return fit * zoom;
+}
+
+static void view_clamp(void)
+{
+	float s = scale_now();
+	float w = MIN((float)pic_w, SCREEN_W / s), h = MIN((float)pic_h, SCREEN_H / s);
+
+	zoom = CLAMP(zoom, 1.0f, ZOOM_MAX);
+	view_cx = CLAMP(view_cx, w / 2, pic_w - w / 2);
+	view_cy = CLAMP(view_cy, h / 2, pic_h - h / 2);
+	zoomed = zoom > 1.001f;
+}
+
+/* shows the part of the picture that the view covers */
+static void view_apply(void)
+{
+	float s = scale_now();
+	float w = MIN((float)pic_w, SCREEN_W / s), h = MIN((float)pic_h, SCREEN_H / s);
+	uint16_t cw = (uint16_t)w, ch = (uint16_t)h;
+	uint16_t cx = (uint16_t)MAX(view_cx - w / 2, 0.0f), cy = (uint16_t)MAX(view_cy - h / 2, 0.0f);
+
+	if (zoom <= 1.001f) {
+		cx = cy = cw = ch = 0;
+	}
+	if (have_frame) {
+		struct display_sunxi_yuv yuv = {
+			.y = frame.plane[0],
+			.uv = frame.plane[1],
+			.width = frame.width,
+			.height = frame.height,
+			.stride_y = frame.stride[0],
+			.stride_uv = frame.stride[1],
+			.full_range = true,
+			.crop_x = cx, .crop_y = cy, .crop_width = cw, .crop_height = ch,
+			.nonblock = true,
+		};
+
+		display_sunxi_show_yuv(disp, &yuv);
+	} else if (have_rgb) {
+		struct display_sunxi_rgb img = {
+			.data = rgb,
+			.width = pic_w,
+			.height = pic_h,
+			.stride = pic_w * 4,
+			.xrgb8888 = true,
+			.crop_x = cx, .crop_y = cy, .crop_width = cw, .crop_height = ch,
+			.nonblock = true,
+		};
+
+		display_sunxi_show_rgb(disp, &img);
+	}
+}
+
+static void view_reset(void)
+{
+	zoom = 1.0f;
+	zoomed = false;
+	view_cx = pic_w / 2.0f;
+	view_cy = pic_h / 2.0f;
+	view_dirty = false;
+}
+
+/* zooms by @p factor keeping the picture point under the screen point (mx, my) in place */
+static void view_zoom_at(float factor, float mx, float my)
+{
+	float s = scale_now();
+	float px = view_cx + (mx - SCREEN_W / 2.0f) / s;
+	float py = view_cy + (my - SCREEN_H / 2.0f) / s;
+
+	zoom = CLAMP(zoom * factor, 1.0f, ZOOM_MAX);
+	s = scale_now();
+	view_cx = px - (mx - SCREEN_W / 2.0f) / s;
+	view_cy = py - (my - SCREEN_H / 2.0f) / s;
+	view_clamp();
+	view_dirty = true;
+}
+
+static void view_tick(lv_timer_t *t)
+{
+	static int last_n;
+	static float last_dist, last_mx, last_my, last_x, last_y;
+	static uint32_t t_down, t_tap;
+	static int down_x, down_y, max_n;
+	static int tap_x, tap_y;
+	int idx[2], n = 0;
+	uint32_t now = k_uptime_get_32();
+
+	ARG_UNUSED(t);
+	if (pic_w == 0 || !(have_frame || have_rgb)) {
+		return;
+	}
+	for (int i = 0; i < TOUCH_SLOTS && n < 2; i++) {
+		if (fingers[i].down) {
+			idx[n++] = i;
+		}
+	}
+	if (n == 2) {
+		float dx = fingers[idx[1]].x - fingers[idx[0]].x;
+		float dy = fingers[idx[1]].y - fingers[idx[0]].y;
+		float dist = sqrtf(dx * dx + dy * dy);
+		float mx = (fingers[idx[0]].x + fingers[idx[1]].x) / 2.0f;
+		float my = (fingers[idx[0]].y + fingers[idx[1]].y) / 2.0f;
+
+		if (last_n == 2 && last_dist > 20.0f && dist > 20.0f) {
+			float s;
+
+			view_zoom_at(dist / last_dist, mx, my);
+			/* the midpoint moving pans */
+			s = scale_now();
+			view_cx -= (mx - last_mx) / s;
+			view_cy -= (my - last_my) / s;
+			view_clamp();
+			view_dirty = true;
+		}
+		last_dist = dist;
+		last_mx = mx;
+		last_my = my;
+	} else if (n == 1 && zoomed) {
+		float x = fingers[idx[0]].x, y = fingers[idx[0]].y;
+
+		if (last_n == 1) {
+			float s = scale_now();
+
+			view_cx -= (x - last_x) / s;
+			view_cy -= (y - last_y) / s;
+			view_clamp();
+			view_dirty = true;
+		}
+	}
+	if (n >= 1) {
+		last_x = fingers[idx[0]].x;
+		last_y = fingers[idx[0]].y;
+	}
+	/* taps: a short touch with one finger that hardly moved */
+	if (n >= 1 && last_n == 0) {
+		t_down = now;
+		down_x = fingers[idx[0]].x;
+		down_y = fingers[idx[0]].y;
+		max_n = 0;
+	}
+	max_n = MAX(max_n, n);
+	if (n == 0 && last_n >= 1 && max_n == 1 && now - t_down < TAP_MS &&
+	    abs((int)last_x - down_x) < TAP_SLOP && abs((int)last_y - down_y) < TAP_SLOP) {
+		if (t_tap != 0 && now - t_tap < DOUBLE_TAP_MS && abs(down_x - tap_x) < 60 &&
+		    abs(down_y - tap_y) < 60) {
+			if (zoomed) {
+				view_reset();
+				view_dirty = true;
+			} else {
+				view_zoom_at(ZOOM_DOUBLE, down_x, down_y);
+			}
+			t_tap = 0;
+		} else {
+			t_tap = now;
+			tap_x = down_x;
+			tap_y = down_y;
+		}
+	}
+	last_n = n;
+	if (view_dirty) {
+		view_dirty = false;
+		view_apply();
+		if (zoomed) {
+			lv_label_set_text_fmt(info_label, "%d / %d   %ux%u   x%d.%d", current + 1, count,
+					      pic_w, pic_h, (int)zoom, (int)(zoom * 10) % 10);
+		} else {
+			lv_label_set_text_fmt(info_label, "%d / %d   %ux%u", current + 1, count, pic_w,
+					      pic_h);
+		}
+	}
+}
+
 static void message_show(const char *text)
 {
 	if (text == NULL) {
@@ -242,6 +484,7 @@ static void photo_show(int idx)
 
 	current = idx;
 	picture_drop();
+	pic_w = pic_h = 0;
 	lv_label_set_text(title_label, names[idx]);
 	lv_label_set_text_fmt(info_label, "%d / %d", idx + 1, count);
 	message_show(NULL);
@@ -268,6 +511,9 @@ static void photo_show(int idx)
 
 			frame = f;
 			have_frame = true;
+			pic_w = f.width;
+			pic_h = f.height;
+			view_reset();
 			ret = display_sunxi_show_yuv(disp, &yuv);
 			lv_label_set_text_fmt(info_label, "%d / %d   %ux%u", idx + 1, count, f.width,
 					      f.height);
@@ -283,6 +529,9 @@ static void photo_show(int idx)
 				};
 
 				ret = display_sunxi_show_rgb(disp, &img);
+				pic_w = f.width;
+				pic_h = f.height;
+				view_reset();
 			}
 			lv_label_set_text_fmt(info_label, "%d / %d   %ux%u", idx + 1, count, f.width,
 					      f.height);
@@ -321,6 +570,9 @@ static void next_clicked(lv_event_t *e)
 
 static void screen_clicked(lv_event_t *e)
 {
+	if (suppressed()) {
+		return;
+	}
 	if (lv_event_get_target(e) == lv_event_get_current_target(e)) {
 		controls_show(!controls_visible);
 	}
@@ -331,6 +583,9 @@ static void screen_gesture(lv_event_t *e)
 	lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_active());
 
 	ARG_UNUSED(e);
+	if (suppressed() || zoomed) {
+		return;
+	}
 	if (dir == LV_DIR_LEFT) {
 		step(1);
 	} else if (dir == LV_DIR_RIGHT) {
@@ -395,6 +650,9 @@ static lv_obj_t *photos_create(void)
 	lv_obj_align(message, LV_ALIGN_CENTER, 0, 0);
 	lv_obj_add_flag(message, LV_OBJ_FLAG_HIDDEN);
 
+	view_timer = lv_timer_create(view_tick, VIEW_MS, NULL);
+	lv_timer_pause(view_timer);
+
 	return scr;
 }
 
@@ -412,6 +670,7 @@ static void photos_enter(void *arg)
 		return;
 	}
 	snprintf(dir_path, sizeof(dir_path), "%.*s", (int)(slash - path), path);
+	lv_timer_resume(view_timer);
 	names_load();
 	current = 0;
 	for (int i = 0; i < count; i++) {
@@ -436,6 +695,8 @@ static void photos_enter(void *arg)
 
 static void photos_leave(void)
 {
+	lv_timer_pause(view_timer);
+	zoomed = false;
 	picture_drop();
 	names_free();
 	display_sunxi_fb_enable(disp, true);

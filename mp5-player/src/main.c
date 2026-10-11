@@ -130,7 +130,9 @@ int main(void)
 	const struct device *disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 	int ret;
 
+	printk("mp5: boot %u ms: main starts\n", k_uptime_get_32());
 	cpu_clock_setup();
+	printk("mp5: boot %u ms: cpu clock done\n", k_uptime_get_32());
 	if (!lv_rvv_selftest()) {
 		printk("mp5: the vector blends differ from LVGL, switched off\n");
 		lv_rvv_enable(false);
@@ -139,9 +141,11 @@ int main(void)
 		printk("mp5: the display is not ready\n");
 		return 0;
 	}
+	printk("mp5: boot %u ms: vector blends checked\n", k_uptime_get_32());
 	ret = fs_mount(&mp);
 	mounted = ret == 0;
-	printk("mp5: SD card %s (%d)\n", mounted ? "mounted" : "not available", ret);
+	printk("mp5: SD card %s (%d) at boot %u ms\n", mounted ? "mounted" : "not available", ret,
+	       k_uptime_get_32());
 
 #ifdef CONFIG_SAMPLE_MP5_G2D
 	lv_g2d_init();
@@ -162,6 +166,7 @@ int main(void)
 #endif
 	lv_timer_handler();
 	display_blanking_off(disp);
+	printk("mp5: boot %u ms: first picture\n", k_uptime_get_32());
 #ifdef CONFIG_SAMPLE_MP5_UI_BENCH
 	/* a full redraw of the home screen, with and without the vector blends */
 	for (int pass = 0; pass < 2; pass++) {

@@ -8,21 +8,22 @@ One file for the whole flash up to the end of the application, written with
 
     xfel spinor write 0 mp5-full.img
 
-The BROM looks for the stub at the start of the flash; it is stored up to three times (0, 64 KiB, 128 KiB)
-like the loader of the other applications when the application offset leaves room for them.
+Layout: 0..128 KiB the boot stub (one copy at 0, the BROM starts it), 128..192 KiB the parameter area
+of the flash (left blank here: the first start trains the sampling and the stub saves the result there),
+the application at 512 KiB.
 """
 import argparse
 import sys
 
 SECTOR = 4096
-STUB_COPIES = (0x0, 0x10000, 0x20000)
+STUB_COPIES = (0x0,)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--boot", required=True, help="xip-boot_spi.bin")
     ap.add_argument("--app", required=True, help="zephyr.bin of the application")
-    ap.add_argument("--offset", type=lambda x: int(x, 0), default=0x8000,
+    ap.add_argument("--offset", type=lambda x: int(x, 0), default=0x80000,
                     help="flash offset of the application (matches the XIP window of the build)")
     ap.add_argument("-o", "--output", required=True)
     a = ap.parse_args()

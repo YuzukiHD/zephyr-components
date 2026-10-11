@@ -21,7 +21,15 @@ void ui_goto(const char *name);
 void ui_goto_arg(const char *name, void *arg);
 
 /** Opens the file browser in @p dir (NULL: the root of the card) listing the files of @p kind */
+#ifdef CONFIG_MP5_FEATURE_FILES
 void ui_files_open(const char *dir, const char *kind);
+#else
+static inline void ui_files_open(const char *dir, const char *kind)
+{
+	(void)dir;
+	(void)kind;
+}
+#endif
 
 /** The first picture, then the panel on; and the loop of the user interface thread */
 void ui_present(void);

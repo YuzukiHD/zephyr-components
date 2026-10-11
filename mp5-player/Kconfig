@@ -7,4 +7,15 @@ rsource "src/gfx/Kconfig"
 rsource "src/features/*/Kconfig"
 rsource "src/debug/Kconfig"
 
+# the old names of the switches that are used on the command line
+config SAMPLE_MP5_SELFTEST
+	bool "Old name of MP5_SELFTEST"
+	depends on MP5_DEBUG && MP5_FEATURE_VIDEO
+	select MP5_SELFTEST
+
+config SAMPLE_MP5_THEME_TEST
+	bool "Old name of MP5_THEME_TEST"
+	depends on MP5_DEBUG && MP5_FEATURE_SETTINGS
+	select MP5_THEME_TEST
+
 source "Kconfig.zephyr"

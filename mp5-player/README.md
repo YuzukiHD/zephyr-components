@@ -146,7 +146,7 @@ the UF2 application area (`0x200000`) overlaps it, so do not use both.
 | `CONFIG_MP5_SELFTEST` | off | play the default video, seek, pause, resume and change the volume by itself |
 | `CONFIG_MP5_THEME_TEST` | off | settings, theme, Wi-Fi and game steps by themselves, ends with `PASS` or `FAIL` |
 
-The options were called `CONFIG_SAMPLE_MP5_*` before; `SAMPLE_MP5_UI_BENCH`, `_UI_PROFILE`,
+The options were called `CONFIG_SAMPLE_MP5_*` before (the two test switches keep their old names as aliases); `SAMPLE_MP5_UI_BENCH`, `_UI_PROFILE`,
 `_UI_DEMO` and `_ROOT` are gone.
 
 ## Notes

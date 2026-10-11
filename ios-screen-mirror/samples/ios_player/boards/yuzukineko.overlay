@@ -1,4 +1,5 @@
-/* LVGL reads the touch panel as a pointer (the on-screen keyboard of the WiFi setup) */
+/* The touch panel is registered as an LVGL pointer. The sample has no touch handling yet: the
+ * status card is display only and the WiFi comes from /SD:/wifi.cfg. */
 / {
 	lvgl_pointer {
 		compatible = "zephyr,lvgl-pointer-input";

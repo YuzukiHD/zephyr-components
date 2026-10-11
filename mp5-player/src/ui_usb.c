@@ -23,6 +23,8 @@
 
 #include "usbd_core.h"
 #include "usbd_display.h"
+#include <zephyr/input/input.h>
+#include "usb_touch.h"
 #include "mp5.h"
 
 extern uintptr_t usb_sunxi_otg_base(void);
@@ -31,9 +33,12 @@ extern uintptr_t usb_sunxi_otg_base(void);
 #define DISPLAY_OUT_EP	0x02
 #define DISPLAY_EP_MPS	512
 #define USBD_VID	0x303A
-#define USBD_PID	0x2987
+#define USBD_PID_TOUCH	0x2986	/* composite: the display on interface 0, a touch screen on 1 */
 #define USBD_MAX_POWER	100
 #define USB_CONFIG_SIZE	(9 + 9 + 7 + 7)
+#define USB_CONFIG_SIZE_TOUCH	(USB_CONFIG_SIZE + USB_TOUCH_DESCRIPTOR_SIZE)
+#define PANEL_W		1024
+#define PANEL_H		768
 
 /* a JPEG frame is at most 500 KiB; the class reads in steps of 16 KiB */
 #define FRAME_BUF_SIZE	(34 * 16384)
@@ -49,14 +54,15 @@ static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display)
 
 static char product_string[64];
 static uint8_t device_descriptor[] = {
-	USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0x00, 0x00, 0x00, USBD_VID, USBD_PID, 0x0101, 0x01)
+	USB_DEVICE_DESCRIPTOR_INIT(USB_2_0, 0x00, 0x00, 0x00, USBD_VID, USBD_PID_TOUCH, 0x0101, 0x01)
 };
-static const uint8_t config_descriptor[USB_CONFIG_SIZE] = {
-	USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE, 0x01, 0x01, USB_CONFIG_BUS_POWERED,
+static uint8_t config_descriptor[USB_CONFIG_SIZE_TOUCH] = {
+	USB_CONFIG_DESCRIPTOR_INIT(USB_CONFIG_SIZE_TOUCH, 0x02, 0x01, USB_CONFIG_BUS_POWERED,
 				   USBD_MAX_POWER),
 	USB_INTERFACE_DESCRIPTOR_INIT(0x00, 0x00, 0x02, 0xff, 0x00, 0x00, 0x00),
 	USB_ENDPOINT_DESCRIPTOR_INIT(DISPLAY_IN_EP, 0x02, DISPLAY_EP_MPS, 0x00),
 	USB_ENDPOINT_DESCRIPTOR_INIT(DISPLAY_OUT_EP, 0x02, DISPLAY_EP_MPS, 0x00),
+	/* the touch screen follows, filled in by usb_start() */
 };
 static const uint8_t device_quality_descriptor[] = {
 	0x0a, USB_DESCRIPTOR_TYPE_DEVICE_QUALIFIER, 0x00, 0x02, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00,
@@ -107,6 +113,110 @@ static struct vdec_stream *jpeg_stream;
 static uint32_t jpeg_w, jpeg_h;
 static int jpeg_hold = 3;
 static struct vdec_frame shown, older;
+
+/* ---- the touch panel as the touch screen of the PC ------------------------------------------- */
+
+/*
+ * A finger the panel loses for a moment would end a drag selection or a press and hold on the PC,
+ * so a lift is reported only when the finger stays away for UP_DEBOUNCE_MS. While a finger is
+ * down the report is repeated every BEAT_MS, as the PC expects from a touch screen.
+ */
+#define UP_DEBOUNCE_MS	50
+#define BEAT_MS		20
+
+static struct {
+	uint16_t x, y;
+	bool down;		/* as the PC knows it */
+	bool lifted;		/* one more report with the tip switch off */
+	uint32_t up_at;		/* the panel lost the finger: when to tell the PC, 0 when it is down */
+} slot[USB_TOUCH_MAX_CONTACTS];
+static int cur_slot;
+static struct k_spinlock touch_lock;
+static bool touch_q_started;
+static struct k_work_q touch_q;
+K_THREAD_STACK_DEFINE(touch_q_stack, 2048);
+static void touch_beat(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(touch_work, touch_beat);
+
+/*
+ * Runs in a queue of its own: the input events are delivered in the system work queue, which must
+ * not wait for the USB endpoint.
+ */
+static void touch_beat(struct k_work *work)
+{
+	struct usb_touch_point out[USB_TOUCH_MAX_CONTACTS] = {0};
+	uint32_t now = k_uptime_get_32();
+	bool any = false;
+	int count = 0;
+	k_spinlock_key_t key;
+
+	ARG_UNUSED(work);
+	key = k_spin_lock(&touch_lock);
+	for (int i = 0; i < USB_TOUCH_MAX_CONTACTS; i++) {
+		if (slot[i].down && slot[i].up_at != 0 && (int32_t)(now - slot[i].up_at) >= 0) {
+			slot[i].down = false;
+			slot[i].lifted = true;
+			slot[i].up_at = 0;
+		}
+		out[i].id = i;
+		if (slot[i].down || slot[i].lifted) {
+			out[i].down = slot[i].down;
+			/* the PC's screen is the picture turned by 180 degrees against the panel's axes */
+			out[i].x = USB_TOUCH_MAX - MIN(slot[i].x, PANEL_W - 1) * USB_TOUCH_MAX / (PANEL_W - 1);
+			out[i].y = USB_TOUCH_MAX - MIN(slot[i].y, PANEL_H - 1) * USB_TOUCH_MAX / (PANEL_H - 1);
+			count = i + 1;
+		}
+		slot[i].lifted = false;
+		any |= slot[i].down;
+	}
+	k_spin_unlock(&touch_lock, key);
+
+	if (count != 0 && (link == LINK_CONFIGURED || link == LINK_STREAMING)) {
+		for (int n = 0; usb_touch_send(out, count) == -EBUSY && n < 20; n++) {
+			k_msleep(1);
+		}
+	}
+	if (any) {
+		k_work_schedule_for_queue(&touch_q, &touch_work, K_MSEC(BEAT_MS));
+	}
+}
+
+static void touch_event(struct input_event *evt, void *user_data)
+{
+	k_spinlock_key_t key;
+
+	ARG_UNUSED(user_data);
+	if (link == LINK_OFF) {
+		return;
+	}
+	key = k_spin_lock(&touch_lock);
+	switch (evt->code) {
+	case INPUT_ABS_MT_SLOT:
+		cur_slot = CLAMP(evt->value, 0, USB_TOUCH_MAX_CONTACTS - 1);
+		break;
+	case INPUT_ABS_X:
+		slot[cur_slot].x = evt->value;
+		break;
+	case INPUT_ABS_Y:
+		slot[cur_slot].y = evt->value;
+		break;
+	case INPUT_BTN_TOUCH:
+		if (evt->value) {
+			slot[cur_slot].down = true;
+			slot[cur_slot].up_at = 0;
+		} else if (slot[cur_slot].down && slot[cur_slot].up_at == 0) {
+			slot[cur_slot].up_at = k_uptime_get_32() + UP_DEBOUNCE_MS;
+		}
+		break;
+	default:
+		break;
+	}
+	k_spin_unlock(&touch_lock, key);
+	if (evt->sync) {
+		k_work_reschedule_for_queue(&touch_q, &touch_work, K_NO_WAIT);
+	}
+}
+INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_CHOSEN(zephyr_touch)), touch_event, NULL);
 
 K_THREAD_STACK_DEFINE(usb_stack, 8192);
 static struct k_thread usb_thread;
@@ -324,12 +434,26 @@ static int usb_start(void)
 			return -ENOMEM;
 		}
 	}
+	if (!touch_q_started) {
+		k_work_queue_init(&touch_q);
+		k_work_queue_start(&touch_q, touch_q_stack, K_THREAD_STACK_SIZEOF(touch_q_stack), 6,
+				   NULL);
+		touch_q_started = true;
+	}
+	{
+		k_spinlock_key_t key = k_spin_lock(&touch_lock);
+
+		memset(slot, 0, sizeof(slot));
+		k_spin_unlock(&touch_lock, key);
+	}
 	frames_ok = frames_bad = 0;
 	quit = false;
 	link = LINK_WAITING;
+	usb_touch_descriptor(config_descriptor + USB_CONFIG_SIZE, USB_TOUCH_INTERFACE);
 	usbd_desc_register(0, &usb_descriptors);
 	usbd_add_interface(0, usbd_display_init_intf(&display_intf, DISPLAY_OUT_EP, DISPLAY_IN_EP,
 						    frame_pool, FRAME_COUNT));
+	usb_touch_init(0);
 	printk("usb display: starting the device\n");
 	usbd_initialize(0, usb_sunxi_otg_base(), usbd_event_handler);
 	printk("usb display: started, power %02x\n", sys_read8(usb_sunxi_otg_base() + 1));
@@ -419,8 +543,9 @@ static lv_obj_t *usb_create(void)
 	lv_obj_set_width(text_label, 560);
 	lv_obj_align(text_label, LV_ALIGN_TOP_MID, 0, 110);
 
-	cross = ui_icon_button(scr, LV_SYMBOL_CLOSE, 64);
+	cross = ui_icon_button(scr, LV_SYMBOL_CLOSE, 88);
 	lv_obj_set_style_bg_opa(cross, LV_OPA_70, 0);
+	lv_obj_set_ext_click_area(cross, 32);
 	lv_obj_align(cross, LV_ALIGN_TOP_RIGHT, -24, 24);
 	lv_obj_add_event_cb(cross, leave_clicked, LV_EVENT_CLICKED, NULL);
 

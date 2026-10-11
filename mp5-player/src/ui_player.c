@@ -423,7 +423,7 @@ static void player_enter(void *arg)
 	lv_label_set_text(dur_label, buf);
 	lv_label_set_text(cur_label, "0:00");
 	lv_label_set_text_fmt(info_label, "%ux%u  H.264%s", info.width, info.height,
-			      info.has_audio ? "  AAC" : "");
+			      info.has_audio ? "  AAC" : (info.raw ? "  no sound" : ""));
 	lv_slider_set_value(vol_slider, player_volume(), LV_ANIM_OFF);
 	lv_label_set_text(vol_icon, volume_symbol(player_volume()));
 	{

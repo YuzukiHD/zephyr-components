@@ -18,7 +18,7 @@ static lv_obj_t *screens[SCR_COUNT];
 static enum screen_id current = SCR_COUNT;
 static const char *const screen_names[SCR_COUNT] = {
 	[SCR_HOME] = "home", [SCR_FILES] = "files", [SCR_PHOTOS] = "photos",
-	[SCR_PLAYER] = "player", [SCR_USB] = "usb", [SCR_RECENT] = "videos",
+	[SCR_PLAYER] = "player", [SCR_USB] = "usb", [SCR_RECENT] = "videos", [SCR_GAME] = "game",
 };
 
 lv_obj_t *ui_screen_new(bool transparent)
@@ -129,6 +129,7 @@ void ui_init(void)
 	ui_register(SCR_HOME, &home_ops);
 	ui_register(SCR_FILES, &files_ops);
 	ui_register(SCR_RECENT, &recent_ops);
+	ui_register(SCR_GAME, &game_ops);
 	ui_register(SCR_PLAYER, &player_ops);
 	ui_goto(SCR_HOME);
 }

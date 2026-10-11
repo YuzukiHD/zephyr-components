@@ -65,7 +65,7 @@ static bool has_ext(const char *name, const char *ext)
 
 static bool is_video(const char *name)
 {
-	return has_ext(name, ".mp4");
+	return has_ext(name, ".mp4") || has_ext(name, ".h264") || has_ext(name, ".264");
 }
 
 static bool is_photo(const char *name)
@@ -84,6 +84,9 @@ static const char *icon_of(const struct entry *e)
 	if (is_photo(e->name)) {
 		return LV_SYMBOL_IMAGE;
 	}
+	if (ui_game_ext(e->name)) {
+		return LV_SYMBOL_KEYBOARD;
+	}
 	return LV_SYMBOL_FILE;
 }
 
@@ -97,6 +100,9 @@ static uint32_t icon_color(const struct entry *e)
 	}
 	if (is_photo(e->name)) {
 		return C_OK;
+	}
+	if (ui_game_ext(e->name)) {
+		return C_PINK;
 	}
 	return C_DIM;
 }
@@ -217,6 +223,8 @@ static void row_clicked(lv_event_t *e)
 		ui_player_open(path, SCR_FILES);
 	} else if (is_photo(entries[idx].name)) {
 		ui_goto_arg(SCR_PHOTOS, path);
+	} else if (ui_game_ext(entries[idx].name)) {
+		ui_game_open(path, SCR_FILES);
 	}
 }
 

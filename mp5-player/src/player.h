@@ -22,6 +22,7 @@ struct player_info {
 	uint32_t duration_ms;
 	uint16_t width, height;
 	bool has_audio;
+	bool raw;	/**< an H.264 file without a container: the length is an estimate */
 };
 
 /** Opens an MP4 file and starts playing it; the picture goes to the video plane */

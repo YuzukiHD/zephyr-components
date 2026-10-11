@@ -190,6 +190,9 @@ int main(void)
 #ifdef CONFIG_SAMPLE_MP5_UI_DEMO
 	ui_stats_demo();
 #endif
+	if (sizeof(CONFIG_SAMPLE_MP5_GAME) > 1) {
+		ui_game_open(CONFIG_SAMPLE_MP5_GAME, SCR_HOME);
+	}
 	printk("mp5: %d x %d\n", (int)lv_display_get_horizontal_resolution(NULL),
 	       (int)lv_display_get_vertical_resolution(NULL));
 

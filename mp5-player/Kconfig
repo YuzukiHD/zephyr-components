@@ -54,6 +54,10 @@ config SAMPLE_MP5_G2D_MIN_PIXELS
 	default 20000
 	depends on SAMPLE_MP5_G2D
 
+config SAMPLE_MP5_GAME
+	string "Game to start at boot, for a check without touching (empty: none)"
+	default ""
+
 config SAMPLE_MP5_HOT_RAM
 	bool "Run the video decoder driver and the AAC decoder from RAM"
 	default y

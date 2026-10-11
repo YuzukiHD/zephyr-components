@@ -35,6 +35,7 @@ enum screen_id {
 	SCR_PLAYER,
 	SCR_USB,
 	SCR_RECENT,
+	SCR_GAME,
 	SCR_COUNT,
 };
 
@@ -66,9 +67,16 @@ void ui_goto_arg(enum screen_id id, void *arg);
 /** Plays a video; the back button of the player returns to @p from (SCR_FILES or SCR_RECENT) */
 void ui_player_open(const char *path, enum screen_id from);
 
+/** Starts a game (.nes .gb .gbc .gba); the cross of the game screen returns to @p from */
+void ui_game_open(const char *path, enum screen_id from);
+
+/** True for the file names of games */
+bool ui_game_ext(const char *name);
+
 extern const struct screen_ops home_ops;
 extern const struct screen_ops files_ops;
 extern const struct screen_ops recent_ops;
+extern const struct screen_ops game_ops;
 extern const struct screen_ops player_ops;
 
 /** Raises the CPU clock to CONFIG_SAMPLE_MP5_CPU_MHZ, each step checked */
@@ -89,9 +97,13 @@ void files_demo_scroll(int32_t dy);
 
 /* ---- clock ------------------------------------------------------------------------------ */
 
-/** The time of day; the board has no RTC, so it counts from the build time unless it is set */
+/** The date and the time of day, from the real time clock */
 void clock_now(struct tm *tm);
 void clock_set(int hour, int minute);
+/** Sets the date and the time (year since 1900, month 0..11) */
+void clock_set_tm(const struct tm *tm);
+/** False when the board has no usable real time clock */
+bool clock_valid(void);
 
 /* ---- storage ---------------------------------------------------------------------------- */
 

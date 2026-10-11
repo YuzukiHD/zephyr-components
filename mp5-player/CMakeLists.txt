@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 cmake_minimum_required(VERSION 3.20.0)
+# the emulator modules sit next to this application
+list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR}/../mgba ${CMAKE_CURRENT_SOURCE_DIR}/../nes)
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(mp5_player)
 
@@ -15,6 +18,7 @@ target_sources(app PRIVATE
 	src/ui.c
 	src/ui_home.c
 	src/ui_files.c
+	src/ui_game.c
 	src/ui_stats.c
 	src/ui_recent.c
 	src/history.c

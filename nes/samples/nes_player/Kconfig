@@ -12,6 +12,11 @@ config SAMPLE_NES_RATE
 	help
 	  48000 or 44100.
 
+config SAMPLE_NES_VOLUME
+	int "Output volume of the codec"
+	range 0 255
+	default 150
+
 config SAMPLE_NES_BENCH
 	bool "Run the emulation unpaced for a fixed number of frames and print the time"
 

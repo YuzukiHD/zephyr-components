@@ -58,7 +58,7 @@ static void audio_main(void *a, void *b, void *c)
 	}
 	audio_codec_start_output(ctl);
 	audio_codec_set_property(ctl, AUDIO_PROPERTY_OUTPUT_VOLUME, AUDIO_CHANNEL_ALL,
-				 (audio_property_value_t){.vol = 150});
+				 (audio_property_value_t){.vol = CONFIG_SAMPLE_NES_VOLUME});
 
 	while (true) {
 		void *blk;

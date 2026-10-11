@@ -11,10 +11,10 @@ layer (`include/nes_zephyr/nesemu.h`, `src/nesemu.c`, Apache-2.0).
 - Local changes in `nofrendo/`: `NES_NO_STDIO` removes the `FILE` based loaders (the glue loads the
   ROM into memory), `utils.h` takes the CRC from the glue.
 
-Sample `samples/nes_player` (needs the display, SD card and codec drivers of the F101 tree):
+Sample `samples/nes_player` (needs the display, SD card and codec drivers of the F101 tree; the on-screen keys need the GT967 touch panel of the yuzukineko board):
 
 ```
-west build -b f101_evb -d build/nes zephyr-components/nes/samples/nes_player
+west build -b yuzukineko -d build/nes zephyr-components/nes/samples/nes_player
 ```
 
 It takes `/SD:/game.nes` (`CONFIG_SAMPLE_NES_ROM`) or the first `.nes` in the root of the card,

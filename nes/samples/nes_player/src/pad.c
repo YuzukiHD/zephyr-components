@@ -10,7 +10,8 @@
  * With a touch panel (the chosen zephyr,touch) the fingers are read straight from the input
  * events, one per touch slot, and each is matched against the buttons here: LVGL's pointer
  * handles one finger, a game needs the directions and a button at the same time. The buttons
- * only show the state.
+ * only show the state. Without a touch panel nothing writes the key mask, the
+ * buttons are then only drawn.
  */
 
 #include <lvgl.h>
@@ -119,17 +120,6 @@ static uint32_t touch_scan(void)
 }
 #endif /* HAS_TOUCH */
 
-static void key_event(lv_event_t *e)
-{
-	uint32_t bit = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
-
-	if (lv_event_get_code(e) == LV_EVENT_PRESSED) {
-		atomic_or(&keys, bit);
-	} else {
-		atomic_and(&keys, ~bit);
-	}
-}
-
 static void key_add(int x, int y, int w, int h, const char *text, uint32_t bit, int radius)
 {
 	lv_obj_t *b = lv_button_create(lv_screen_active());
@@ -150,7 +140,6 @@ static void key_add(int x, int y, int w, int h, const char *text, uint32_t bit, 
 	lv_obj_set_style_text_color(l, lv_color_white(), 0);
 	lv_label_set_text(l, text);
 	lv_obj_center(l);
-	lv_obj_add_event_cb(b, key_event, LV_EVENT_ALL, (void *)(uintptr_t)bit);
 
 	if (nkeys < MAX_KEYS) {
 		pad_keys_tbl[nkeys++] = (struct pad_key){
@@ -164,22 +153,19 @@ static void pad_main(void *a, void *b, void *c)
 	lv_obj_set_style_bg_opa(lv_screen_active(), LV_OPA_TRANSP, 0);
 
 	/*
-	 * The layout was drawn for a 1024x600 panel, the keys at the bottom stay at the bottom of
-	 * a taller one. The picture is 900 wide in the middle.
+	 * The layout is for the 1024x768 panel of the yuzukineko board, origin top left. The picture
+	 * (256x224 scaled by the video plane) fills the screen behind the keys.
 	 */
-	const int dy = lv_display_get_vertical_resolution(NULL) - 600;
+	key_add(30, 498, 90, 90, LV_SYMBOL_LEFT, NESEMU_KEY_LEFT, 20);
+	key_add(210, 498, 90, 90, LV_SYMBOL_RIGHT, NESEMU_KEY_RIGHT, 20);
+	key_add(120, 408, 90, 90, LV_SYMBOL_UP, NESEMU_KEY_UP, 20);
+	key_add(120, 588, 90, 90, LV_SYMBOL_DOWN, NESEMU_KEY_DOWN, 20);
 
-	key_add(30, 330 + dy, 90, 90, LV_SYMBOL_LEFT, NESEMU_KEY_LEFT, 20);
-	key_add(210, 330 + dy, 90, 90, LV_SYMBOL_RIGHT, NESEMU_KEY_RIGHT, 20);
-	key_add(120, 240 + dy, 90, 90, LV_SYMBOL_UP, NESEMU_KEY_UP, 20);
-	key_add(120, 420 + dy, 90, 90, LV_SYMBOL_DOWN, NESEMU_KEY_DOWN, 20);
+	key_add(830, 528, 100, 100, "A", NESEMU_KEY_A, LV_RADIUS_CIRCLE);
+	key_add(720, 598, 100, 100, "B", NESEMU_KEY_B, LV_RADIUS_CIRCLE);
 
-	key_add(830, 360 + dy, 100, 100, "A", NESEMU_KEY_A, LV_RADIUS_CIRCLE);
-	key_add(720, 430 + dy, 100, 100, "B", NESEMU_KEY_B, LV_RADIUS_CIRCLE);
-
-
-	key_add(380, 520 + dy, 120, 60, "SELECT", NESEMU_KEY_SELECT, 30);
-	key_add(524, 520 + dy, 120, 60, "START", NESEMU_KEY_START, 30);
+	key_add(380, 688, 120, 60, "SELECT", NESEMU_KEY_SELECT, 30);
+	key_add(524, 688, 120, 60, "START", NESEMU_KEY_START, 30);
 
 	while (true) {
 #if HAS_TOUCH

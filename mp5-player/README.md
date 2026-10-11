@@ -59,6 +59,24 @@ xfel write 0x20000 out/syterkit/build/yuzukineko/app_sram/xip-boot/xip-boot_fel.
 xfel exec 0x20000
 ```
 
+### Complete flash image (starts by itself at power on)
+
+`tools/mkimage.py` puts the boot stub (`xip-boot_spi.bin`, the SPL image for the flash, three copies at
+0, 64 KiB and 128 KiB) and the application at `0xa00000` into one file for the whole flash up to the end
+of the application. Everything in front of the application is overwritten.
+
+```sh
+python3 tools/mkimage.py --boot out/syterkit/build/yuzukineko/app_sram/xip-boot/xip-boot_spi.bin \
+    --app build/mp5/zephyr/zephyr.bin -o mp5-full.img
+# board in FEL mode (hold the FEL key at power on)
+xfel spinor write 0 mp5-full.img
+```
+
+After the next power cycle the BROM starts the stub from the flash, which maps the window and jumps to the
+application; the log of the stub and of the application is on the console of the board. To change only the
+application write `zephyr.bin` at `0xa00000` as above (FEL mode is still needed, the board no longer
+enters it by itself).
+
 The console is UART1 (PB0/PB1), 115200 8N1. `0xa00000` to the end of the flash is used by the image;
 the UF2 application area (`0x200000`) overlaps it, so do not use both.
 

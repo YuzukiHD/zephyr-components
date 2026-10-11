@@ -28,7 +28,6 @@
 #define STDIN_FILENO	0
 #endif
 
-int getchar(void);
 int rename(const char *from, const char *to);
 char *fgets(char *s, int n, FILE *f);
 double strtod(const char *s, char **end);

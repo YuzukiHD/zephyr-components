@@ -36,6 +36,8 @@ __weak int stat(const char *path, struct stat *buf)
 	return -1;
 }
 
+/* picolibc defines getchar as a macro */
+#undef getchar
 __weak int getchar(void)
 {
 	return -1;

@@ -30,6 +30,10 @@ config AIC8800
 	  firmware download, a port of wpa_supplicant for the station
 	  and access point modes, and the Zephyr network interface.
 
+	  Use the minimal C library (CONFIG_MINIMAL_LIBC=y): the supplicant
+	  task ends right after it is started under picolibc, so a network
+	  cannot be joined. The samples set it in their prj.conf.
+
 if AIC8800
 
 module = AIC8800

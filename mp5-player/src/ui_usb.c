@@ -18,6 +18,7 @@
 #include <zephyr/drivers/display/display_sunxi.h>
 #include <zephyr/drivers/vdec.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/sys_io.h>
 #include <zephyr/sys/printk.h>
 
 #include "usbd_core.h"
@@ -113,6 +114,7 @@ static K_SEM_DEFINE(usb_done, 0, 1);
 
 static void usbd_event_handler(uint8_t busid, uint8_t event)
 {
+	printk("usb display: event %d\n", event);
 	if (event == USBD_EVENT_CONFIGURED) {
 		link = LINK_CONFIGURED;
 	} else if (event == USBD_EVENT_DISCONNECTED || event == USBD_EVENT_RESET) {
@@ -256,6 +258,8 @@ static void usb_main(void *a, void *b, void *c)
 		if (usbd_display_dequeue(&frame, 100) >= 0) {
 			handle_frame(frame);
 			usbd_display_enqueue(frame);
+		} else {
+			k_msleep(10);
 		}
 		ms = k_uptime_get_32() - last;
 		if (ms >= REPORT_MS) {
@@ -270,6 +274,35 @@ static void usb_main(void *a, void *b, void *c)
 	k_sem_give(&usb_done);
 }
 
+
+/* free space of the heap: the chunks of 64 KiB that can be taken, and the largest single block */
+static void heap_report(const char *tag)
+{
+	void **list = malloc(256 * sizeof(void *));
+	unsigned int n = 0, big = 0;
+
+	if (list == NULL) {
+		return;
+	}
+	while (n < 256 && (list[n] = malloc(64 * 1024)) != NULL) {
+		n++;
+	}
+	for (unsigned int i = 0; i < n; i++) {
+		free(list[i]);
+	}
+	for (unsigned int kb = 16384; kb >= 64 && big == 0; kb /= 2) {
+		void *p = malloc(kb * 1024);
+
+		if (p != NULL) {
+			free(p);
+			big = kb;
+		}
+	}
+	free(list);
+	printk("usb display: heap %s: %u KiB free in 64 KiB blocks, largest block >= %u KiB\n", tag,
+	       n * 64, big);
+}
+
 static int usb_start(void)
 {
 	struct display_capabilities caps;
@@ -277,6 +310,7 @@ static int usb_start(void)
 	if (!device_is_ready(vdec_dev) || !device_is_ready(disp)) {
 		return -ENODEV;
 	}
+	heap_report("before");
 	display_get_capabilities(disp, &caps);
 	snprintk(product_string, sizeof(product_string), "cherryusb_R%ux%u_Ejpg%u_Fps%u_Bl%u",
 		 caps.x_resolution, caps.y_resolution, QUALITY_TOLD, FPS_TOLD, FRAME_LIMIT_KB);
@@ -293,14 +327,15 @@ static int usb_start(void)
 	frames_ok = frames_bad = 0;
 	quit = false;
 	link = LINK_WAITING;
-	k_thread_create(&usb_thread, usb_stack, K_THREAD_STACK_SIZEOF(usb_stack), usb_main, NULL,
-			NULL, NULL, 5, 0, K_NO_WAIT);
-	k_thread_name_set(&usb_thread, "usb_display");
-
 	usbd_desc_register(0, &usb_descriptors);
 	usbd_add_interface(0, usbd_display_init_intf(&display_intf, DISPLAY_OUT_EP, DISPLAY_IN_EP,
 						    frame_pool, FRAME_COUNT));
+	printk("usb display: starting the device\n");
 	usbd_initialize(0, usb_sunxi_otg_base(), usbd_event_handler);
+	printk("usb display: started, power %02x\n", sys_read8(usb_sunxi_otg_base() + 1));
+	k_thread_create(&usb_thread, usb_stack, K_THREAD_STACK_SIZEOF(usb_stack), usb_main, NULL,
+			NULL, NULL, 5, 0, K_NO_WAIT);
+	k_thread_name_set(&usb_thread, "usb_display");
 	printk("usb display: waiting for the host (%s)\n", product_string);
 
 	return 0;
@@ -322,6 +357,7 @@ static void usb_stop(void)
 		frame_pool[i].frame_buf = NULL;
 	}
 	link = LINK_OFF;
+	heap_report("after");
 	printk("usb display: stopped\n");
 }
 

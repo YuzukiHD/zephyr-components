@@ -27,7 +27,7 @@
 #define MAX_PHOTOS	512
 #define NAME_MAX_LEN	96
 #define PATH_MAX_LEN	256
-#define MAX_FILE_BYTES	(CONFIG_VDEC_SUNXI_STREAM_BUFFER_KB * 1024)
+#define MAX_FILE_BYTES	(6 * 1024 * 1024)
 
 static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 static const struct device *const vdec_dev = DEVICE_DT_GET(DT_NODELABEL(ve));

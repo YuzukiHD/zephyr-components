@@ -14,6 +14,7 @@
 #include <zephyr/fs/fs.h>
 #include <zephyr/kernel.h>
 
+#include "core/app.h"
 #include "mp5.h"
 
 #define CFG_FILE	"/SD:/.mp5_settings"
@@ -133,3 +134,11 @@ void cfg_set(const char *key, const char *value)
 	save();
 	k_mutex_unlock(&lock);
 }
+
+static int cfg_step(void)
+{
+	cfg_load();
+
+	return 0;
+}
+MP5_INIT(MP5_STAGE_STORAGE, 10, "settings", cfg_step);

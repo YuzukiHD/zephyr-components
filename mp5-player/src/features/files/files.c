@@ -480,8 +480,3 @@ const struct screen_ops files_ops = {
 	.enter = files_enter,
 	.leave = files_leave,
 };
-
-void files_demo_scroll(int32_t dy)
-{
-	lv_obj_scroll_by(list, 0, dy, LV_ANIM_ON);
-}

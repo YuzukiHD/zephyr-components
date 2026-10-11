@@ -33,6 +33,7 @@
 #include <mgba_zephyr/gba.h>
 #include <nes_zephyr/nesemu.h>
 
+#include "core/app.h"
 #include "mp5.h"
 
 #define RATE		48000
@@ -639,3 +640,14 @@ const struct screen_ops game_ops = {
 	.enter = game_enter,
 	.leave = game_leave,
 };
+
+/* CONFIG_SAMPLE_MP5_GAME starts a game at boot (for the check of the emulators) */
+static int game_autostart(void)
+{
+	if (sizeof(CONFIG_SAMPLE_MP5_GAME) > 1) {
+		ui_game_open(CONFIG_SAMPLE_MP5_GAME, SCR_HOME);
+	}
+
+	return 0;
+}
+MP5_INIT(MP5_STAGE_READY, 50, "game autostart", game_autostart);

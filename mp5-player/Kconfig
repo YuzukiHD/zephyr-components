@@ -31,15 +31,6 @@ config SAMPLE_MP5_THREAD_STATS
 	  access fault inside the scheduler about 8 s after a failed open of a video (seen on the
 	  board), so it is left off unless needed.
 
-config SAMPLE_MP5_UI_BENCH
-	bool "Time ten full redraws of the home screen at start, with and without the vector blends"
-
-config SAMPLE_MP5_UI_PROFILE
-	bool "Redraw the home screen for a while at start and print the hottest blocks of code"
-
-config SAMPLE_MP5_UI_DEMO
-	bool "Tour the screens by itself at start (swipe, change screens, play a video twice)"
-
 config SAMPLE_MP5_G2D
 	bool "Fill large plain rectangles of the user interface with the 2D accelerator"
 	depends on G2D

@@ -26,6 +26,7 @@
 #include <zephyr/net/wifi_mgmt.h>
 #include <zephyr/sys/printk.h>
 
+#include "core/app.h"
 #include "mp5.h"
 
 #define MAX_APS		24
@@ -520,7 +521,7 @@ static struct k_thread bt_thread;
 
 /* ---- interface for the user interface -------------------------------------------------- */
 
-void app_net_init(void)
+static void app_net_init(void)
 {
 	k_mutex_init(&lock);
 	k_thread_create(&net_thread, net_stack, K_THREAD_STACK_SIZEOF(net_stack), net_main, NULL, NULL,
@@ -530,6 +531,14 @@ void app_net_init(void)
 			NULL, 12, 0, K_MSEC(3500));
 	k_thread_name_set(&bt_thread, "bt");
 }
+
+static int net_step(void)
+{
+	app_net_init();
+
+	return 0;
+}
+MP5_INIT(MP5_STAGE_SERVICES, 10, "network", net_step);
 
 static void put(const struct request *r)
 {

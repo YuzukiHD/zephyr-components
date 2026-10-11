@@ -16,7 +16,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
+#include "core/app.h"
 #include "mp5.h"
+#include "player.h"
+#include <zephyr/fs/fs.h>
 
 static int step;
 static int failures;
@@ -114,7 +117,90 @@ static void test_step(lv_timer_t *t)
 	step++;
 }
 
-void ui_theme_test_start(void)
+#ifdef CONFIG_SAMPLE_MP5_THEME_TEST
+static int theme_test_start(void)
 {
 	lv_timer_create(test_step, 2500, NULL);
+
+	return 0;
 }
+MP5_INIT(MP5_STAGE_READY, 10, "theme test", theme_test_start);
+#endif
+
+#ifdef CONFIG_SAMPLE_MP5_SELFTEST
+/* The files in the root of the card, to see what there is to play */
+static void list_root(void)
+{
+	struct fs_dir_t dir;
+	struct fs_dirent ent;
+
+	fs_dir_t_init(&dir);
+	if (fs_opendir(&dir, MP5_MOUNT_POINT) != 0) {
+		return;
+	}
+	while (fs_readdir(&dir, &ent) == 0 && ent.name[0] != '\0') {
+		printk("sd: %s %s %u\n", ent.type == FS_DIR_ENTRY_DIR ? "dir " : "file", ent.name,
+		       (unsigned int)ent.size);
+	}
+	fs_closedir(&dir);
+}
+
+/* Drives the player the way the controls do and prints where it is after each step */
+static void playback_main(void *a, void *b, void *c)
+{
+	static const char *const names[] = {"idle", "playing", "paused", "ended", "error"};
+	static const struct {
+		const char *what;
+		int wait_ms;
+	} steps[] = {
+		{"play", 2500}, {"seek 6000", 2500}, {"pause", 1500}, {"seek 1000 while paused", 1500},
+		{"resume", 2500}, {"volume 30", 1500}, {"volume 0", 1000}, {"volume 70", 500},
+		{"seek 9500", 4000}, {"replay", 2000},
+	};
+
+	ARG_UNUSED(a);
+	ARG_UNUSED(b);
+	ARG_UNUSED(c);
+	k_msleep(1500);
+	for (int i = 0; i < ARRAY_SIZE(steps); i++) {
+		const char *w = steps[i].what;
+
+		if (strcmp(w, "seek 6000") == 0) {
+			player_seek(6000);
+		} else if (strcmp(w, "pause") == 0) {
+			player_pause();
+		} else if (strcmp(w, "seek 1000 while paused") == 0) {
+			player_seek(1000);
+		} else if (strcmp(w, "resume") == 0) {
+			player_play();
+		} else if (strcmp(w, "volume 30") == 0) {
+			player_set_volume(30);
+		} else if (strcmp(w, "volume 0") == 0) {
+			player_set_volume(0);
+		} else if (strcmp(w, "volume 70") == 0) {
+			player_set_volume(70);
+		} else if (strcmp(w, "seek 9500") == 0) {
+			player_seek(9500);
+		} else if (strcmp(w, "replay") == 0) {
+			player_play();
+		}
+		printk("selftest: %-24s -> ", w);
+		k_msleep(steps[i].wait_ms);
+		printk("%s, position %u ms, volume %d\n", names[player_state()], player_position_ms(),
+		       player_volume());
+	}
+	printk("selftest: done\n");
+}
+
+K_THREAD_DEFINE(selftest, 4096, playback_main, NULL, NULL, NULL, 9, 0, -1);
+
+static int playback_start(void)
+{
+	list_root();
+	ui_goto(SCR_PLAYER);
+	k_thread_start(selftest);
+
+	return 0;
+}
+MP5_INIT(MP5_STAGE_READY, 5, "playback test", playback_start);
+#endif

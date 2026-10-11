@@ -11,6 +11,7 @@
  * gradient, border or blend mode, so the result equals the software fill.
  */
 
+#include "core/app.h"
 #include <lvgl.h>
 #include <zephyr/cache.h>
 #include <zephyr/device.h>
@@ -129,3 +130,11 @@ void lv_g2d_report(void)
 	printk("lv_g2d: %u fills, %u pixels\n", fills, fill_px);
 	fills = fill_px = 0;
 }
+
+static int g2d_step(void)
+{
+	lv_g2d_init();
+
+	return 0;
+}
+MP5_INIT(MP5_STAGE_UI, 10, "g2d", g2d_step);

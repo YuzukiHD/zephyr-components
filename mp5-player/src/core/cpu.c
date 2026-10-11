@@ -12,6 +12,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
+#include "core/app.h"
 #include "mp5.h"
 
 /* A busy loop over a checksummed block of memory: a CPU that is too fast corrupts it */
@@ -64,3 +65,11 @@ void cpu_clock_setup(void)
 	}
 	printk("cpu: %u MHz\n", rate / 1000000U);
 }
+
+static int cpu_step(void)
+{
+	cpu_clock_setup();
+
+	return 0;
+}
+MP5_INIT(MP5_STAGE_EARLY, 10, "cpu clock", cpu_step);

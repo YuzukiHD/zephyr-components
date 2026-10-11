@@ -21,6 +21,7 @@
  * lv_rvv_selftest() runs LVGL's own code and these functions on the same random data.
  */
 
+#include "core/app.h"
 #include <lvgl.h>
 #include <riscv_vector.h>
 #include <stdlib.h>
@@ -391,3 +392,14 @@ bool lv_rvv_selftest(void)
 
 	return bad == 0;
 }
+
+static int rvv_step(void)
+{
+	if (!lv_rvv_selftest()) {
+		printk("mp5: the vector blends differ from LVGL, switched off\n");
+		lv_rvv_enable(false);
+	}
+
+	return 0;
+}
+MP5_INIT(MP5_STAGE_EARLY, 20, "vector blends", rvv_step);

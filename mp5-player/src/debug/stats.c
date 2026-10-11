@@ -96,54 +96,6 @@ void ui_stats_page_set_up(uint32_t us)
 	page_enter_us = us;
 }
 
-#ifdef CONFIG_SAMPLE_MP5_UI_DEMO
-#include "history.h"
-
-/* a scripted tour of the screens, for the numbers above without a finger */
-static void demo_step(lv_timer_t *t)
-{
-	static int step;
-	int n = step++;
-
-	if (n == 0) {
-		ui_goto_arg(SCR_FILES, NULL);
-	} else if (n >= 1 && n <= 8) {
-		/* the file list down and up, four times: a swipe of about 2000 pixels each */
-		files_demo_scroll(n % 2 == 1 ? -2000 : 2000);
-	} else if (n == 9) {
-		ui_stats_scroll_summary();
-	} else if (n == 10) {
-		ui_goto(SCR_RECENT);
-	} else if (n == 11) {
-		ui_goto(SCR_HOME);
-	} else if (n == 12) {
-		ui_player_open(CONFIG_SAMPLE_MP5_VIDEO_DEFAULT, SCR_RECENT);
-	} else if (n == 14) {
-		/* back to the list: the video is in it, with the position it was left at */
-		ui_goto(SCR_RECENT);
-		printk("ui demo: %d videos in the history\n", history_count());
-		for (int i = 0; i < history_count(); i++) {
-			printk("ui demo:   %s at %u of %u ms\n", history_get(i)->path,
-			       (unsigned)history_get(i)->pos_ms, (unsigned)history_get(i)->dur_ms);
-		}
-	} else if (n == 15) {
-		ui_goto(SCR_HOME);
-	} else if (n == 16) {
-		ui_player_open(CONFIG_SAMPLE_MP5_VIDEO_DEFAULT, SCR_RECENT);
-	} else if (n == 18) {
-		/* the second time it goes on from the saved position */
-		printk("ui demo: second start at %u ms\n", (unsigned)player_position_ms());
-		ui_goto(SCR_HOME);
-		lv_timer_delete(t);
-	}
-}
-
-void ui_stats_demo(void)
-{
-	lv_timer_create(demo_step, 3000, NULL);
-}
-#endif
-
 void ui_stats_scroll_summary(void)
 {
 	if (total_ms > 0) {

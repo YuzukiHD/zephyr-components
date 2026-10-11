@@ -14,6 +14,9 @@ zephyr_include_directories(src src/gfx src/core src/ui
 
 target_sources(app PRIVATE
 	src/main.c
+	src/core/app.c
+	src/core/storage.c
+	src/core/boot_display.c
 	src/core/clock.c
 	src/core/cpu.c
 	src/core/cfg.c
@@ -50,13 +53,12 @@ endif()
 set_source_files_properties(src/gfx/lv_rvv.c PROPERTIES COMPILE_OPTIONS
   "-march=rv32imafdcv_zicsr_zifencei_xtheadcmo_xtheadba_xtheadbb_xtheadbs_xtheadcondmov_xtheadmemidx_xtheadmempair")
 
-if(CONFIG_SAMPLE_MP5_THEME_TEST)
+if(CONFIG_SAMPLE_MP5_THEME_TEST OR CONFIG_SAMPLE_MP5_SELFTEST)
   target_sources(app PRIVATE src/debug/selftest.c)
 endif()
 
-if(CONFIG_SAMPLE_MP5_UI_PROFILE)
-  target_sources(app PRIVATE src/debug/profile.c)
-endif()
+# the start steps are read only records that the modules register; the linker collects them
+zephyr_linker_sources(SECTIONS src/core/sections-rom.ld)
 
 if(CONFIG_SAMPLE_MP5_G2D)
   target_sources(app PRIVATE src/gfx/lv_g2d.c)

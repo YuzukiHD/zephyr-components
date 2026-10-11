@@ -80,8 +80,9 @@ lv_obj_t *ui_icon_button(lv_obj_t *parent, const char *symbol, int32_t size);
 /** A title bar with a back button and a title, at the top of @p parent */
 lv_obj_t *ui_title_bar(lv_obj_t *parent, const char *title, lv_event_cb_t on_back);
 
-/** Builds the screens and shows the home screen */
-void ui_init(void);
+/** The first picture, then the panel on; and the loop of the user interface thread */
+void ui_present(void);
+void ui_loop(void);
 
 /** Shows another screen */
 void ui_goto(enum screen_id id);
@@ -141,8 +142,6 @@ void cpu_clock_setup(void);
 
 /* ---- network ---- */
 
-/** Starts the network worker; with a saved network it joins it and sets the clock */
-void app_net_init(void);
 /** One line about the Wi-Fi link and about the last time from the network, for the settings */
 void app_net_status(char *buf, size_t size);
 void app_net_sync_status(char *buf, size_t size);
@@ -180,11 +179,7 @@ void ui_stats_scroll_begin(const char *name);
 void ui_stats_scroll_end(void);
 void ui_stats_page_begin(const char *name);
 void ui_stats_page_set_up(uint32_t us);
-void ui_stats_demo(void);
 void ui_stats_scroll_summary(void);
-
-/** Scrolls the file list by @p dy pixels with the animation of a swipe (for the demo) */
-void files_demo_scroll(int32_t dy);
 
 /* ---- clock ------------------------------------------------------------------------------ */
 
@@ -196,10 +191,6 @@ void clock_set_tm(const struct tm *tm);
 /** False when the board has no usable real time clock */
 bool clock_valid(void);
 
-/* ---- storage ---------------------------------------------------------------------------- */
-
-bool storage_ready(void);
-/** Total and free bytes of the SD card; false when it is not mounted */
-bool storage_space(uint64_t *total, uint64_t *free_bytes);
+#include "core/storage.h"
 
 #endif /* MP5_H_ */

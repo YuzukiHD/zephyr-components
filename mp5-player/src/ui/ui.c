@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "core/app.h"
 #include "mp5.h"
 
 static const struct screen_ops *screen_ops[SCR_COUNT];
@@ -264,9 +265,8 @@ static void ui_rebuild(void *unused)
 	lv_obj_delete_async(tmp);
 }
 
-void ui_init(void)
+static int ui_step(void)
 {
-	cfg_load();
 	theme_load();
 	{
 		const char *b = cfg_get("brightness");
@@ -286,4 +286,44 @@ void ui_init(void)
 	ui_register(SCR_WIFI, &wifi_ops);
 	ui_register(SCR_PLAYER, &player_ops);
 	ui_goto(SCR_HOME);
+
+	return 0;
+}
+MP5_INIT(MP5_STAGE_UI, 20, "interface", ui_step);
+
+/* the first picture: drawn, then the panel is switched on */
+void ui_present(void)
+{
+	static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+
+	lv_timer_handler();
+	display_blanking_off(disp);
+	printk("mp5: boot %u ms: first picture\n", k_uptime_get_32());
+}
+
+/* the user interface thread: how long a redraw takes shows in the log when it is slow */
+void ui_loop(void)
+{
+	printk("mp5: %d x %d\n", (int)lv_display_get_horizontal_resolution(NULL),
+	       (int)lv_display_get_vertical_resolution(NULL));
+	for (;;) {
+		static uint32_t slow, worst_us, report_ms;
+		uint32_t t0 = k_cycle_get_32(), next, us;
+
+		next = lv_timer_handler();
+		us = k_cyc_to_us_floor32(k_cycle_get_32() - t0);
+		if (us > 30000U) {
+			slow++;
+		}
+		worst_us = MAX(worst_us, us);
+		if (k_uptime_get_32() - report_ms >= 5000U) {
+			if (worst_us > 8000U) {
+				printk("ui: worst redraw %u ms, %u slower than 30 ms\n", worst_us / 1000,
+				       slow);
+			}
+			slow = worst_us = 0;
+			report_ms = k_uptime_get_32();
+		}
+		k_msleep(MIN(next, 20U));
+	}
 }

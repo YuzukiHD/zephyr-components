@@ -15,7 +15,9 @@
 #include <zephyr/kernel.h>
 
 #include "core/app.h"
-#include "mp5.h"
+#include "core/fsutil.h"
+#include "core/storage.h"
+#include "core/cfg.h"
 
 #define CFG_FILE	"/SD:/.mp5_settings"
 #define CFG_MAX		28
@@ -53,20 +55,16 @@ static void save(void)
 
 void cfg_load(void)
 {
-	struct fs_file_t f;
 	char buf[3072];
-	ssize_t n;
+	int n;
 
 	k_mutex_lock(&lock, K_FOREVER);
 	count = 0;
-	fs_file_t_init(&f);
-	if (storage_ready() && fs_open(&f, CFG_FILE, FS_O_READ) == 0) {
-		n = fs_read(&f, buf, sizeof(buf) - 1);
-		fs_close(&f);
+	n = storage_ready() ? file_read_text(CFG_FILE, buf, sizeof(buf)) : -1;
+	if (n >= 0) {
 		if (n > 0) {
 			char *line = buf, *next;
 
-			buf[n] = '\0';
 			for (; line != NULL && *line != '\0' && count < CFG_MAX; line = next) {
 				char *sp;
 

@@ -1,0 +1,5 @@
+config MP5_FEATURE_FILES
+	bool "File browser"
+	default y
+	help
+	  The Files tile and the list of the SD card. Videos, photos and games open from it.

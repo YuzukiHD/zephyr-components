@@ -18,7 +18,7 @@
 #include <zephyr/sys/printk.h>
 
 #include "core/app.h"
-#include "mp5.h"
+#include "ui/ui.h"
 
 int main(void)
 {

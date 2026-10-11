@@ -16,6 +16,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
+#include "core/fsutil.h"
 #include "history.h"
 
 #define HISTORY_FILE "/SD:/.mp5_recent"
@@ -46,7 +47,6 @@ static void save(void)
 
 void history_load(void)
 {
-	struct fs_file_t f;
 	struct fs_dirent st;
 	char *buf, *p, *end;
 
@@ -59,14 +59,10 @@ void history_load(void)
 	if (buf == NULL) {
 		return;
 	}
-	fs_file_t_init(&f);
-	if (fs_open(&f, HISTORY_FILE, FS_O_READ) != 0) {
+	if (file_read_text(HISTORY_FILE, buf, st.size + 1) < 0) {
 		free(buf);
 		return;
 	}
-	st.size = fs_read(&f, buf, st.size);
-	fs_close(&f);
-	buf[st.size > 0 ? st.size : 0] = '\0';
 
 	for (p = buf; *p != '\0' && count < HISTORY_MAX; p = end) {
 		unsigned long pos, dur;

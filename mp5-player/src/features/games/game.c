@@ -34,7 +34,8 @@
 #include <nes_zephyr/nesemu.h>
 
 #include "core/app.h"
-#include "mp5.h"
+#include "features/games/game.h"
+#include "ui/ui.h"
 
 #define RATE		48000
 #define HIGH_WATER	(RATE / 15)
@@ -85,7 +86,7 @@ static atomic_t pad_bits;		/* BIT(K_...) of the fingers on the pad */
 
 static lv_obj_t *pad_objs[K_COUNT], *msg_label, *load_label, *gba_only_l, *gba_only_r;
 static lv_timer_t *poll;
-static enum screen_id origin = SCR_FILES;
+static const char *origin = "files";
 
 /* ---- sound --------------------------------------------------------------------------------- */
 
@@ -464,7 +465,7 @@ static void key_add(lv_obj_t *parent, int k, int x, int y, int w, int h, const c
 static void exit_clicked(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	if (origin == SCR_FILES) {
+	if (strcmp(origin, "files") == 0) {
 		char dir[sizeof(rom_path)];
 		char *slash;
 
@@ -473,7 +474,7 @@ static void exit_clicked(lv_event_t *e)
 		if (slash != NULL) {
 			*slash = '\0';
 		}
-		ui_goto_arg(SCR_FILES, dir);
+		ui_goto_arg("files", dir);
 	} else {
 		ui_goto(origin);
 	}
@@ -542,17 +543,30 @@ static bool ext_is(const char *p, const char *ext)
 	return true;
 }
 
-void ui_game_open(const char *path, enum screen_id from)
+void ui_game_open(const char *path, const char *from)
 {
 	origin = from;
-	ui_goto_arg(SCR_GAME, (void *)path);
+	ui_goto_arg("game", (void *)path);
 }
 
-bool ui_game_ext(const char *name)
+static void game_file_open(const char *path)
 {
-	return ext_is(name, ".nes") || ext_is(name, ".gb") || ext_is(name, ".gbc") ||
-	       ext_is(name, ".gba");
+	ui_game_open(path, "files");
 }
+
+static const char *const nes_exts[] = {".nes", NULL};
+static const char *const gb_exts[] = {".gb", ".gbc", ".gba", NULL};
+
+MP5_FILE_HANDLER(nes, .kind = "nes", .title = "NES", .symbol = LV_SYMBOL_KEYBOARD,
+		 .color = &ui_pal.pink, .exts = nes_exts, .open = game_file_open);
+MP5_FILE_HANDLER(gb, .kind = "gb", .title = "Game Boy", .symbol = LV_SYMBOL_KEYBOARD,
+		 .color = &ui_pal.pink, .exts = gb_exts, .open = game_file_open);
+MP5_HOME_TILE(nes, .order = 50, .symbol = LV_SYMBOL_KEYBOARD, .title = "NES",
+	      .subtitle = "Famicom games", .color_top = 0xE5484D, .color_bottom = 0xB02A37,
+	      .kind = "nes");
+MP5_HOME_TILE(gb, .order = 60, .symbol = LV_SYMBOL_PLAY, .title = "Game Boy",
+	      .subtitle = "GB, GBC and GBA", .color_top = 0x9B6CFF, .color_bottom = 0x6A3FD0,
+	      .kind = "gb");
 
 static void game_enter(void *arg)
 {
@@ -635,17 +649,13 @@ static void game_leave(void)
 	}
 }
 
-const struct screen_ops game_ops = {
-	.create = game_create,
-	.enter = game_enter,
-	.leave = game_leave,
-};
+MP5_SCREEN(game, "game", game_create, game_enter, game_leave);
 
-/* CONFIG_SAMPLE_MP5_GAME starts a game at boot (for the check of the emulators) */
+/* CONFIG_MP5_GAME starts a game at boot (for the check of the emulators) */
 static int game_autostart(void)
 {
-	if (sizeof(CONFIG_SAMPLE_MP5_GAME) > 1) {
-		ui_game_open(CONFIG_SAMPLE_MP5_GAME, SCR_HOME);
+	if (sizeof(CONFIG_MP5_GAME) > 1) {
+		ui_game_open(CONFIG_MP5_GAME, "home");
 	}
 
 	return 0;

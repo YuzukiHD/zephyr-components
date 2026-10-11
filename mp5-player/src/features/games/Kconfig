@@ -1,0 +1,26 @@
+menu "Games"
+
+config MP5_FEATURE_GAMES
+	bool "NES, Game Boy, Game Boy Color and Game Boy Advance"
+	default y
+	depends on MP5_FEATURE_FILES
+	select MGBA
+	select NES
+	select CRC
+	select RING_BUFFER
+	select STATIC_INIT_GNU
+	select I2S
+	select AUDIO
+	select AUDIO_CODEC
+	select DMA
+
+config MP5_GAME
+	string "Game to start at boot, for a check without touching (empty: none)"
+	default ""
+	depends on MP5_FEATURE_GAMES
+
+config MGBA_MAX_ROM_SIZE_MB
+	# a bigger game is refused: the video player needs the memory for its pictures
+	default 6 if MP5_FEATURE_GAMES
+
+endmenu

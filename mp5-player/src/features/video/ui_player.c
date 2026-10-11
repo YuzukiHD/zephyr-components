@@ -13,7 +13,9 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
-#include "mp5.h"
+#include "debug/stats.h"
+#include "features/video/ui_player.h"
+#include "ui/ui.h"
 #include "history.h"
 #include "player.h"
 
@@ -31,7 +33,7 @@ static bool dragging, controls_visible = true;
 static int64_t last_touch_ms;
 static uint32_t duration_ms;
 static char current_path[256];
-static enum screen_id origin = SCR_HOME;
+static const char *origin = "home";
 static int64_t saved_ms;
 static const char *open_path;
 
@@ -55,13 +57,11 @@ static void format_time(char *buf, size_t size, uint32_t ms)
 
 static void controls_show(bool show)
 {
-	static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
-
 	controls_visible = show;
 	/* the display engine reads the whole frame buffer plane 60 times a second, which takes
 	 * memory bandwidth from the decoder: with nothing to draw the plane is switched off
 	 */
-	display_sunxi_fb_enable(disp, show);
+	ui_overlay_set(show);
 	if (show) {
 		lv_obj_remove_flag(top_bar, LV_OBJ_FLAG_HIDDEN);
 		lv_obj_remove_flag(panel, LV_OBJ_FLAG_HIDDEN);
@@ -88,7 +88,7 @@ static void screen_clicked(lv_event_t *e)
 static void back_clicked(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	if (origin == SCR_FILES) {
+	if (strcmp(origin, "files") == 0) {
 		char dir[sizeof(current_path)];
 		char *slash;
 
@@ -97,7 +97,7 @@ static void back_clicked(lv_event_t *e)
 		if (slash != NULL) {
 			*slash = '\0';
 		}
-		ui_goto_arg(SCR_FILES, dir);
+		ui_goto_arg("files", dir);
 	} else {
 		ui_goto(origin);
 	}
@@ -115,11 +115,11 @@ static void history_save(void)
 	}
 }
 
-void ui_player_open(const char *path, enum screen_id from)
+void ui_player_open(const char *path, const char *from)
 {
 	origin = from;
 	open_path = path;
-	ui_goto_arg(SCR_PLAYER, (void *)path);
+	ui_goto_arg("player", (void *)path);
 }
 
 static void play_clicked(lv_event_t *e)
@@ -385,14 +385,14 @@ static lv_obj_t *player_create(void)
 
 static void player_enter(void *arg)
 {
-	const char *path = arg != NULL ? arg : CONFIG_SAMPLE_MP5_VIDEO_DEFAULT;
+	const char *path = arg != NULL ? arg : CONFIG_MP5_VIDEO_DEFAULT;
 	const char *name = strrchr(path, '/');
 	struct player_info info;
 	char buf[16];
 	int ret;
 
 	if (arg == NULL) {
-		origin = SCR_HOME;
+		origin = "home";
 	}
 	strncpy(current_path, path, sizeof(current_path) - 1);
 	name = name != NULL ? name + 1 : path;
@@ -444,7 +444,7 @@ static void player_enter(void *arg)
 
 static void player_leave(void)
 {
-	display_sunxi_fb_enable(DEVICE_DT_GET(DT_CHOSEN(zephyr_display)), true);
+	ui_overlay_set(true);
 	if (tick != NULL) {
 		lv_timer_pause(tick);
 	}
@@ -452,8 +452,18 @@ static void player_leave(void)
 	player_close();
 }
 
-const struct screen_ops player_ops = {
-	.create = player_create,
-	.enter = player_enter,
-	.leave = player_leave,
-};
+MP5_SCREEN(player, "player", player_create, player_enter, player_leave);
+
+static void video_file_open(const char *path)
+{
+	ui_player_open(path, "files");
+}
+
+static const char *const video_exts[] = {".mp4", ".h264", ".264", NULL};
+
+MP5_FILE_HANDLER(video, .kind = "video", .title = "Videos", .symbol = LV_SYMBOL_VIDEO,
+		 .color = &ui_pal.accent, .exts = video_exts, .open = video_file_open,
+		 .extra_screen = "recent", .extra_label = LV_SYMBOL_LIST "  Recent");
+MP5_HOME_TILE(videos, .order = 10, .symbol = LV_SYMBOL_VIDEO, .title = "Videos",
+	      .subtitle = "MP4 and H.264", .color_top = 0x6C8CFF, .color_bottom = 0x4A5DE8,
+	      .kind = "video");

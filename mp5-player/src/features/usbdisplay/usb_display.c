@@ -25,7 +25,7 @@
 #include "usbd_display.h"
 #include <zephyr/input/input.h>
 #include "usb_touch.h"
-#include "mp5.h"
+#include "ui/ui.h"
 
 extern uintptr_t usb_sunxi_otg_base(void);
 
@@ -495,7 +495,7 @@ static int start_error;
 static void leave_clicked(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	ui_goto(SCR_HOME);
+	ui_goto("home");
 }
 
 static void status_update(lv_timer_t *t)
@@ -575,11 +575,11 @@ static void usb_leave(void)
 		lv_timer_pause(status_timer);
 	}
 	usb_stop();
-	display_sunxi_fb_enable(disp, true);
+	ui_overlay_set(true);
 }
 
-const struct screen_ops usb_ops = {
-	.create = usb_create,
-	.enter = usb_enter,
-	.leave = usb_leave,
-};
+MP5_SCREEN(usb, "usb", usb_create, usb_enter, usb_leave);
+
+MP5_HOME_TILE(usb, .order = 40, .symbol = LV_SYMBOL_USB, .title = "USB Display",
+	      .subtitle = "Second screen for a PC", .color_top = 0xFF6C9B, .color_bottom = 0xD443A8,
+	      .screen = "usb");

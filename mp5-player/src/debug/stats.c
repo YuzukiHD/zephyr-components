@@ -12,8 +12,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
-#include "mp5.h"
-#include "player.h"
+#include "debug/stats.h"
+#include <lvgl.h>
 
 static bool scrolling;
 static uint32_t frames, worst_us, render_start, busy_us;

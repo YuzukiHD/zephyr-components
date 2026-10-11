@@ -16,7 +16,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
-#include "mp5.h"
+#include "core/clock.h"
 
 static const struct device *const rtc = DEVICE_DT_GET(DT_NODELABEL(rtc));
 static bool checked, rtc_ok;

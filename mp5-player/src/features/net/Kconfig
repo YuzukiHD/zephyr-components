@@ -1,0 +1,64 @@
+menu "Network"
+
+config MP5_FEATURE_NET
+	bool "Wi-Fi and the time from the network"
+	default y
+	select AIC8800
+	select NETWORKING
+	select NET_IPV4
+	select NET_UDP
+	select NET_TCP
+	select NET_DHCPV4
+	select NET_MGMT
+	select NET_MGMT_EVENT
+	select NET_MGMT_EVENT_INFO
+	select NET_L2_ETHERNET
+	select WIFI
+	select NET_L2_WIFI_MGMT
+	select NET_SOCKETS
+	select DNS_RESOLVER
+	select SNTP
+	select TEST_RANDOM_GENERATOR
+
+config MP5_FEATURE_BT
+	bool "Bluetooth connection shown in the settings"
+	default y
+	depends on MP5_FEATURE_NET
+	select BT
+	select BT_PERIPHERAL
+	select AIC8800_BT
+
+config MP5_UTC_OFFSET_MIN
+	int "Offset of the local time from UTC in minutes (the clock shows local time)"
+	default 480
+	range -720 840
+	depends on MP5_FEATURE_NET
+
+config MP5_NTP_SERVER
+	string "Time server"
+	default "ntp.aliyun.com"
+	depends on MP5_FEATURE_NET
+
+# tuning of the Zephyr options of the features: stacks that were used up to the last byte
+config SYSTEM_WORKQUEUE_STACK_SIZE
+	default 4096 if MP5_FEATURE_NET
+config NET_MGMT_EVENT_STACK_SIZE
+	default 3072 if MP5_FEATURE_NET
+config NET_RX_STACK_SIZE
+	default 3072 if MP5_FEATURE_NET
+config NET_TX_STACK_SIZE
+	default 2048 if MP5_FEATURE_NET
+config NET_TCP_WORKQ_STACK_SIZE
+	default 3072 if MP5_FEATURE_NET
+config NET_SOCKETS_SERVICE_STACK_SIZE
+	default 3072 if MP5_FEATURE_NET
+config BT_RX_STACK_SIZE
+	default 2048 if MP5_FEATURE_BT
+config BT_LONG_WQ_STACK_SIZE
+	default 3072 if MP5_FEATURE_BT
+config BT_MAX_CONN
+	default 1 if MP5_FEATURE_BT
+config BT_DEVICE_NAME
+	default "MP5 Player" if MP5_FEATURE_BT
+
+endmenu

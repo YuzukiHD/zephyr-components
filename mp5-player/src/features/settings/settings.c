@@ -4,28 +4,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* The settings: the date and time, the network and the network time, the board */
+/*
+ * The settings screen: the date and time and the board are its own rows, every other row is
+ * registered by the feature it belongs to (MP5_SETTINGS_ROW) and listed in the order field.
+ */
 
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/kernel.h>
 
-#include "mp5.h"
+#include "core/clock.h"
+#include "features/settings/settings.h"
+#include "ui/ui.h"
 
 #define ROW_H	96
 
-static lv_obj_t *time_value, *net_value, *sync_value, *bt_value;
+static lv_obj_t *time_value;
 static lv_timer_t *refresh_timer;
 
 static void back_clicked(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	ui_goto(SCR_HOME);
+	ui_goto("home");
 }
 
 /* a row: a title, the value on the right, tapping it does something */
-static lv_obj_t *row_create(lv_obj_t *parent, const char *symbol, const char *title,
-			    lv_obj_t **value, lv_event_cb_t cb)
+lv_obj_t *settings_row_create(lv_obj_t *parent, const char *symbol, const char *title,
+				      lv_obj_t **value, lv_event_cb_t cb)
 {
 	lv_obj_t *row = lv_obj_create(parent);
 	lv_obj_t *icon = lv_label_create(row);
@@ -71,117 +76,78 @@ static lv_obj_t *row_create(lv_obj_t *parent, const char *symbol, const char *ti
 static void time_clicked(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	ui_set_time_dialog();
+	ui_set_time_dialog(NULL);
 }
 
-static void refresh(lv_timer_t *t)
+static void time_row(lv_obj_t *list)
+{
+	settings_row_create(list, LV_SYMBOL_BELL, "Date and time", &time_value, time_clicked);
+}
+
+static void time_refresh(void)
 {
 	struct tm tm;
-	char buf[64], line[96];
+	char buf[64];
 
-	ARG_UNUSED(t);
 	clock_now(&tm);
 	snprintf(buf, sizeof(buf), "%04d-%02d-%02d  %02d:%02d:%02d", tm.tm_year + 1900,
 		 tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 	lv_label_set_text(time_value, buf);
-	app_net_status(line, sizeof(line));
-	lv_label_set_text(net_value, line);
-	app_net_sync_status(line, sizeof(line));
-	lv_label_set_text(sync_value, line);
-	bt_status(line, sizeof(line));
-	lv_label_set_text(bt_value, line);
 }
 
-static void wifi_clicked(lv_event_t *e)
+static void about_row(lv_obj_t *list)
 {
-	ARG_UNUSED(e);
-	ui_goto(SCR_WIFI);
+	lv_obj_t *about;
+	char buf[96];
+
+	snprintf(buf, sizeof(buf), "Built %s %s", __DATE__, __TIME__);
+	settings_row_create(list, LV_SYMBOL_SETTINGS, "About", &about, NULL);
+	lv_label_set_text(about, buf);
 }
 
-static void sync_clicked(lv_event_t *e)
+MP5_SETTINGS_ROW(time, 10, time_row, time_refresh);
+MP5_SETTINGS_ROW(about, 90, about_row, NULL);
+
+/* calls @p fn for every row in the order of their order field */
+static void rows_each(void (*fn)(const struct mp5_settings_row *r, void *arg), void *arg)
 {
-	ARG_UNUSED(e);
-	app_net_sync_time();
-	refresh(NULL);
-}
+	const struct mp5_settings_row *prev = NULL;
+	int n = 0;
 
-static void dark_changed(lv_event_t *e)
-{
-	lv_obj_t *sw = lv_event_get_target(e);
-
-	/* the screens are made again, the switch with them */
-	ui_theme_set(lv_obj_has_state(sw, LV_STATE_CHECKED), ui_theme_accent());
-}
-
-static void accent_clicked(lv_event_t *e)
-{
-	ui_theme_set(ui_theme_dark(), (int)(uintptr_t)lv_event_get_user_data(e));
-}
-
-/* a row with a switch for dark or light */
-static void dark_row(lv_obj_t *list)
-{
-	lv_obj_t *value;
-	lv_obj_t *row = row_create(list, LV_SYMBOL_EYE_OPEN, "Dark mode", &value, NULL);
-	lv_obj_t *sw = lv_switch_create(row);
-
-	lv_obj_add_flag(value, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_set_style_bg_color(sw, lv_color_hex(C_ACCENT), LV_PART_INDICATOR | LV_STATE_CHECKED);
-	if (ui_theme_dark()) {
-		lv_obj_add_state(sw, LV_STATE_CHECKED);
+	STRUCT_SECTION_FOREACH(mp5_settings_row, r) {
+		n++;
 	}
-	lv_obj_add_event_cb(sw, dark_changed, LV_EVENT_VALUE_CHANGED, NULL);
-}
+	for (int k = 0; k < n; k++) {
+		const struct mp5_settings_row *best = NULL;
 
-/* a row with the accent colours to choose from */
-static void accent_row(lv_obj_t *list)
-{
-	lv_obj_t *value;
-	lv_obj_t *row = row_create(list, LV_SYMBOL_IMAGE, "Accent color", &value, NULL);
-
-	lv_obj_add_flag(value, LV_OBJ_FLAG_HIDDEN);
-	for (int i = 0; i < UI_ACCENTS; i++) {
-		lv_obj_t *dot = lv_button_create(row);
-
-		lv_obj_remove_style_all(dot);
-		lv_obj_set_size(dot, 48, 48);
-		lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
-		lv_obj_set_style_bg_color(dot, lv_color_hex(ui_theme_accent_color(i)), 0);
-		lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
-		if (i == ui_theme_accent()) {
-			lv_obj_set_style_border_width(dot, 4, 0);
-			lv_obj_set_style_border_color(dot, lv_color_hex(C_TEXT), 0);
+		STRUCT_SECTION_FOREACH(mp5_settings_row, r) {
+			if ((prev == NULL || r->order > prev->order) &&
+			    (best == NULL || r->order < best->order)) {
+				best = r;
+			}
 		}
-		lv_obj_set_ext_click_area(dot, 6);
-		lv_obj_add_event_cb(dot, accent_clicked, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
+		fn(best, arg);
+		prev = best;
 	}
 }
 
-static void brightness_changed(lv_event_t *e)
+static void row_make(const struct mp5_settings_row *r, void *list)
 {
-	lv_obj_t *s = lv_event_get_target(e);
-
-	/* the backlight follows the slider, the value is saved when it is let go */
-	ui_brightness_set(lv_slider_get_value(s), lv_event_get_code(e) == LV_EVENT_RELEASED);
+	r->create(list);
 }
 
-static void brightness_row(lv_obj_t *list)
+static void row_refresh(const struct mp5_settings_row *r, void *unused)
 {
-	lv_obj_t *value;
-	lv_obj_t *row = row_create(list, LV_SYMBOL_EYE_OPEN, "Brightness", &value, NULL);
-	lv_obj_t *s = lv_slider_create(row);
+	ARG_UNUSED(unused);
+	if (r->refresh != NULL) {
+		r->refresh();
+	}
+}
 
-	lv_obj_add_flag(value, LV_OBJ_FLAG_HIDDEN);
-	lv_obj_set_width(s, 360);
-	lv_slider_set_range(s, 10, 255);
-	lv_slider_set_value(s, ui_brightness(), LV_ANIM_OFF);
-	lv_obj_set_style_bg_color(s, lv_color_hex(C_SURFACE2), LV_PART_MAIN);
-	lv_obj_set_style_bg_color(s, lv_color_hex(C_ACCENT), LV_PART_INDICATOR);
-	lv_obj_set_style_bg_color(s, lv_color_hex(C_ACCENT), LV_PART_KNOB);
-	lv_obj_set_style_pad_all(s, 8, LV_PART_KNOB);
-	lv_obj_set_ext_click_area(s, 20);
-	lv_obj_add_event_cb(s, brightness_changed, LV_EVENT_VALUE_CHANGED, NULL);
-	lv_obj_add_event_cb(s, brightness_changed, LV_EVENT_RELEASED, NULL);
+static void refresh(lv_timer_t *t)
+{
+	ARG_UNUSED(t);
+	rows_each(row_refresh, NULL);
 }
 
 static lv_obj_t *settings_create(void)
@@ -189,8 +155,6 @@ static lv_obj_t *settings_create(void)
 	lv_obj_t *scr = ui_screen_new(false);
 	lv_obj_t *bar = ui_title_bar(scr, "Settings", back_clicked);
 	lv_obj_t *list = lv_obj_create(scr);
-	lv_obj_t *about;
-	char buf[96];
 
 	ARG_UNUSED(bar);
 	lv_obj_remove_style_all(list);
@@ -200,20 +164,7 @@ static lv_obj_t *settings_create(void)
 	lv_obj_set_style_pad_hor(list, 32, 0);
 	lv_obj_set_style_pad_row(list, 12, 0);
 	lv_obj_set_scroll_dir(list, LV_DIR_VER);
-
-	row_create(list, LV_SYMBOL_BELL, "Date and time", &time_value, time_clicked);
-	row_create(list, LV_SYMBOL_WIFI, "Wi-Fi", &net_value, wifi_clicked);
-	row_create(list, LV_SYMBOL_BLUETOOTH, "Bluetooth", &bt_value, NULL);
-	row_create(list, LV_SYMBOL_REFRESH, "Set the time from the network", &sync_value,
-		   sync_clicked);
-
-	brightness_row(list);
-	dark_row(list);
-	accent_row(list);
-
-	snprintf(buf, sizeof(buf), "Built %s %s", __DATE__, __TIME__);
-	row_create(list, LV_SYMBOL_SETTINGS, "About", &about, NULL);
-	lv_label_set_text(about, buf);
+	rows_each(row_make, list);
 
 	return scr;
 }
@@ -235,8 +186,7 @@ static void settings_leave(void)
 	}
 }
 
-const struct screen_ops settings_ops = {
-	.create = settings_create,
-	.enter = settings_enter,
-	.leave = settings_leave,
-};
+MP5_SCREEN(settings, "settings", settings_create, settings_enter, settings_leave);
+MP5_HOME_TILE(settings, .order = 70, .symbol = LV_SYMBOL_SETTINGS, .title = "Settings",
+	      .subtitle = "Time and network", .color_top = 0x8B95A8, .color_bottom = 0x5B6478,
+	      .screen = "settings");

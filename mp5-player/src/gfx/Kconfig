@@ -1,0 +1,25 @@
+menu "Drawing accelerators"
+
+config MP5_GFX_RVV
+	bool "Vector blends for the software renderer of LVGL"
+	default y
+	select SUN252I_F101_RVV
+	help
+	  Checked against the C code of LVGL at boot; the vector code is switched off when it
+	  differs.
+
+config MP5_GFX_G2D
+	bool "Fill large plain rectangles of the user interface with the 2D accelerator"
+	depends on G2D
+	help
+	  Measured on the board and left off: the fills run one after the other with the
+	  processor waiting, the same memory bus is used, and ten full redraws of the home
+	  screen take 1281 ms instead of 810 ms. A decode error of the video engine was seen once
+	  while it was on.
+
+config MP5_GFX_G2D_MIN_PIXELS
+	int "Smallest rectangle in pixels that the accelerator fills"
+	default 20000
+	depends on MP5_GFX_G2D
+
+endmenu

@@ -1,0 +1,23 @@
+menu "Debugging"
+
+config MP5_DEBUG
+	bool "Numbers about the user interface and the self tests"
+	default y
+	help
+	  The frame rate of a swiped list and the time a screen takes to its first picture are
+	  printed when they happen.
+
+config MP5_SELFTEST
+	bool "Play the default video and seek, pause and change the volume by itself"
+	depends on MP5_DEBUG && MP5_FEATURE_VIDEO
+	help
+	  For a check without touching the screen: the steps and the positions are printed.
+
+config MP5_THEME_TEST
+	bool "Switch the settings by itself and print the result (ends with PASS or FAIL)"
+	depends on MP5_DEBUG && MP5_FEATURE_SETTINGS
+	help
+	  Theme, brightness, saved passwords, a Wi-Fi scan and joining the saved network, and
+	  starting and leaving a game, for the features that are built.
+
+endmenu

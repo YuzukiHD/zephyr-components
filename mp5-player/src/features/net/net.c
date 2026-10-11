@@ -6,8 +6,7 @@
 
 /*
  * The network of the player: the Wi-Fi link of the AIC8800 chip (scan, join, address by DHCP), the
- * time of day from an NTP server, and the Bluetooth link of the same chip (only the state of the
- * connection is shown). Everything that waits runs in one worker thread; the user interface asks
+ * time of day from an NTP server. Everything that waits runs in one worker thread; the user interface asks
  * for state and gives commands.
  */
 
@@ -16,9 +15,7 @@
 #include <string.h>
 #include <time.h>
 
-#include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/fs/fs.h>
-#include <zephyr/bluetooth/conn.h>
 #include <zephyr/kernel.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/net_mgmt.h>
@@ -27,7 +24,11 @@
 #include <zephyr/sys/printk.h>
 
 #include "core/app.h"
-#include "mp5.h"
+#include "core/cfg.h"
+#include "core/clock.h"
+#include "core/storage.h"
+#include "core/fsutil.h"
+#include "features/net/net.h"
 
 #define MAX_APS		24
 #define CONNECT_WAIT_S	25
@@ -152,7 +153,7 @@ static void civil_from_days(int64_t z, int *y, int *m, int *d)
 
 static void clock_from_unix(int64_t unix_s)
 {
-	int64_t local = unix_s + (int64_t)CONFIG_SAMPLE_MP5_UTC_OFFSET_MIN * 60;
+	int64_t local = unix_s + (int64_t)CONFIG_MP5_UTC_OFFSET_MIN * 60;
 	int64_t days = local / 86400;
 	int sec = local % 86400, y, m, d;
 	struct tm tm = {0};
@@ -189,7 +190,7 @@ static void clock_from_unix(int64_t unix_s)
 
 static bool time_sync(void)
 {
-	static const char *const servers[] = {CONFIG_SAMPLE_MP5_NTP_SERVER, "cn.pool.ntp.org",
+	static const char *const servers[] = {CONFIG_MP5_NTP_SERVER, "cn.pool.ntp.org",
 					      "pool.ntp.org"};
 	struct sntp_time ts;
 
@@ -333,21 +334,12 @@ static void do_connect(struct net_if *iface, const char *ssid, const char *psk)
 /* the network on the card: /SD:/wifi.cfg, the name on the first line, the password on the second */
 static void wifi_cfg_read(char *ssid, size_t ssid_size, char *psk, size_t psk_size)
 {
-	struct fs_file_t f;
 	char buf[128];
-	ssize_t n;
 	char *nl;
 
-	fs_file_t_init(&f);
-	if (!storage_ready() || fs_open(&f, "/SD:/wifi.cfg", FS_O_READ) != 0) {
+	if (!storage_ready() || file_read_text("/SD:/wifi.cfg", buf, sizeof(buf)) <= 0) {
 		return;
 	}
-	n = fs_read(&f, buf, sizeof(buf) - 1);
-	fs_close(&f);
-	if (n <= 0) {
-		return;
-	}
-	buf[n] = '\0';
 	nl = strchr(buf, '\n');
 	if (nl != NULL) {
 		*nl++ = '\0';
@@ -450,75 +442,6 @@ static void net_main(void *a, void *b, void *c)
 	}
 }
 
-/* ---- Bluetooth ------------------------------------------------------------------------- */
-
-static struct bt_conn *bt_peer;
-static char bt_peer_text[BT_ADDR_LE_STR_LEN];
-static enum { BT_OFF, BT_STARTING, BT_READY, BT_LINKED, BT_FAILED } bt_state = BT_OFF;
-
-static const struct bt_data adv_data[] = {
-	BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-	BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
-};
-
-static void adv_start(void)
-{
-	int err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, adv_data, ARRAY_SIZE(adv_data), NULL, 0);
-
-	if (err != 0 && err != -EALREADY) {
-		printk("bt: advertising failed: %d\n", err);
-	}
-}
-
-static void bt_connected_cb(struct bt_conn *conn, uint8_t err)
-{
-	if (err != 0) {
-		return;
-	}
-	if (bt_peer == NULL) {
-		bt_peer = bt_conn_ref(conn);
-	}
-	k_mutex_lock(&lock, K_FOREVER);
-	bt_addr_le_to_str(bt_conn_get_dst(conn), bt_peer_text, sizeof(bt_peer_text));
-	k_mutex_unlock(&lock);
-	bt_state = BT_LINKED;
-	printk("bt: connected %s\n", bt_peer_text);
-}
-
-static void bt_disconnected_cb(struct bt_conn *conn, uint8_t reason)
-{
-	if (bt_peer != NULL) {
-		bt_conn_unref(bt_peer);
-		bt_peer = NULL;
-	}
-	bt_state = BT_READY;
-	printk("bt: disconnected (%u)\n", reason);
-	adv_start();
-}
-
-BT_CONN_CB_DEFINE(bt_conn_cbs) = {
-	.connected = bt_connected_cb,
-	.disconnected = bt_disconnected_cb,
-};
-
-static void bt_main(void *a, void *b, void *c)
-{
-	int err;
-
-	bt_state = BT_STARTING;
-	err = bt_enable(NULL);
-	if (err != 0) {
-		printk("bt: enable failed: %d\n", err);
-		bt_state = BT_FAILED;
-		return;
-	}
-	bt_state = BT_READY;
-	adv_start();
-}
-
-K_THREAD_STACK_DEFINE(bt_stack, 4096);
-static struct k_thread bt_thread;
-
 /* ---- interface for the user interface -------------------------------------------------- */
 
 static void app_net_init(void)
@@ -527,9 +450,6 @@ static void app_net_init(void)
 	k_thread_create(&net_thread, net_stack, K_THREAD_STACK_SIZEOF(net_stack), net_main, NULL, NULL,
 			NULL, 12, 0, K_NO_WAIT);
 	k_thread_name_set(&net_thread, "net");
-	k_thread_create(&bt_thread, bt_stack, K_THREAD_STACK_SIZEOF(bt_stack), bt_main, NULL, NULL,
-			NULL, 12, 0, K_MSEC(3500));
-	k_thread_name_set(&bt_thread, "bt");
 }
 
 static int net_step(void)
@@ -601,32 +521,6 @@ void app_net_sync_time(void)
 	}
 	sync_pending = true;
 	put(&r);
-}
-
-void bt_status(char *buf, size_t size)
-{
-	k_mutex_lock(&lock, K_FOREVER);
-	switch (bt_state) {
-	case BT_OFF:
-	case BT_STARTING:
-		snprintf(buf, size, "Starting");
-		break;
-	case BT_READY:
-		snprintf(buf, size, "Ready as " CONFIG_BT_DEVICE_NAME);
-		break;
-	case BT_LINKED:
-		snprintf(buf, size, "Connected  %s", bt_peer_text);
-		break;
-	case BT_FAILED:
-		snprintf(buf, size, "Not available");
-		break;
-	}
-	k_mutex_unlock(&lock);
-}
-
-bool bt_connected(void)
-{
-	return bt_state == BT_LINKED;
 }
 
 void app_net_scan(void)

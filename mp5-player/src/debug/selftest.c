@@ -13,13 +13,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <zephyr/fs/fs.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
 #include "core/app.h"
-#include "mp5.h"
-#include "player.h"
-#include <zephyr/fs/fs.h>
+#include "core/cfg.h"
+#include "core/storage.h"
+#include "features/games/game.h"
+#include "features/net/net.h"
+#include "features/video/player.h"
+#include "ui/ui.h"
 
 static int step;
 static int failures;
@@ -30,6 +34,12 @@ static void check(bool ok, const char *what)
 		failures++;
 	}
 	printk("theme: %-44s %s\n", what, ok ? "ok" : "FAILED");
+}
+
+/* the steps of a feature that is not built are left out; the dead calls are not linked */
+static bool net_up(void)
+{
+	return IS_ENABLED(CONFIG_MP5_FEATURE_NET) && app_net_connected();
 }
 
 static void test_step(lv_timer_t *t)
@@ -53,7 +63,7 @@ static void test_step(lv_timer_t *t)
 		      "screen rebuilt and active");
 	}
 	if (step == 0) {
-		ui_goto(SCR_SETTINGS);
+		ui_goto("settings");
 	} else if (step <= 5) {
 		ui_theme_set(dark[step - 1], accent[step - 1]);
 	} else if (step == 6) {
@@ -65,7 +75,7 @@ static void test_step(lv_timer_t *t)
 		      atoi(cfg_get("brightness")) == 120, "brightness set and saved");
 		ui_brightness_set(old, true);
 		check(ui_brightness() == old, "brightness restored");
-		if (app_net_connected()) {
+		if (net_up()) {
 			check(app_net_saved_psk("ChinaNet-K5ii", psk, sizeof(psk)) && strlen(psk) > 0,
 			      "password of the joined network is kept");
 			check(!app_net_saved_psk("no such network", psk, sizeof(psk)),
@@ -75,34 +85,42 @@ static void test_step(lv_timer_t *t)
 		}
 	} else if (step == 7) {
 		/* the Wi-Fi screen scans for networks while the board is online */
-		ui_goto(SCR_WIFI);
+		ui_goto("wifi");
 		/* what the Scan button does */
-		app_net_scan();
+		if (IS_ENABLED(CONFIG_MP5_FEATURE_NET)) {
+			app_net_scan();
+		}
 	} else if (step >= 10 && step <= 16) {
 		/* the Scan button again and again, with the list made again each time */
-		app_net_scan();
+		if (IS_ENABLED(CONFIG_MP5_FEATURE_NET)) {
+			app_net_scan();
+		}
 	} else if (step == 9) {
 		struct net_ap list[24];
 		char psk[65];
 
 		/* the same network again, as a second tap on it */
-		if (app_net_connected() && app_net_saved_psk("ChinaNet-K5ii", psk, sizeof(psk))) {
+		if (net_up() && app_net_saved_psk("ChinaNet-K5ii", psk, sizeof(psk))) {
 			printk("theme: connecting to the network that is joined already\n");
 			app_net_connect("ChinaNet-K5ii", psk);
 		}
-		int n = app_net_scan_results(list, ARRAY_SIZE(list));
+		if (IS_ENABLED(CONFIG_MP5_FEATURE_NET)) {
+			int n = app_net_scan_results(list, ARRAY_SIZE(list));
 
-		printk("theme: the Wi-Fi screen found %d networks\n", n);
-		check(n > 0, "scan while online lists networks");
+			printk("theme: the Wi-Fi screen found %d networks\n", n);
+			check(n > 0, "scan while online lists networks");
+		}
 	} else if (step == 8) {
 		/* wait for the scan */
 	} else if (step == 17) {
-		ui_goto(SCR_SETTINGS);
+		ui_goto("settings");
 	} else if (step == 18) {
 		/* a game with sound, then leaving it: the amplifier must go off */
-		ui_game_open("/SD:/Legend-of-Zelda.gb", SCR_HOME);
+		if (IS_ENABLED(CONFIG_MP5_FEATURE_GAMES)) {
+			ui_game_open("/SD:/Legend-of-Zelda.gb", "home");
+		}
 	} else if (step == 21) {
-		ui_goto(SCR_HOME);
+		ui_goto("home");
 	} else if (step == 19 || step == 20) {
 		/* the game runs */
 	} else if (step == 23) {
@@ -117,7 +135,7 @@ static void test_step(lv_timer_t *t)
 	step++;
 }
 
-#ifdef CONFIG_SAMPLE_MP5_THEME_TEST
+#ifdef CONFIG_MP5_THEME_TEST
 static int theme_test_start(void)
 {
 	lv_timer_create(test_step, 2500, NULL);
@@ -127,7 +145,7 @@ static int theme_test_start(void)
 MP5_INIT(MP5_STAGE_READY, 10, "theme test", theme_test_start);
 #endif
 
-#ifdef CONFIG_SAMPLE_MP5_SELFTEST
+#ifdef CONFIG_MP5_SELFTEST
 /* The files in the root of the card, to see what there is to play */
 static void list_root(void)
 {
@@ -197,7 +215,7 @@ K_THREAD_DEFINE(selftest, 4096, playback_main, NULL, NULL, NULL, 9, 0, -1);
 static int playback_start(void)
 {
 	list_root();
-	ui_goto(SCR_PLAYER);
+	ui_goto("player");
 	k_thread_start(selftest);
 
 	return 0;

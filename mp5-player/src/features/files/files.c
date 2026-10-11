@@ -18,7 +18,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
-#include "mp5.h"
+#include "core/fsutil.h"
+#include "core/storage.h"
+#include "debug/stats.h"
+#include "ui/ui.h"
 
 #define ROOT		"/SD:"
 #define MAX_ENTRIES	512
@@ -37,76 +40,48 @@ struct entry {
 
 static struct entry *entries;
 static int count;
-static enum files_filter filter = FILES_ALL;
+/* the kind of file the browser lists, NULL: all */
+static const struct mp5_file_handler *filter;
 static lv_obj_t *title_label, *recent_btn;
 static char dir_path[PATH_MAX_LEN] = ROOT;
 static lv_obj_t *path_label, *list, *spacer, *empty_label;
 static lv_obj_t *rows[POOL];
 static int row_idx[POOL];
 
-static char lower(char c)
+/* the kind of file a name is: the handler that lists its extension */
+static const struct mp5_file_handler *handler_of(const char *name)
 {
-	return (c >= 'A' && c <= 'Z') ? c + 32 : c;
-}
-
-int ui_name_cmp(const char *a, const char *b)
-{
-	while (*a != '\0' && lower(*a) == lower(*b)) {
-		a++;
-		b++;
+	STRUCT_SECTION_FOREACH(mp5_file_handler, h) {
+		for (const char *const *ext = h->exts; *ext != NULL; ext++) {
+			if (name_has_ext(name, *ext)) {
+				return h;
+			}
+		}
 	}
-	return (unsigned char)lower(*a) - (unsigned char)lower(*b);
-}
 
-static bool has_ext(const char *name, const char *ext)
-{
-	size_t n = strlen(name), e = strlen(ext);
-
-	return n > e && ui_name_cmp(name + n - e, ext) == 0;
-}
-
-static bool is_video(const char *name)
-{
-	return has_ext(name, ".mp4") || has_ext(name, ".h264") || has_ext(name, ".264");
-}
-
-static bool is_photo(const char *name)
-{
-	return ui_photo_ext(name);
+	return NULL;
 }
 
 static const char *icon_of(const struct entry *e)
 {
+	const struct mp5_file_handler *h = e->dir ? NULL : handler_of(e->name);
+
 	if (e->dir) {
 		return LV_SYMBOL_DIRECTORY;
 	}
-	if (is_video(e->name)) {
-		return LV_SYMBOL_VIDEO;
-	}
-	if (is_photo(e->name)) {
-		return LV_SYMBOL_IMAGE;
-	}
-	if (ui_game_ext(e->name)) {
-		return LV_SYMBOL_KEYBOARD;
-	}
-	return LV_SYMBOL_FILE;
+
+	return h != NULL ? h->symbol : LV_SYMBOL_FILE;
 }
 
 static uint32_t icon_color(const struct entry *e)
 {
+	const struct mp5_file_handler *h = e->dir ? NULL : handler_of(e->name);
+
 	if (e->dir) {
 		return C_WARN;
 	}
-	if (is_video(e->name)) {
-		return C_ACCENT;
-	}
-	if (is_photo(e->name)) {
-		return C_OK;
-	}
-	if (ui_game_ext(e->name)) {
-		return C_PINK;
-	}
-	return C_DIM;
+
+	return h != NULL ? *h->color : C_DIM;
 }
 
 /* folders first, then by name; inserted while reading so no second pass is needed */
@@ -115,25 +90,12 @@ static bool before(const struct entry *a, const struct entry *b)
 	if (a->dir != b->dir) {
 		return a->dir;
 	}
-	return ui_name_cmp(a->name, b->name) < 0;
+	return name_cmp(a->name, b->name) < 0;
 }
 
 static bool shown_by_filter(const struct fs_dirent *d)
 {
-	if (d->type == FS_DIR_ENTRY_DIR || filter == FILES_ALL) {
-		return true;
-	}
-	if (filter == FILES_NES) {
-		return has_ext(d->name, ".nes");
-	}
-	if (filter == FILES_VIDEO) {
-		return is_video(d->name);
-	}
-	if (filter == FILES_PHOTO) {
-		return is_photo(d->name);
-	}
-
-	return has_ext(d->name, ".gb") || has_ext(d->name, ".gbc") || has_ext(d->name, ".gba");
+	return d->type == FS_DIR_ENTRY_DIR || filter == NULL || handler_of(d->name) == filter;
 }
 
 static void entry_add(const struct fs_dirent *d)
@@ -240,19 +202,21 @@ static void row_clicked(lv_event_t *e)
 			dir_load();
 		}
 		list_show();
-	} else if (is_video(entries[idx].name)) {
-		ui_player_open(path, SCR_FILES);
-	} else if (is_photo(entries[idx].name)) {
-		ui_goto_arg(SCR_PHOTOS, path);
-	} else if (ui_game_ext(entries[idx].name)) {
-		ui_game_open(path, SCR_FILES);
+	} else {
+		const struct mp5_file_handler *h = handler_of(entries[idx].name);
+
+		if (h != NULL && h->open != NULL) {
+			h->open(path);
+		}
 	}
 }
 
 static void recent_clicked(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	ui_goto(SCR_RECENT);
+	if (filter != NULL && filter->extra_screen != NULL) {
+		ui_goto(filter->extra_screen);
+	}
 }
 
 static void back_clicked(lv_event_t *e)
@@ -262,7 +226,7 @@ static void back_clicked(lv_event_t *e)
 		dir_load();
 		list_show();
 	} else {
-		ui_goto(SCR_HOME);
+		ui_goto("home");
 	}
 }
 
@@ -390,7 +354,7 @@ static lv_obj_t *files_create(void)
 		lv_obj_set_style_bg_color(recent_btn, lv_color_hex(C_ACCENT2), LV_STATE_PRESSED);
 		lv_obj_set_style_text_color(l, lv_color_hex(C_TEXT), 0);
 		lv_obj_set_style_text_font(l, &lv_font_montserrat_20, 0);
-		lv_label_set_text(l, LV_SYMBOL_LIST "  Recent");
+		lv_label_set_text(l, "");
 		lv_obj_center(l);
 		lv_obj_add_event_cb(recent_btn, recent_clicked, LV_EVENT_CLICKED, NULL);
 	}
@@ -436,10 +400,15 @@ static lv_obj_t *files_create(void)
 	return scr;
 }
 
-void ui_files_open(const char *dir, enum files_filter f)
+void ui_files_open(const char *dir, const char *kind)
 {
-	filter = f;
-	ui_goto_arg(SCR_FILES, (void *)dir);
+	filter = NULL;
+	STRUCT_SECTION_FOREACH(mp5_file_handler, h) {
+		if (kind != NULL && strcmp(h->kind, kind) == 0) {
+			filter = h;
+		}
+	}
+	ui_goto_arg("files", (void *)dir);
 }
 
 /* the argument is a directory to open, or NULL for the root; a file path opens its folder */
@@ -453,14 +422,13 @@ static void files_enter(void *arg)
 	} else {
 		strcpy(dir_path, ROOT);
 	}
-	if (filter == FILES_VIDEO) {
+	if (filter != NULL && filter->extra_screen != NULL) {
+		lv_label_set_text(lv_obj_get_child(recent_btn, 0), filter->extra_label);
 		lv_obj_remove_flag(recent_btn, LV_OBJ_FLAG_HIDDEN);
 	} else {
 		lv_obj_add_flag(recent_btn, LV_OBJ_FLAG_HIDDEN);
 	}
-	lv_label_set_text(title_label, filter == FILES_NES ? "NES" : filter == FILES_GB ? "Game Boy" :
-				       filter == FILES_VIDEO ? "Videos" :
-				       filter == FILES_PHOTO ? "Photos" : "Files");
+	lv_label_set_text(title_label, filter != NULL ? filter->title : "Files");
 	if (!storage_ready() || dir_load() != 0) {
 		strcpy(dir_path, ROOT);
 		if (!storage_ready() || dir_load() != 0) {
@@ -475,8 +443,7 @@ static void files_leave(void)
 	entries_free();
 }
 
-const struct screen_ops files_ops = {
-	.create = files_create,
-	.enter = files_enter,
-	.leave = files_leave,
-};
+MP5_SCREEN(files, "files", files_create, files_enter, files_leave);
+
+MP5_HOME_TILE(files, .order = 20, .symbol = LV_SYMBOL_DIRECTORY, .title = "Files",
+	      .subtitle = "Browse the SD card", .color_top = 0xFFB547, .color_bottom = 0xF2822C);

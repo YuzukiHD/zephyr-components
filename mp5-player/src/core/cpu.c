@@ -13,7 +13,6 @@
 #include <zephyr/sys/printk.h>
 
 #include "core/app.h"
-#include "mp5.h"
 
 /* A busy loop over a checksummed block of memory: a CPU that is too fast corrupts it */
 static bool cpu_selftest(void)
@@ -42,7 +41,7 @@ static bool cpu_selftest(void)
 void cpu_clock_setup(void)
 {
 	const struct device *cctl = DEVICE_DT_GET(DT_NODELABEL(cctl));
-	uint32_t rate, target = CONFIG_SAMPLE_MP5_CPU_MHZ * 1000000U;
+	uint32_t rate, target = CONFIG_MP5_CPU_MHZ * 1000000U;
 
 	clock_control_get_rate(cctl, (clock_control_subsys_t)CLK_CPU, &rate);
 	/* in steps, each one checked: the voltage is not changed */

@@ -14,7 +14,8 @@
 #include <string.h>
 #include <zephyr/kernel.h>
 
-#include "mp5.h"
+#include "features/net/net.h"
+#include "ui/ui.h"
 
 #define MAX_ROWS	24
 #define ROW_H		72
@@ -32,7 +33,7 @@ static char pending_ssid[33];
 static void back_clicked(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	ui_goto(SCR_SETTINGS);
+	ui_goto("settings");
 }
 
 static void scan_clicked(lv_event_t *e)
@@ -290,8 +291,4 @@ static void wifi_leave(void)
 	}
 }
 
-const struct screen_ops wifi_ops = {
-	.create = wifi_create,
-	.enter = wifi_enter,
-	.leave = wifi_leave,
-};
+MP5_SCREEN(wifi, "wifi", wifi_create, wifi_enter, wifi_leave);

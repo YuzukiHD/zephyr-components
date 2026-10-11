@@ -2,73 +2,9 @@
 
 mainmenu "MP5 player"
 
-config SAMPLE_MP5_ROOT
-	string "Directory the file browser starts in"
-	default "/SD:"
-
-config SAMPLE_MP5_VIDEO_DEFAULT
-	string "Video the Videos tile plays when it is not given a file"
-	default "/SD:/video540p-ysjf.mp4"
-
-config SAMPLE_MP5_SELFTEST
-	bool "Play the default video and seek, pause and change the volume by itself"
-	help
-	  For a check without touching the screen: the steps and the positions are printed.
-
-config SAMPLE_MP5_CPU_MHZ
-	int "CPU clock in MHz, 0 keeps what the boot stub set up (600)"
-	default 816
-	help
-	  The CPU PLL is raised in steps of 72 MHz and the memory is checked after each step. The
-	  voltage is not changed.
-
-config SAMPLE_MP5_THREAD_STATS
-	bool "Print the CPU time of the player threads with the playback statistics"
-	select THREAD_RUNTIME_STATS
-	select SCHED_THREAD_USAGE_ALL
-	help
-	  With the usage accounting of the scheduler switched on, the system stopped with a load
-	  access fault inside the scheduler about 8 s after a failed open of a video (seen on the
-	  board), so it is left off unless needed.
-
-config SAMPLE_MP5_G2D
-	bool "Fill large plain rectangles of the user interface with the 2D accelerator"
-	depends on G2D
-	help
-	  Measured on the board and left off: the fills run one after the other with the
-	  processor waiting, the same memory bus is used, and ten full redraws of the home
-	  screen take 1281 ms instead of 810 ms. A decode error of the video engine was seen once
-	  while it was on.
-
-config SAMPLE_MP5_G2D_MIN_PIXELS
-	int "Smallest rectangle in pixels that the accelerator fills"
-	default 20000
-	depends on SAMPLE_MP5_G2D
-
-config SAMPLE_MP5_GAME
-	string "Game to start at boot, for a check without touching (empty: none)"
-	default ""
-
-config SAMPLE_MP5_HOT_RAM
-	bool "Run the video decoder driver and the AAC decoder from RAM"
-	default y
-	depends on XIP
-	select CODE_DATA_RELOCATION
-	help
-	  In an XIP image every instruction that is not in the cache comes from the flash window.
-	  The decoder driver and the AAC decoder run on every frame, so their text is copied to RAM
-	  at boot; the rest (kernel, other drivers, LVGL, file system) stays in the flash.
-
-config SAMPLE_MP5_UTC_OFFSET_MIN
-	int "Offset of the local time from UTC in minutes (the clock shows local time)"
-	default 480
-	range -720 840
-
-config SAMPLE_MP5_NTP_SERVER
-	string "Time server"
-	default "ntp.aliyun.com"
-
-config SAMPLE_MP5_THEME_TEST
-	bool "Switch the theme by itself on the settings screen and print the result"
+rsource "src/core/Kconfig"
+rsource "src/gfx/Kconfig"
+rsource "src/features/*/Kconfig"
+rsource "src/debug/Kconfig"
 
 source "Kconfig.zephyr"

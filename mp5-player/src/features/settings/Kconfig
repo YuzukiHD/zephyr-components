@@ -1,0 +1,17 @@
+menu "Settings"
+
+config MP5_FEATURE_SETTINGS
+	bool "Settings screen"
+	default y
+
+config MP5_FEATURE_BRIGHTNESS
+	bool "Brightness row"
+	default y
+	depends on MP5_FEATURE_SETTINGS
+
+config MP5_FEATURE_THEME_PICKER
+	bool "Dark or light and accent colour rows"
+	default y
+	depends on MP5_FEATURE_SETTINGS
+
+endmenu

@@ -11,7 +11,9 @@
 #include <zephyr/kernel.h>
 
 #include "history.h"
-#include "mp5.h"
+#include "debug/stats.h"
+#include "features/video/ui_player.h"
+#include "ui/ui.h"
 
 #define ROW_H	96
 
@@ -31,13 +33,13 @@ static void time_text(char *buf, size_t n, uint32_t ms)
 static void back_clicked(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	ui_goto(SCR_HOME);
+	ui_goto("home");
 }
 
 static void browse_clicked(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	ui_files_open(NULL, FILES_VIDEO);
+	ui_files_open(NULL, "video");
 }
 
 static void entry_clicked(lv_event_t *e)
@@ -47,7 +49,7 @@ static void entry_clicked(lv_event_t *e)
 
 	if (h != NULL) {
 		strcpy(path, h->path);
-		ui_player_open(path, SCR_RECENT);
+		ui_player_open(path, "recent");
 	}
 }
 
@@ -189,7 +191,4 @@ static void recent_enter(void *arg)
 	lv_obj_scroll_to_y(list, 0, LV_ANIM_OFF);
 }
 
-const struct screen_ops recent_ops = {
-	.create = recent_create,
-	.enter = recent_enter,
-};
+MP5_SCREEN(recent, "recent", recent_create, recent_enter, NULL);

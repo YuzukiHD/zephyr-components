@@ -24,7 +24,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
-#include "mp5.h"
+#include "core/fsutil.h"
+#include "ui/ui.h"
 
 #define MAX_PHOTOS	512
 #define NAME_MAX_LEN	96
@@ -46,21 +47,14 @@ static uint32_t *rgb;
 static lv_obj_t *top_bar, *title_label, *info_label, *message, *prev_btn, *next_btn;
 static bool controls_visible = true;
 
-static bool has_ext(const char *name, const char *ext)
-{
-	size_t n = strlen(name), e = strlen(ext);
-
-	return n > e && ui_name_cmp(name + n - e, ext) == 0;
-}
-
 static bool is_png(const char *name)
 {
-	return has_ext(name, ".png");
+	return name_has_ext(name, ".png");
 }
 
-bool ui_photo_ext(const char *name)
+static bool ui_photo_ext(const char *name)
 {
-	return has_ext(name, ".jpg") || has_ext(name, ".jpeg") || has_ext(name, ".png");
+	return name_has_ext(name, ".jpg") || name_has_ext(name, ".jpeg") || name_has_ext(name, ".png");
 }
 
 static void names_free(void)
@@ -93,7 +87,7 @@ static void names_load(void)
 		    strlen(d.name) >= NAME_MAX_LEN || !ui_photo_ext(d.name)) {
 			continue;
 		}
-		while (at > 0 && ui_name_cmp(d.name, names[at - 1]) < 0) {
+		while (at > 0 && name_cmp(d.name, names[at - 1]) < 0) {
 			at--;
 		}
 		memmove(names[at + 1], names[at], (count - at) * sizeof(*names));
@@ -446,7 +440,7 @@ static void controls_show(bool show)
 {
 	controls_visible = show;
 	/* with no controls the plane of the user interface is off and only the picture is read */
-	display_sunxi_fb_enable(disp, show || !(have_frame || have_rgb));
+	ui_overlay_set(show || !(have_frame || have_rgb));
 	if (show) {
 		lv_obj_remove_flag(top_bar, LV_OBJ_FLAG_HIDDEN);
 		if (count > 1) {
@@ -542,7 +536,7 @@ static void photo_show(int idx)
 		printk("photos: %s: %d\n", names[idx], ret);
 		picture_drop();
 		message_show(error_text(ret));
-		display_sunxi_fb_enable(disp, true);
+		ui_overlay_set(true);
 	} else {
 		printk("photos: %s shown in %d ms\n", names[idx], (int)(k_uptime_get() - t0));
 		controls_show(controls_visible);
@@ -596,7 +590,7 @@ static void screen_gesture(lv_event_t *e)
 static void back_clicked(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	ui_goto_arg(SCR_FILES, dir_path);
+	ui_goto_arg("files", dir_path);
 }
 
 static lv_obj_t *side_button(lv_obj_t *scr, const char *symbol, lv_align_t align, lv_event_cb_t cb)
@@ -701,11 +695,20 @@ static void photos_leave(void)
 	zoomed = false;
 	picture_drop();
 	names_free();
-	display_sunxi_fb_enable(disp, true);
+	ui_overlay_set(true);
 }
 
-const struct screen_ops photos_ops = {
-	.create = photos_create,
-	.enter = photos_enter,
-	.leave = photos_leave,
-};
+MP5_SCREEN(photos, "photos", photos_create, photos_enter, photos_leave);
+
+static void photo_open(const char *path)
+{
+	ui_goto_arg("photos", (void *)path);
+}
+
+static const char *const photo_exts[] = {".jpg", ".jpeg", ".png", NULL};
+
+MP5_FILE_HANDLER(photo, .kind = "photo", .title = "Photos", .symbol = LV_SYMBOL_IMAGE,
+		 .color = &ui_pal.ok, .exts = photo_exts, .open = photo_open);
+MP5_HOME_TILE(photos, .order = 30, .symbol = LV_SYMBOL_IMAGE, .title = "Photos",
+	      .subtitle = "JPEG and PNG", .color_top = 0x3DDC97, .color_bottom = 0x1FA97A,
+	      .kind = "photo");

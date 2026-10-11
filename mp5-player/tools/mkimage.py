@@ -22,7 +22,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--boot", required=True, help="xip-boot_spi.bin")
     ap.add_argument("--app", required=True, help="zephyr.bin of the application")
-    ap.add_argument("--offset", type=lambda x: int(x, 0), default=0xA00000,
+    ap.add_argument("--offset", type=lambda x: int(x, 0), default=0x40000,
                     help="flash offset of the application (matches the XIP window of the build)")
     ap.add_argument("-o", "--output", required=True)
     a = ap.parse_args()

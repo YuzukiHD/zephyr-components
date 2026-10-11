@@ -1,6 +1,6 @@
 /*
  * MP5 runs in place from the flash: the image is linked into the memory window of the SPIF
- * controller, which the boot stub (SyterKit xip-boot) maps from the flash offset 0xa00000 at
+ * controller, which the boot stub (SyterKit xip-boot) maps from the flash offset 0x40000 at
  * 0x0e000000. The window is 6 MiB, up to the end of the 16 MiB flash.
  */
 

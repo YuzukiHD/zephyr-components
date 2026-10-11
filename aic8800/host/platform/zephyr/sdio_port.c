@@ -812,10 +812,19 @@ int aicwf_sdio_send_pkt(u8 *buf, uint count)
     struct aic_sdio_dev *sdiodev = &sdio_dev;
     rtos_mutex_lock(sdiodev->bus_txrx, -1);
     sdio_claim_host(sdio_card);
-    if (g_rwnx_hw->chipid == PRODUCT_ID_AIC8800D80)
+    /*
+     * -EINVAL and -EBUSY come back before anything is put on the bus, so the same write can be
+     * tried again. Right after the chip is powered up one such failure was seen on the first
+     * command, which left the firmware download without an answer.
+     */
+    for (int try = 0; try < 3; try++) {
         ret = sdio_writesb(sdio_function[FUNC_1]->card, sdio_function[FUNC_1]->num, sdiodev->sdio_reg.wr_fifo_addr, buf, count);
-    else
-        ret = sdio_writesb(sdio_function[FUNC_1]->card, sdio_function[FUNC_1]->num, sdiodev->sdio_reg.wr_fifo_addr, buf, count);
+        if (ret != -EINVAL && ret != -EBUSY) {
+            break;
+        }
+        AIC_LOG_PRINTF("sdio write retry %d (%d)\n", try + 1, ret);
+        rtos_msleep(2);
+    }
 
     sdio_release_host(sdio_card);
     rtos_mutex_unlock(sdiodev->bus_txrx);

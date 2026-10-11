@@ -54,10 +54,13 @@ struct doom_file {
 	bool err;
 };
 
-/* stdout, stderr and stdin are the library's own pseudo streams (1, 2, 3) */
+/*
+ * stdout, stderr and stdin are the library's own streams: the pseudo streams 1, 2, 3 of the
+ * minimal C library, or the objects behind stdin/stdout/stderr of picolibc
+ */
 static bool is_std(FILE *f)
 {
-	return (uintptr_t)f <= 3U;
+	return (uintptr_t)f <= 3U || f == stdin || f == stdout || f == stderr;
 }
 
 FILE *doom_fopen(const char *path, const char *mode)

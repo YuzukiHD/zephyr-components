@@ -1,0 +1,26 @@
+/*
+ * The PWM_BL block is not used by the yuzukineko board (its panel backlight is on PWM channel 2).
+ * It is switched on here for the demonstration, on PB2 (PWM) and PB3 (FB) of the first boost
+ * converter, and not on PB0/PB1, which carry the console.
+ */
+&pio {
+	pwm_bl_pins_app: pwm_bl_pins_app {
+		pwm_bl_group {
+			pinmux = <ALLWINNER_PINMUX(ALLWINNER_PIO_PB, 2, 2)
+				  ALLWINNER_PINMUX(ALLWINNER_PIO_PB, 3, 2)>;
+		};
+	};
+};
+
+&pwm_bl {
+	status = "okay";
+	pinctrl-0 = <&pwm_bl_pins_app>;
+	pinctrl-names = "default";
+};
+
+/ {
+	zephyr,user {
+		/* channel 0, period 20 us, like the backlight node of the f101_evb board */
+		pwms = <&pwm_bl 0 20000 PWM_POLARITY_INVERTED>;
+	};
+};

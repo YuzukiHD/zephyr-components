@@ -1,0 +1,7 @@
+/* PB2 and PB3 are free pins of the board (the UART1 flow control signals, not used) */
+/ {
+	zephyr,user {
+		out-gpios = <&gpiob 2 GPIO_ACTIVE_HIGH>;
+		in-gpios = <&gpiob 3 GPIO_ACTIVE_HIGH>;
+	};
+};

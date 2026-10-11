@@ -17,6 +17,7 @@ Zephyr modules for RISC-V boards. Each directory is a module of its own
 | [`ios-screen-mirror/`](ios-screen-mirror) | iOS screen mirror: AirPlay receiver on the [RPiPlay](https://github.com/FD-/RPiPlay) library, DNS-SD announcements, H.264 decoded by the video engine |
 | [`uf2-downloader/`](uf2-downloader) | not a module but an application: shows a `F101BOOT` USB drive and writes the `.uf2` files copied onto it to the SPI NOR (`tools/mkuf2.py`) |
 | [`bochs/`](bochs) | the [Bochs](https://github.com/bochs-emu/Bochs) x86 PC emulator (486 class, no FPU) for a Windows 95 class guest; the BIOS runs on the board, output, input and a disk are not done yet |
+| [`examples/`](examples) | not a module: small applications for yuzukineko, one per driver or library interface, with the board output in the documentation |
 
 The upstream projects are git submodules (`ncnn/ncnn`, `mgba/mgba`, `doom/doomgeneric`, `bochs/Bochs`, `micropython/micropython`,
 `litehtml/litehtml`, `pocketjs/pocketjs`, `pocketjs/quickjs-ng`, `ios-screen-mirror/rpiplay`); the nofrendo core

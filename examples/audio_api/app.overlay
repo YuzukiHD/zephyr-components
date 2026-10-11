@@ -1,0 +1,12 @@
+/*
+ * The pins of I2S0 are shared with the SDIO port of the WiFi chip and the USB VBUS switch on
+ * this board. The internal loopback of the I2S0 and S/PDIF controllers needs no pin, so the
+ * two nodes are switched on here without a pinctrl state.
+ */
+&i2s0 {
+	status = "okay";
+};
+
+&owa {
+	status = "okay";
+};

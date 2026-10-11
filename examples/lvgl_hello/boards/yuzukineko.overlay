@@ -1,0 +1,7 @@
+/* LVGL reads the GT967 touch panel as a pointer */
+/ {
+	lvgl_pointer {
+		compatible = "zephyr,lvgl-pointer-input";
+		input = <&touch>;
+	};
+};

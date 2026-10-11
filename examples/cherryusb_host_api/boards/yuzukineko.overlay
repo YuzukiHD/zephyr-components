@@ -1,0 +1,10 @@
+/* host mode: turn the OTG device controller off and the EHCI/OHCI host controller on.
+ * Both share the USB PHY, which only one role can hold at a time.
+ */
+&usbotg {
+	status = "disabled";
+};
+
+&usbhci {
+	status = "okay";
+};

@@ -77,4 +77,7 @@ config SAMPLE_MP5_NTP_SERVER
 	string "Time server"
 	default "ntp.aliyun.com"
 
+config SAMPLE_MP5_THEME_TEST
+	bool "Switch the theme by itself on the settings screen and print the result"
+
 source "Kconfig.zephyr"

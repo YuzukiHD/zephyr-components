@@ -17,6 +17,7 @@
 #include <time.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/fs/fs.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/kernel.h>
 #include <zephyr/net/net_if.h>
@@ -162,7 +163,23 @@ static void clock_from_unix(int64_t unix_s)
 	tm.tm_hour = sec / 3600;
 	tm.tm_min = sec / 60 % 60;
 	tm.tm_sec = sec % 60;
+	{
+		struct tm before;
+
+		clock_now(&before);
+		printk("net: clock was %04d-%02d-%02d %02d:%02d:%02d, network says %04d-%02d-%02d "
+		       "%02d:%02d:%02d\n", before.tm_year + 1900, before.tm_mon + 1, before.tm_mday,
+		       before.tm_hour, before.tm_min, before.tm_sec, y, m, d, tm.tm_hour, tm.tm_min,
+		       tm.tm_sec);
+	}
 	clock_set_tm(&tm);
+	{
+		struct tm after;
+
+		clock_now(&after);
+		printk("net: clock now %04d-%02d-%02d %02d:%02d:%02d\n", after.tm_year + 1900,
+		       after.tm_mon + 1, after.tm_mday, after.tm_hour, after.tm_min, after.tm_sec);
+	}
 	k_mutex_lock(&lock, K_FOREVER);
 	snprintf(sync_text, sizeof(sync_text), "Synced %04d-%02d-%02d %02d:%02d", y, m, d,
 		 tm.tm_hour, tm.tm_min);
@@ -263,6 +280,46 @@ static void do_connect(struct net_if *iface, const char *ssid, const char *psk)
 	time_sync();
 }
 
+/* the network on the card: /SD:/wifi.cfg, the name on the first line, the password on the second */
+static void wifi_cfg_read(char *ssid, size_t ssid_size, char *psk, size_t psk_size)
+{
+	struct fs_file_t f;
+	char buf[128];
+	ssize_t n;
+	char *nl;
+
+	fs_file_t_init(&f);
+	if (!storage_ready() || fs_open(&f, "/SD:/wifi.cfg", FS_O_READ) != 0) {
+		return;
+	}
+	n = fs_read(&f, buf, sizeof(buf) - 1);
+	fs_close(&f);
+	if (n <= 0) {
+		return;
+	}
+	buf[n] = '\0';
+	nl = strchr(buf, '\n');
+	if (nl != NULL) {
+		*nl++ = '\0';
+	}
+	for (char *e = buf + strlen(buf); e > buf && (e[-1] == '\r' || e[-1] == ' '); e--) {
+		e[-1] = '\0';
+	}
+	snprintf(ssid, ssid_size, "%s", buf);
+	if (nl != NULL) {
+		char *end = strchr(nl, '\n');
+
+		if (end != NULL) {
+			*end = '\0';
+		}
+		for (char *e = nl + strlen(nl); e > nl && (e[-1] == '\r'); e--) {
+			e[-1] = '\0';
+		}
+		snprintf(psk, psk_size, "%s", nl);
+	}
+	printk("net: network %s from the card\n", ssid);
+}
+
 static void net_main(void *a, void *b, void *c)
 {
 	struct net_if *iface = NULL;
@@ -300,8 +357,13 @@ static void net_main(void *a, void *b, void *c)
 	if (v != NULL) {
 		snprintf(saved_psk, sizeof(saved_psk), "%s", v);
 	}
+	if (saved_ssid[0] == '\0') {
+		wifi_cfg_read(saved_ssid, sizeof(saved_ssid), saved_psk, sizeof(saved_psk));
+	}
 	if (saved_ssid[0] != '\0') {
+		printk("net: joining %s\n", saved_ssid);
 		do_connect(iface, saved_ssid, saved_psk);
+		printk("net: link state %d (%s)\n", (int)link, addr_now);
 	}
 
 	for (;;) {

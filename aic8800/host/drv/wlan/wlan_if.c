@@ -282,7 +282,7 @@ int wlan_sta_connect(uint8_t *ssid, uint8_t *pw, int timeout_ms)
 	int fhost_vif_idx = 0;
 	int to_ms = 10000;
 
-	AIC_LOG_PRINTF("Connect Wi-Fi: %s, %s\r\n", ssid, pw);
+	AIC_LOG_PRINTF("Connect Wi-Fi: %s\r\n", ssid);
 
     if (pw && (strlen((const char *)pw)) && (strlen((const char *)pw) < 8)) {
         AIC_LOG_PRINTF("Err: password < 8\r\n");
@@ -305,7 +305,7 @@ int wlan_start_sta(uint8_t *ssid, uint8_t *pw, int timeout_ms)
     int fhost_vif_idx = 0;
     int to_ms = 10000;
 
-    AIC_LOG_PRINTF("Connect Wi-Fi: %s, %s\r\n", ssid, pw);
+    AIC_LOG_PRINTF("Connect Wi-Fi: %s\r\n", ssid);
 
     if(pw && (strlen((const char *)pw)) && (strlen((const char *)pw) < 8)) {
         AIC_LOG_PRINTF("Err: password < 8\r\n");

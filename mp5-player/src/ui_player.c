@@ -294,11 +294,11 @@ static lv_obj_t *player_create(void)
 	back = ui_icon_button(top_bar, LV_SYMBOL_LEFT, 64);
 	lv_obj_set_pos(back, 32, 24);
 	lv_obj_add_event_cb(back, back_clicked, LV_EVENT_CLICKED, NULL);
-	title_label = flat_label(top_bar, &lv_font_montserrat_24, C_TEXT);
+	title_label = flat_label(top_bar, &lv_font_montserrat_24, 0xE8ECF4);
 	lv_obj_set_width(title_label, 780);
 	lv_label_set_long_mode(title_label, LV_LABEL_LONG_DOT);
 	lv_obj_set_pos(title_label, 120, 38);
-	info_label = flat_label(top_bar, &lv_font_montserrat_16, C_DIM);
+	info_label = flat_label(top_bar, &lv_font_montserrat_16, 0x8B95A8);
 	lv_obj_align(info_label, LV_ALIGN_TOP_RIGHT, -32, 42);
 
 	/* the panel at the bottom */
@@ -310,14 +310,14 @@ static lv_obj_t *player_create(void)
 	lv_obj_set_style_bg_color(panel, lv_color_hex(0x0B0F17), 0);
 	lv_obj_set_style_bg_opa(panel, LV_OPA_70, 0);
 	lv_obj_set_style_border_width(panel, 1, 0);
-	lv_obj_set_style_border_color(panel, lv_color_hex(C_BORDER), 0);
+	lv_obj_set_style_border_color(panel, lv_color_hex(0x2A3350), 0);
 	lv_obj_remove_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
 	lv_obj_add_event_cb(panel, touched, LV_EVENT_PRESSING, NULL);
 
-	cur_label = flat_label(panel, &lv_font_montserrat_16, C_TEXT);
+	cur_label = flat_label(panel, &lv_font_montserrat_16, 0xE8ECF4);
 	lv_obj_set_pos(cur_label, 32, 30);
 	lv_label_set_text(cur_label, "0:00");
-	dur_label = flat_label(panel, &lv_font_montserrat_16, C_DIM);
+	dur_label = flat_label(panel, &lv_font_montserrat_16, 0x8B95A8);
 	lv_obj_align(dur_label, LV_ALIGN_TOP_RIGHT, -32, 30);
 	lv_label_set_text(dur_label, "0:00");
 
@@ -333,7 +333,7 @@ static lv_obj_t *player_create(void)
 	lv_obj_set_pos(b10, 330, 86);
 	lv_obj_add_event_cb(b10, back10_clicked, LV_EVENT_CLICKED, NULL);
 	lv_obj_add_event_cb(b10, touched, LV_EVENT_PRESSING, NULL);
-	l10 = flat_label(panel, &lv_font_montserrat_14, C_DIM);
+	l10 = flat_label(panel, &lv_font_montserrat_14, 0x8B95A8);
 	lv_label_set_text(l10, "-10 s");
 	lv_obj_set_pos(l10, 338, 160);
 
@@ -350,7 +350,7 @@ static lv_obj_t *player_create(void)
 	lv_obj_set_pos(f10, 546, 86);
 	lv_obj_add_event_cb(f10, fwd10_clicked, LV_EVENT_CLICKED, NULL);
 	lv_obj_add_event_cb(f10, touched, LV_EVENT_PRESSING, NULL);
-	lf10 = flat_label(panel, &lv_font_montserrat_14, C_DIM);
+	lf10 = flat_label(panel, &lv_font_montserrat_14, 0x8B95A8);
 	lv_label_set_text(lf10, "+10 s");
 	lv_obj_set_pos(lf10, 554, 160);
 
@@ -363,7 +363,7 @@ static lv_obj_t *player_create(void)
 		lv_obj_set_pos(mute, 24, 94);
 		lv_obj_add_flag(mute, LV_OBJ_FLAG_CLICKABLE);
 		lv_obj_add_event_cb(mute, mute_clicked, LV_EVENT_CLICKED, NULL);
-		vol_icon = flat_label(mute, &lv_font_montserrat_24, C_TEXT);
+		vol_icon = flat_label(mute, &lv_font_montserrat_24, 0xE8ECF4);
 		lv_label_set_text(vol_icon, LV_SYMBOL_VOLUME_MAX);
 		lv_obj_center(vol_icon);
 	}
@@ -374,7 +374,7 @@ static lv_obj_t *player_create(void)
 	lv_slider_set_range(vol_slider, 0, 100);
 	lv_obj_add_event_cb(vol_slider, volume_event, LV_EVENT_VALUE_CHANGED, NULL);
 
-	message = flat_label(scr, &lv_font_montserrat_24, C_TEXT);
+	message = flat_label(scr, &lv_font_montserrat_24, 0xE8ECF4);
 	lv_obj_set_style_text_align(message, LV_TEXT_ALIGN_CENTER, 0);
 	lv_obj_set_width(message, 700);
 	lv_obj_align(message, LV_ALIGN_CENTER, 0, -40);

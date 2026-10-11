@@ -8,6 +8,7 @@
  */
 
 #include <string.h>
+#include <zephyr/kernel.h>
 
 #include "lmac_types.h"
 #include "fhost_wpa.h"
@@ -43,21 +44,27 @@ static void wifi_event(AIC_WIFI_EVENT event, aic_wifi_event_data *data)
     }
 }
 
+/*
+ * The chip is started once, by whoever needs it first (a join or scan request, or the Bluetooth
+ * transport); the others wait until it is running.
+ */
+static K_MUTEX_DEFINE(start_lock);
+
 int aicz_wifi_start(void)
 {
-    int ret;
+    int ret = 0;
 
-    if (wifi_started)
-        return 0;
+    k_mutex_lock(&start_lock, K_FOREVER);
+    if (!wifi_started) {
+        ret = aic_wifi_init(WIFI_MODE_STA, 0, NULL);
+        if (ret == 0) {
+            aic_wifi_event_register(wifi_event);
+            wifi_started = true;
+        }
+    }
+    k_mutex_unlock(&start_lock);
 
-    ret = aic_wifi_init(WIFI_MODE_STA, 0, NULL);
-    if (ret)
-        return ret;
-
-    aic_wifi_event_register(wifi_event);
-    wifi_started = true;
-
-    return 0;
+    return ret;
 }
 
 const uint8_t *aicz_wifi_mac(void)

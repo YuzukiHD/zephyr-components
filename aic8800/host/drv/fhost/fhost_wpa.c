@@ -878,7 +878,13 @@ int fhost_wpa_execute_cmd(int fhost_vif_idx, char *resp_buf, int *resp_buf_len,
     if (cmd_len == 0) {
         cmd[0] = '\0';
     }
-    AIC_LOG_PRINTF("%s cmd:%s\n", __func__, cmd);
+    /* the passphrase and the keys are not written to the log */
+    if (strstr(cmd, " psk ") != NULL || strstr(cmd, " wep_key") != NULL ||
+        strstr(cmd, " password ") != NULL) {
+        AIC_LOG_PRINTF("%s cmd:(%d bytes, secret)\n", __func__, cmd_len);
+    } else {
+        AIC_LOG_PRINTF("%s cmd:%s\n", __func__, cmd);
+    }
 
     if (cmd_len >= sizeof(cmd))
     {

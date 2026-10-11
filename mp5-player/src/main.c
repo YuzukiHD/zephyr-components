@@ -148,6 +148,13 @@ int main(void)
 #endif
 	ui_init();
 	app_net_init();
+#ifdef CONFIG_SAMPLE_MP5_THEME_TEST
+	{
+		extern void ui_theme_test_start(void);
+
+		ui_theme_test_start();
+	}
+#endif
 #ifdef CONFIG_SAMPLE_MP5_SELFTEST
 	list_root();
 	ui_goto(SCR_PLAYER);

@@ -49,6 +49,10 @@ endif()
 set_source_files_properties(src/lv_rvv.c PROPERTIES COMPILE_OPTIONS
   "-march=rv32imafdcv_zicsr_zifencei_xtheadcmo_xtheadba_xtheadbb_xtheadbs_xtheadcondmov_xtheadmemidx_xtheadmempair")
 
+if(CONFIG_SAMPLE_MP5_THEME_TEST)
+  target_sources(app PRIVATE src/ui_theme_test.c)
+endif()
+
 if(CONFIG_SAMPLE_MP5_UI_PROFILE)
   target_sources(app PRIVATE src/ui_profile.c)
 endif()

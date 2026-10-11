@@ -630,13 +630,13 @@ static lv_obj_t *photos_create(void)
 	lv_obj_add_event_cb(back, back_clicked, LV_EVENT_CLICKED, NULL);
 	title_label = lv_label_create(top_bar);
 	lv_obj_set_style_text_font(title_label, &lv_font_montserrat_24, 0);
-	lv_obj_set_style_text_color(title_label, lv_color_hex(C_TEXT), 0);
+	lv_obj_set_style_text_color(title_label, lv_color_hex(0xE8ECF4), 0);
 	lv_obj_set_width(title_label, 620);
 	lv_label_set_long_mode(title_label, LV_LABEL_LONG_DOT);
 	lv_obj_set_pos(title_label, 120, 38);
 	info_label = lv_label_create(top_bar);
 	lv_obj_set_style_text_font(info_label, &lv_font_montserrat_20, 0);
-	lv_obj_set_style_text_color(info_label, lv_color_hex(C_DIM), 0);
+	lv_obj_set_style_text_color(info_label, lv_color_hex(0x8B95A8), 0);
 	lv_obj_align(info_label, LV_ALIGN_TOP_RIGHT, -32, 40);
 
 	prev_btn = side_button(scr, LV_SYMBOL_LEFT, LV_ALIGN_LEFT_MID, prev_clicked);
@@ -644,7 +644,7 @@ static lv_obj_t *photos_create(void)
 
 	message = lv_label_create(scr);
 	lv_obj_set_style_text_font(message, &lv_font_montserrat_24, 0);
-	lv_obj_set_style_text_color(message, lv_color_hex(C_TEXT), 0);
+	lv_obj_set_style_text_color(message, lv_color_hex(0xE8ECF4), 0);
 	lv_obj_set_style_text_align(message, LV_TEXT_ALIGN_CENTER, 0);
 	lv_obj_set_width(message, 700);
 	lv_obj_align(message, LV_ALIGN_CENTER, 0, 0);

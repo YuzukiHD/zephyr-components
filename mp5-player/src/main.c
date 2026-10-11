@@ -17,10 +17,12 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/display.h>
 #include <zephyr/fs/fs.h>
+#include <zephyr/storage/disk_access.h>
 #include <stdlib.h>
 #include <zephyr/cache.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
+#include <lvgl_zephyr.h>
 
 #include "lv_rvv.h"
 #ifdef CONFIG_SAMPLE_MP5_G2D
@@ -125,10 +127,33 @@ static void selftest_main(void *a, void *b, void *c)
 K_THREAD_DEFINE(selftest, 4096, selftest_main, NULL, NULL, NULL, 9, 0, -1);
 #endif
 
+/*
+ * The panel needs about half a second to come up (a fixed sequence of waits), so the display is
+ * initialised in a thread of its own while the main thread raises the CPU clock, checks the vector
+ * code and mounts the card; main waits for it before LVGL starts.
+ */
+static K_SEM_DEFINE(display_up, 0, 1);
+static int display_ret;
+static K_THREAD_STACK_DEFINE(display_init_stack, 8192);
+static struct k_thread display_init_thread;
+
+static void display_init_main(void *a, void *b, void *c)
+{
+	ARG_UNUSED(a);
+	ARG_UNUSED(b);
+	ARG_UNUSED(c);
+	display_ret = device_init(DEVICE_DT_GET(DT_CHOSEN(zephyr_display)));
+	k_sem_give(&display_up);
+}
+
 int main(void)
 {
 	const struct device *disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 	int ret;
+
+	k_thread_create(&display_init_thread, display_init_stack, K_THREAD_STACK_SIZEOF(display_init_stack),
+			display_init_main, NULL, NULL, NULL, 5, 0, K_NO_WAIT);
+	k_thread_name_set(&display_init_thread, "display_init");
 
 	printk("mp5: boot %u ms: main starts\n", k_uptime_get_32());
 	cpu_clock_setup();
@@ -137,16 +162,37 @@ int main(void)
 		printk("mp5: the vector blends differ from LVGL, switched off\n");
 		lv_rvv_enable(false);
 	}
-	if (!device_is_ready(disp)) {
-		printk("mp5: the display is not ready\n");
-		return 0;
-	}
 	printk("mp5: boot %u ms: vector blends checked\n", k_uptime_get_32());
 	ret = fs_mount(&mp);
 	mounted = ret == 0;
 	printk("mp5: SD card %s (%d) at boot %u ms\n", mounted ? "mounted" : "not available", ret,
 	       k_uptime_get_32());
+	if (!mounted) {
+		/* what the card says, read only: it is never written when the mount fails */
+		uint32_t sectors = 0;
+		static uint8_t sector0[512];
 
+		if (disk_access_init("SD") == 0 &&
+		    disk_access_ioctl("SD", DISK_IOCTL_GET_SECTOR_COUNT, &sectors) == 0 &&
+		    disk_access_read("SD", sector0, 0, 1) == 0) {
+			printk("mp5: SD sectors %u, sector 0 starts %02x %02x %02x %02x, boot signature %02x%02x\n",
+			       sectors, sector0[0], sector0[1], sector0[2], sector0[3], sector0[510],
+			       sector0[511]);
+		} else {
+			printk("mp5: the card does not answer to reads\n");
+		}
+	}
+
+	k_sem_take(&display_up, K_FOREVER);
+	printk("mp5: boot %u ms: display up (%d)\n", k_uptime_get_32(), display_ret);
+	if (display_ret != 0 || !device_is_ready(disp)) {
+		printk("mp5: the display is not ready\n");
+		return 0;
+	}
+	if (lvgl_init() != 0) {
+		printk("mp5: LVGL did not start\n");
+		return 0;
+	}
 #ifdef CONFIG_SAMPLE_MP5_G2D
 	lv_g2d_init();
 #endif

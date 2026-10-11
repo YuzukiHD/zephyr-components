@@ -29,3 +29,8 @@
 &spi0 {
 	status = "disabled";
 };
+
+/* the panel is brought up by the application in a thread of its own, in parallel with the rest of the start */
+&display {
+	zephyr,deferred-init;
+};

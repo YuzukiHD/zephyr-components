@@ -131,6 +131,7 @@ void ui_init(void)
 	ui_register(SCR_RECENT, &recent_ops);
 	ui_register(SCR_GAME, &game_ops);
 	ui_register(SCR_PHOTOS, &photos_ops);
+	ui_register(SCR_USB, &usb_ops);
 	ui_register(SCR_SETTINGS, &settings_ops);
 	ui_register(SCR_PLAYER, &player_ops);
 	ui_goto(SCR_HOME);

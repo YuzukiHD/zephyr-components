@@ -101,6 +101,7 @@ extern const struct screen_ops recent_ops;
 extern const struct screen_ops game_ops;
 extern const struct screen_ops settings_ops;
 extern const struct screen_ops photos_ops;
+extern const struct screen_ops usb_ops;
 extern const struct screen_ops player_ops;
 
 /** Raises the CPU clock to CONFIG_SAMPLE_MP5_CPU_MHZ, each step checked */

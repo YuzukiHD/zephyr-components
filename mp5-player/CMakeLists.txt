@@ -22,6 +22,7 @@ target_sources(app PRIVATE
 	src/net.c
 	src/ui_game.c
 	src/ui_photos.c
+	src/ui_usb.c
 	src/ui_stats.c
 	src/ui_recent.c
 	src/history.c

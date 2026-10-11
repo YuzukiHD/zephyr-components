@@ -16,6 +16,7 @@
 #include <lvgl.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/printk.h>
 #include <doom_zephyr/doom.h>
 
 #include "app.h"
@@ -181,6 +182,9 @@ static void pad_main(void *a, void *b, void *c)
 	key_add(880, 100, 120, 60, "STR>", DOOM_KEY_STRAFE_R, 16);
 	key_add(400, 520 + dy, 100, 60, "Y", DOOM_KEY_Y, 30);
 	key_add(524, 520 + dy, 100, 60, "N", DOOM_KEY_N, 30);
+	printk("pad: %d keys, display %dx%d, touch %s\n", nkeys,
+	       lv_display_get_horizontal_resolution(NULL), lv_display_get_vertical_resolution(NULL),
+	       HAS_TOUCH ? "on" : "off");
 
 	while (true) {
 #if HAS_TOUCH

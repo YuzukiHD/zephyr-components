@@ -18,7 +18,7 @@ The game data is not included: put `doom1.wad` (shareware) or a Freedoom WAD on 
 
 ```
 git submodule update --init
-west build -b f101_evb -d build/doom zephyr-components/doom/samples/doom_player
+west build -b yuzukineko -d build/doom zephyr-components/doom/samples/doom_player
 ```
 
 The sample takes `/SD:/doom1.wad` (`CONFIG_SAMPLE_DOOM_WAD`) or the first `.wad` in the root of the card

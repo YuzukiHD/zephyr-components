@@ -123,10 +123,17 @@ static void key_event(lv_event_t *e)
 {
 	uint32_t bit = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
 
-	if (lv_event_get_code(e) == LV_EVENT_PRESSED) {
+	/* only these events change a key: drawing and style events arrive while it is held */
+	switch (lv_event_get_code(e)) {
+	case LV_EVENT_PRESSED:
 		atomic_or(&keys, bit);
-	} else {
+		break;
+	case LV_EVENT_RELEASED:
+	case LV_EVENT_PRESS_LOST:
 		atomic_and(&keys, ~bit);
+		break;
+	default:
+		break;
 	}
 }
 
@@ -165,7 +172,7 @@ static void pad_main(void *a, void *b, void *c)
 
 	/*
 	 * The layout was drawn for a 1024x600 panel, the keys at the bottom stay at the bottom of
-	 * a taller one. The picture is 900 wide in the middle.
+	 * a taller one. The picture fills the width of the panel and the keys are drawn over it.
 	 */
 	const int dy = lv_display_get_vertical_resolution(NULL) - 600;
 

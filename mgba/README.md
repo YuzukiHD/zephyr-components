@@ -6,7 +6,7 @@ git submodule `mgba/mgba` (MPL-2.0), unchanged. The glue in this directory is
 Apache-2.0; `src/renderers/` and `src/gba_memory.c` hold modified copies of mGBA
 files (MPL-2.0).
 
-Tested on the Allwinner F101 EVB (XuanTie C907, 16 MB PSRAM).
+Tested on the YuzukiNeko board (Allwinner F101, XuanTie C907, 16 MB PSRAM, 1024x768 DSI panel with a GT967 touch controller).
 
 Only the emulation core is built: no threading, debugger, scripting or image
 codecs, and no BIOS file (the built-in replacement is used). The libc gaps of
@@ -15,11 +15,15 @@ the minimal C library are filled by `src/mgba_libc.c` and `shim/`.
 ## Use
 
 ```
-git submodule update --init mgba/mgba
-west build -b f101_evb -d build/gba zephyr-components/mgba/samples/gba_player
+cd zephyr-components/mgba && git submodule update --init mgba && cd ../..
+west build -b yuzukineko -d build/gba zephyr-components/mgba/samples/gba_player
 ```
 
-or, in another application, add the module and enable it:
+The module sources of mGBA are a git submodule; fetch it once before the first build. The
+sample's `prj.conf` selects the minimal C library (`CONFIG_MINIMAL_LIBC=y`), which the headers in
+`shim/` are written for; an application of your own needs it as well.
+
+Or, in another application, add the module and enable it:
 
 ```
 list(APPEND ZEPHYR_EXTRA_MODULES /path/to/zephyr-components/mgba)   # before find_package(Zephyr)
@@ -45,7 +49,7 @@ ARGB plane over it, the sound pacing the emulation. The save file is written nex
 to the ROM. The CPU clock is raised to `CONFIG_SAMPLE_GBA_CPU_MHZ`.
 
 The whole ROM is read into memory, so a ROM larger than `CONFIG_MGBA_MAX_ROM_SIZE_MB`
-(10 on the EVB) is skipped. With `-DEXTRA_CONF_FILE=.../paged.conf`
+(10 in the sample) is skipped. With `-DEXTRA_CONF_FILE=.../paged.conf`
 (`CONFIG_MGBA_ROM_DEMAND_PAGED`, needs the MMU and the demand paging of the
 kernel) the ROM is a window of the file that is paged in from the card when the
 emulation touches it, so a 16 MiB ROM runs on the 16 MB board; `src/gba_memory.c`

@@ -74,6 +74,7 @@ enum files_filter {
 	FILES_NES,	/**< .nes */
 	FILES_GB,	/**< .gb .gbc .gba */
 	FILES_VIDEO,	/**< .mp4 .h264 .264 */
+	FILES_PHOTO,	/**< .jpg .jpeg .png */
 };
 
 /** Opens the file browser in @p dir (NULL: the root of the card) listing only @p filter */
@@ -85,6 +86,12 @@ void ui_set_time_dialog(void);
 /** Starts a game (.nes .gb .gbc .gba); the cross of the game screen returns to @p from */
 void ui_game_open(const char *path, enum screen_id from);
 
+/** Case blind comparison of file names */
+int ui_name_cmp(const char *a, const char *b);
+
+/** True for the file names of photos (.jpg .jpeg .png) */
+bool ui_photo_ext(const char *name);
+
 /** True for the file names of games */
 bool ui_game_ext(const char *name);
 
@@ -93,6 +100,7 @@ extern const struct screen_ops files_ops;
 extern const struct screen_ops recent_ops;
 extern const struct screen_ops game_ops;
 extern const struct screen_ops settings_ops;
+extern const struct screen_ops photos_ops;
 extern const struct screen_ops player_ops;
 
 /** Raises the CPU clock to CONFIG_SAMPLE_MP5_CPU_MHZ, each step checked */

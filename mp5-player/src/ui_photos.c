@@ -1,0 +1,448 @@
+/*
+ * Copyright (c) 2026 Yuzuki Tsuru
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/*
+ * The photo viewer: a JPEG is decoded by the video engine and shown on the video plane as it is,
+ * a PNG is decoded to RGBA and converted to XRGB8888 for the video plane. The other photos of
+ * the folder are reached with the buttons at the sides or a swipe; a tap hides the controls.
+ */
+
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <zephyr/cache.h>
+#include <zephyr/device.h>
+#include <zephyr/drivers/display/display_sunxi.h>
+#include <zephyr/drivers/vdec.h>
+#include <zephyr/fs/fs.h>
+#include <zephyr/kernel.h>
+#include <zephyr/sys/printk.h>
+
+#include "mp5.h"
+
+#define MAX_PHOTOS	512
+#define NAME_MAX_LEN	96
+#define PATH_MAX_LEN	256
+#define MAX_FILE_BYTES	(CONFIG_VDEC_SUNXI_STREAM_BUFFER_KB * 1024)
+
+static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+static const struct device *const vdec_dev = DEVICE_DT_GET(DT_NODELABEL(ve));
+
+static char dir_path[PATH_MAX_LEN];
+static char (*names)[NAME_MAX_LEN];
+static int count, current;
+
+/* what is on the video plane */
+static bool have_frame, have_rgb;
+static struct vdec_frame frame;
+static uint32_t *rgb;
+
+static lv_obj_t *top_bar, *title_label, *info_label, *message, *prev_btn, *next_btn;
+static bool controls_visible = true;
+
+static bool has_ext(const char *name, const char *ext)
+{
+	size_t n = strlen(name), e = strlen(ext);
+
+	return n > e && ui_name_cmp(name + n - e, ext) == 0;
+}
+
+static bool is_png(const char *name)
+{
+	return has_ext(name, ".png");
+}
+
+bool ui_photo_ext(const char *name)
+{
+	return has_ext(name, ".jpg") || has_ext(name, ".jpeg") || has_ext(name, ".png");
+}
+
+static void names_free(void)
+{
+	free(names);
+	names = NULL;
+	count = 0;
+}
+
+/* the photos of the folder in name order */
+static void names_load(void)
+{
+	struct fs_dir_t dir;
+	struct fs_dirent d;
+
+	names_free();
+	names = malloc(MAX_PHOTOS * sizeof(*names));
+	if (names == NULL) {
+		return;
+	}
+	fs_dir_t_init(&dir);
+	if (fs_opendir(&dir, dir_path) != 0) {
+		names_free();
+		return;
+	}
+	while (fs_readdir(&dir, &d) == 0 && d.name[0] != '\0') {
+		int at = count;
+
+		if (d.type == FS_DIR_ENTRY_DIR || d.name[0] == '.' || count >= MAX_PHOTOS ||
+		    strlen(d.name) >= NAME_MAX_LEN || !ui_photo_ext(d.name)) {
+			continue;
+		}
+		while (at > 0 && ui_name_cmp(d.name, names[at - 1]) < 0) {
+			at--;
+		}
+		memmove(names[at + 1], names[at], (count - at) * sizeof(*names));
+		strcpy(names[at], d.name);
+		count++;
+	}
+	fs_closedir(&dir);
+}
+
+static void picture_drop(void)
+{
+	if (have_frame || have_rgb) {
+		display_sunxi_hide_yuv(disp);
+	}
+	if (have_frame) {
+		vdec_frame_release(vdec_dev, &frame);
+		have_frame = false;
+	}
+	if (have_rgb) {
+		free(rgb);
+		rgb = NULL;
+		have_rgb = false;
+	}
+}
+
+static int file_read(const char *path, uint8_t **data, size_t *len)
+{
+	struct fs_dirent st;
+	struct fs_file_t f;
+	uint8_t *buf;
+	size_t done = 0;
+	int ret;
+
+	ret = fs_stat(path, &st);
+	if (ret < 0) {
+		return ret;
+	}
+	if (st.size == 0 || st.size > MAX_FILE_BYTES) {
+		return -EFBIG;
+	}
+	buf = malloc(st.size);
+	if (buf == NULL) {
+		return -ENOMEM;
+	}
+	fs_file_t_init(&f);
+	ret = fs_open(&f, path, FS_O_READ);
+	if (ret < 0) {
+		free(buf);
+		return ret;
+	}
+	while (done < st.size) {
+		ssize_t n = fs_read(&f, buf + done, MIN(st.size - done, 64 * 1024));
+
+		if (n <= 0) {
+			ret = n < 0 ? n : -EIO;
+			break;
+		}
+		done += n;
+	}
+	fs_close(&f);
+	if (done != st.size) {
+		free(buf);
+		return ret;
+	}
+	*data = buf;
+	*len = st.size;
+
+	return 0;
+}
+
+/* RGBA8888 as the decoder delivers it (bytes A, B, G, R) to XRGB8888, over black */
+static int rgba_to_xrgb(const struct vdec_frame *f)
+{
+	size_t bytes = (size_t)f->width * f->height * 4;
+	uint32_t *dst = aligned_alloc(64, ROUND_UP(bytes, 64));
+
+	if (dst == NULL) {
+		return -ENOMEM;
+	}
+	for (unsigned int y = 0; y < f->height; y++) {
+		const uint8_t *s = f->plane[0] + (size_t)y * f->stride[0];
+		uint32_t *d = dst + (size_t)y * f->width;
+
+		for (unsigned int x = 0; x < f->width; x++, s += 4) {
+			uint32_t a = s[0];
+
+			d[x] = a == 255 ? ((uint32_t)s[3] << 16) | ((uint32_t)s[2] << 8) | s[1]
+					: ((s[3] * a / 255) << 16) | ((s[2] * a / 255) << 8) |
+					  (s[1] * a / 255);
+		}
+	}
+	sys_cache_data_flush_range(dst, bytes);
+	rgb = dst;
+	have_rgb = true;
+
+	return 0;
+}
+
+static void message_show(const char *text)
+{
+	if (text == NULL) {
+		lv_obj_add_flag(message, LV_OBJ_FLAG_HIDDEN);
+	} else {
+		lv_label_set_text(message, text);
+		lv_obj_remove_flag(message, LV_OBJ_FLAG_HIDDEN);
+	}
+}
+
+static void controls_show(bool show)
+{
+	controls_visible = show;
+	/* with no controls the plane of the user interface is off and only the picture is read */
+	display_sunxi_fb_enable(disp, show || !(have_frame || have_rgb));
+	if (show) {
+		lv_obj_remove_flag(top_bar, LV_OBJ_FLAG_HIDDEN);
+		if (count > 1) {
+			lv_obj_remove_flag(prev_btn, LV_OBJ_FLAG_HIDDEN);
+			lv_obj_remove_flag(next_btn, LV_OBJ_FLAG_HIDDEN);
+		}
+	} else {
+		lv_obj_add_flag(top_bar, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_add_flag(prev_btn, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_add_flag(next_btn, LV_OBJ_FLAG_HIDDEN);
+	}
+}
+
+static const char *error_text(int ret)
+{
+	switch (ret) {
+	case -EFBIG:
+		return "The file is too large";
+	case -ENOMEM:
+		return "The picture is too large for the memory";
+	case -ENOTSUP:
+		return "This kind of picture is not supported\n(JPEG: baseline 4:2:0)";
+	default:
+		return "Cannot open this picture";
+	}
+}
+
+static void photo_show(int idx)
+{
+	char path[PATH_MAX_LEN];
+	uint8_t *data;
+	size_t len;
+	int64_t t0 = k_uptime_get();
+	int ret;
+
+	current = idx;
+	picture_drop();
+	lv_label_set_text(title_label, names[idx]);
+	lv_label_set_text_fmt(info_label, "%d / %d", idx + 1, count);
+	message_show(NULL);
+
+	snprintf(path, sizeof(path), "%s/%s", dir_path, names[idx]);
+	ret = file_read(path, &data, &len);
+	if (ret == 0) {
+		bool png = is_png(names[idx]);
+		struct vdec_frame f;
+
+		ret = vdec_decode_image(vdec_dev, png ? VDEC_CODEC_PNG : VDEC_CODEC_JPEG, data, len,
+					png ? VDEC_FORMAT_RGBA8888 : VDEC_FORMAT_NV12, &f);
+		free(data);
+		if (ret == 0 && !png) {
+			struct display_sunxi_yuv yuv = {
+				.y = f.plane[0],
+				.uv = f.plane[1],
+				.width = f.width,
+				.height = f.height,
+				.stride_y = f.stride[0],
+				.stride_uv = f.stride[1],
+				.full_range = true,
+			};
+
+			frame = f;
+			have_frame = true;
+			ret = display_sunxi_show_yuv(disp, &yuv);
+			lv_label_set_text_fmt(info_label, "%d / %d   %ux%u", idx + 1, count, f.width,
+					      f.height);
+		} else if (ret == 0) {
+			ret = rgba_to_xrgb(&f);
+			if (ret == 0) {
+				struct display_sunxi_rgb img = {
+					.data = rgb,
+					.width = f.width,
+					.height = f.height,
+					.stride = f.width * 4,
+					.xrgb8888 = true,
+				};
+
+				ret = display_sunxi_show_rgb(disp, &img);
+			}
+			lv_label_set_text_fmt(info_label, "%d / %d   %ux%u", idx + 1, count, f.width,
+					      f.height);
+			vdec_frame_release(vdec_dev, &f);
+		}
+	}
+	if (ret != 0) {
+		printk("photos: %s: %d\n", names[idx], ret);
+		picture_drop();
+		message_show(error_text(ret));
+		display_sunxi_fb_enable(disp, true);
+	} else {
+		printk("photos: %s shown in %d ms\n", names[idx], (int)(k_uptime_get() - t0));
+		controls_show(controls_visible);
+	}
+}
+
+static void step(int dir)
+{
+	if (count > 1) {
+		photo_show((current + dir + count) % count);
+	}
+}
+
+static void prev_clicked(lv_event_t *e)
+{
+	ARG_UNUSED(e);
+	step(-1);
+}
+
+static void next_clicked(lv_event_t *e)
+{
+	ARG_UNUSED(e);
+	step(1);
+}
+
+static void screen_clicked(lv_event_t *e)
+{
+	if (lv_event_get_target(e) == lv_event_get_current_target(e)) {
+		controls_show(!controls_visible);
+	}
+}
+
+static void screen_gesture(lv_event_t *e)
+{
+	lv_dir_t dir = lv_indev_get_gesture_dir(lv_indev_active());
+
+	ARG_UNUSED(e);
+	if (dir == LV_DIR_LEFT) {
+		step(1);
+	} else if (dir == LV_DIR_RIGHT) {
+		step(-1);
+	}
+}
+
+static void back_clicked(lv_event_t *e)
+{
+	ARG_UNUSED(e);
+	ui_goto_arg(SCR_FILES, dir_path);
+}
+
+static lv_obj_t *side_button(lv_obj_t *scr, const char *symbol, lv_align_t align, lv_event_cb_t cb)
+{
+	lv_obj_t *b = ui_icon_button(scr, symbol, 72);
+
+	lv_obj_set_style_bg_opa(b, LV_OPA_70, 0);
+	lv_obj_align(b, align, align == LV_ALIGN_LEFT_MID ? 24 : -24, 0);
+	lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, NULL);
+
+	return b;
+}
+
+static lv_obj_t *photos_create(void)
+{
+	lv_obj_t *scr = ui_screen_new(true);
+	lv_obj_t *back;
+
+	lv_obj_add_flag(scr, LV_OBJ_FLAG_CLICKABLE);
+	lv_obj_add_event_cb(scr, screen_clicked, LV_EVENT_CLICKED, NULL);
+	lv_obj_add_event_cb(scr, screen_gesture, LV_EVENT_GESTURE, NULL);
+
+	top_bar = lv_obj_create(scr);
+	lv_obj_remove_style_all(top_bar);
+	lv_obj_set_size(top_bar, LV_PCT(100), 112);
+	lv_obj_set_style_bg_color(top_bar, lv_color_black(), 0);
+	lv_obj_set_style_bg_opa(top_bar, LV_OPA_50, 0);
+	lv_obj_remove_flag(top_bar, LV_OBJ_FLAG_SCROLLABLE);
+	back = ui_icon_button(top_bar, LV_SYMBOL_LEFT, 64);
+	lv_obj_set_pos(back, 32, 24);
+	lv_obj_add_event_cb(back, back_clicked, LV_EVENT_CLICKED, NULL);
+	title_label = lv_label_create(top_bar);
+	lv_obj_set_style_text_font(title_label, &lv_font_montserrat_24, 0);
+	lv_obj_set_style_text_color(title_label, lv_color_hex(C_TEXT), 0);
+	lv_obj_set_width(title_label, 620);
+	lv_label_set_long_mode(title_label, LV_LABEL_LONG_DOT);
+	lv_obj_set_pos(title_label, 120, 38);
+	info_label = lv_label_create(top_bar);
+	lv_obj_set_style_text_font(info_label, &lv_font_montserrat_20, 0);
+	lv_obj_set_style_text_color(info_label, lv_color_hex(C_DIM), 0);
+	lv_obj_align(info_label, LV_ALIGN_TOP_RIGHT, -32, 40);
+
+	prev_btn = side_button(scr, LV_SYMBOL_LEFT, LV_ALIGN_LEFT_MID, prev_clicked);
+	next_btn = side_button(scr, LV_SYMBOL_RIGHT, LV_ALIGN_RIGHT_MID, next_clicked);
+
+	message = lv_label_create(scr);
+	lv_obj_set_style_text_font(message, &lv_font_montserrat_24, 0);
+	lv_obj_set_style_text_color(message, lv_color_hex(C_TEXT), 0);
+	lv_obj_set_style_text_align(message, LV_TEXT_ALIGN_CENTER, 0);
+	lv_obj_set_width(message, 700);
+	lv_obj_align(message, LV_ALIGN_CENTER, 0, 0);
+	lv_obj_add_flag(message, LV_OBJ_FLAG_HIDDEN);
+
+	return scr;
+}
+
+/* the argument is the path of the photo to show */
+static void photos_enter(void *arg)
+{
+	const char *path = arg;
+	const char *slash;
+
+	if (path == NULL) {
+		return;
+	}
+	slash = strrchr(path, '/');
+	if (slash == NULL) {
+		return;
+	}
+	snprintf(dir_path, sizeof(dir_path), "%.*s", (int)(slash - path), path);
+	names_load();
+	current = 0;
+	for (int i = 0; i < count; i++) {
+		if (strcmp(names[i], slash + 1) == 0) {
+			current = i;
+		}
+	}
+	controls_visible = true;
+	if (count == 0) {
+		message_show("No pictures in this folder");
+		return;
+	}
+	if (count > 1) {
+		lv_obj_remove_flag(prev_btn, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_remove_flag(next_btn, LV_OBJ_FLAG_HIDDEN);
+	} else {
+		lv_obj_add_flag(prev_btn, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_add_flag(next_btn, LV_OBJ_FLAG_HIDDEN);
+	}
+	photo_show(current);
+}
+
+static void photos_leave(void)
+{
+	picture_drop();
+	names_free();
+	display_sunxi_fb_enable(disp, true);
+}
+
+const struct screen_ops photos_ops = {
+	.create = photos_create,
+	.enter = photos_enter,
+	.leave = photos_leave,
+};

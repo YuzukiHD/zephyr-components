@@ -49,7 +49,7 @@ static char lower(char c)
 	return (c >= 'A' && c <= 'Z') ? c + 32 : c;
 }
 
-static int name_cmp(const char *a, const char *b)
+int ui_name_cmp(const char *a, const char *b)
 {
 	while (*a != '\0' && lower(*a) == lower(*b)) {
 		a++;
@@ -62,7 +62,7 @@ static bool has_ext(const char *name, const char *ext)
 {
 	size_t n = strlen(name), e = strlen(ext);
 
-	return n > e && name_cmp(name + n - e, ext) == 0;
+	return n > e && ui_name_cmp(name + n - e, ext) == 0;
 }
 
 static bool is_video(const char *name)
@@ -72,7 +72,7 @@ static bool is_video(const char *name)
 
 static bool is_photo(const char *name)
 {
-	return has_ext(name, ".jpg") || has_ext(name, ".jpeg") || has_ext(name, ".png");
+	return ui_photo_ext(name);
 }
 
 static const char *icon_of(const struct entry *e)
@@ -115,7 +115,7 @@ static bool before(const struct entry *a, const struct entry *b)
 	if (a->dir != b->dir) {
 		return a->dir;
 	}
-	return name_cmp(a->name, b->name) < 0;
+	return ui_name_cmp(a->name, b->name) < 0;
 }
 
 static bool shown_by_filter(const struct fs_dirent *d)
@@ -128,6 +128,9 @@ static bool shown_by_filter(const struct fs_dirent *d)
 	}
 	if (filter == FILES_VIDEO) {
 		return is_video(d->name);
+	}
+	if (filter == FILES_PHOTO) {
+		return is_photo(d->name);
 	}
 
 	return has_ext(d->name, ".gb") || has_ext(d->name, ".gbc") || has_ext(d->name, ".gba");
@@ -456,7 +459,8 @@ static void files_enter(void *arg)
 		lv_obj_add_flag(recent_btn, LV_OBJ_FLAG_HIDDEN);
 	}
 	lv_label_set_text(title_label, filter == FILES_NES ? "NES" : filter == FILES_GB ? "Game Boy" :
-				       filter == FILES_VIDEO ? "Videos" : "Files");
+				       filter == FILES_VIDEO ? "Videos" :
+				       filter == FILES_PHOTO ? "Photos" : "Files");
 	if (!storage_ready() || dir_load() != 0) {
 		strcpy(dir_path, ROOT);
 		if (!storage_ready() || dir_load() != 0) {

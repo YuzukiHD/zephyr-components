@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "MP5 player"
+
+config SAMPLE_MP5_ROOT
+	string "Directory the file browser starts in"
+	default "/SD:"
+
+config SAMPLE_MP5_VIDEO_DEFAULT
+	string "Video the Videos tile plays when it is not given a file"
+	default "/SD:/video540p-ysjf.mp4"
+
+config SAMPLE_MP5_SELFTEST
+	bool "Play the default video and seek, pause and change the volume by itself"
+	help
+	  For a check without touching the screen: the steps and the positions are printed.
+
+source "Kconfig.zephyr"

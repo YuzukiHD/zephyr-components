@@ -37,7 +37,7 @@ static void back_clicked(lv_event_t *e)
 static void browse_clicked(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	ui_goto_arg(SCR_FILES, NULL);
+	ui_files_open(NULL, FILES_ALL);
 }
 
 static void entry_clicked(lv_event_t *e)

@@ -18,6 +18,8 @@ target_sources(app PRIVATE
 	src/ui.c
 	src/ui_home.c
 	src/ui_files.c
+	src/ui_settings.c
+	src/net.c
 	src/ui_game.c
 	src/ui_stats.c
 	src/ui_recent.c

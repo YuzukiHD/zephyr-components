@@ -12,7 +12,7 @@
 #include "mp5.h"
 
 #define TILE_W		220
-#define TILE_H		300
+#define TILE_H		196
 #define TILE_GAP	21
 
 struct tile {
@@ -22,13 +22,18 @@ struct tile {
 	uint32_t color_top;
 	uint32_t color_bottom;
 	enum screen_id target;
+	enum files_filter filter;	/**< for the file browser */
 };
 
 static const struct tile tiles[] = {
 	{LV_SYMBOL_VIDEO, "Videos", "Recently played", 0x6C8CFF, 0x4A5DE8, SCR_RECENT},
-	{LV_SYMBOL_DIRECTORY, "Files", "Browse the SD card", 0xFFB547, 0xF2822C, SCR_FILES},
+	{LV_SYMBOL_DIRECTORY, "Files", "Browse the SD card", 0xFFB547, 0xF2822C, SCR_FILES,
+	 FILES_ALL},
 	{LV_SYMBOL_IMAGE, "Photos", "JPEG and PNG", 0x3DDC97, 0x1FA97A, SCR_PHOTOS},
 	{LV_SYMBOL_USB, "USB Display", "Second screen for a PC", 0xFF6C9B, 0xD443A8, SCR_USB},
+	{LV_SYMBOL_KEYBOARD, "NES", "Famicom games", 0xE5484D, 0xB02A37, SCR_FILES, FILES_NES},
+	{LV_SYMBOL_PLAY, "Game Boy", "GB, GBC and GBA", 0x9B6CFF, 0x6A3FD0, SCR_FILES, FILES_GB},
+	{LV_SYMBOL_SETTINGS, "Settings", "Time and network", 0x8B95A8, 0x5B6478, SCR_SETTINGS},
 };
 
 static const char *const day_names[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday",
@@ -44,7 +49,11 @@ static void tile_clicked(lv_event_t *e)
 {
 	const struct tile *t = lv_event_get_user_data(e);
 
-	ui_goto(t->target);
+	if (t->target == SCR_FILES) {
+		ui_files_open(NULL, t->filter);
+	} else {
+		ui_goto(t->target);
+	}
 }
 
 static lv_obj_t *tile_create(lv_obj_t *parent, const struct tile *t)
@@ -64,8 +73,8 @@ static lv_obj_t *tile_create(lv_obj_t *parent, const struct tile *t)
 	lv_obj_set_style_border_color(card, lv_color_hex(C_BORDER), 0);
 	lv_obj_set_style_bg_color(card, lv_color_hex(C_SURFACE2), LV_STATE_PRESSED);
 	lv_obj_set_style_border_color(card, lv_color_hex(t->color_top), LV_STATE_PRESSED);
-	lv_obj_set_style_pad_all(card, 26, 0);
-	lv_obj_set_style_pad_row(card, 8, 0);
+	lv_obj_set_style_pad_all(card, 22, 0);
+	lv_obj_set_style_pad_row(card, 6, 0);
 	lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
 	lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 	lv_obj_remove_flag(card, LV_OBJ_FLAG_SCROLLABLE);
@@ -73,15 +82,15 @@ static lv_obj_t *tile_create(lv_obj_t *parent, const struct tile *t)
 	lv_obj_add_event_cb(card, tile_clicked, LV_EVENT_CLICKED, (void *)t);
 
 	lv_obj_remove_style_all(badge);
-	lv_obj_set_size(badge, 96, 96);
+	lv_obj_set_size(badge, 64, 64);
 	lv_obj_set_style_radius(badge, LV_RADIUS_CIRCLE, 0);
 	lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, 0);
 	lv_obj_set_style_bg_color(badge, lv_color_hex(t->color_top), 0);
 	lv_obj_set_style_bg_grad_color(badge, lv_color_hex(t->color_bottom), 0);
 	lv_obj_set_style_bg_grad_dir(badge, LV_GRAD_DIR_VER, 0);
 	lv_obj_remove_flag(badge, LV_OBJ_FLAG_CLICKABLE);
-	lv_obj_set_style_margin_bottom(badge, 38, 0);
-	lv_obj_set_style_text_font(sym, &lv_font_montserrat_48, 0);
+	lv_obj_set_style_margin_bottom(badge, 14, 0);
+	lv_obj_set_style_text_font(sym, &lv_font_montserrat_28, 0);
 	lv_obj_set_style_text_color(sym, lv_color_white(), 0);
 	lv_label_set_text(sym, t->symbol);
 	lv_obj_center(sym);
@@ -93,6 +102,7 @@ static lv_obj_t *tile_create(lv_obj_t *parent, const struct tile *t)
 	lv_obj_set_width(sub, LV_PCT(100));
 	lv_obj_set_style_text_font(sub, &lv_font_montserrat_16, 0);
 	lv_obj_set_style_text_color(sub, lv_color_hex(C_DIM), 0);
+	lv_label_set_long_mode(sub, LV_LABEL_LONG_DOT);
 	lv_label_set_text(sub, t->subtitle);
 
 	return card;
@@ -181,13 +191,20 @@ static lv_obj_t *dialog_button(lv_obj_t *parent, const char *text, uint32_t colo
 	return b;
 }
 
+void ui_set_time_dialog(void);
+
 static void set_time_open(lv_event_t *e)
+{
+	ARG_UNUSED(e);
+	ui_set_time_dialog();
+}
+
+void ui_set_time_dialog(void)
 {
 	static char hours[24 * 3 + 1], minutes[60 * 3 + 1];
 	lv_obj_t *panel, *title, *row, *colon, *buttons;
 	struct tm tm;
 
-	ARG_UNUSED(e);
 	if (set_dialog != NULL) {
 		return;
 	}
@@ -270,13 +287,13 @@ static lv_obj_t *home_create(void)
 
 	lv_obj_set_flex_flow(scr, LV_FLEX_FLOW_COLUMN);
 	lv_obj_set_flex_align(scr, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-	lv_obj_set_style_pad_all(scr, 40, 0);
-	lv_obj_set_style_pad_row(scr, 26, 0);
+	lv_obj_set_style_pad_all(scr, 36, 0);
+	lv_obj_set_style_pad_row(scr, 20, 0);
 
 	/* the clock */
 	card = lv_obj_create(scr);
 	lv_obj_remove_style_all(card);
-	lv_obj_set_size(card, LV_PCT(100), 190);
+	lv_obj_set_size(card, LV_PCT(100), 170);
 	lv_obj_set_style_radius(card, 36, 0);
 	lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
 	lv_obj_set_style_bg_color(card, lv_color_hex(C_ACCENT), 0);
@@ -318,16 +335,19 @@ static lv_obj_t *home_create(void)
 	lv_obj_set_style_text_letter_space(brand, 3, 0);
 	lv_label_set_text(brand, "YUZUKINEKO  MP5");
 
-	/* the functions */
-	row = lv_obj_create(scr);
-	lv_obj_remove_style_all(row);
-	lv_obj_set_size(row, LV_PCT(100), TILE_H);
-	lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-	lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_START,
-			      LV_FLEX_ALIGN_START);
-	lv_obj_set_style_pad_column(row, TILE_GAP, 0);
-	lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+	/* the functions, four to a row */
+	row = NULL;
 	for (size_t i = 0; i < ARRAY_SIZE(tiles); i++) {
+		if (i % 4 == 0) {
+			row = lv_obj_create(scr);
+			lv_obj_remove_style_all(row);
+			lv_obj_set_size(row, LV_PCT(100), TILE_H);
+			lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+			lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START,
+					      LV_FLEX_ALIGN_START);
+			lv_obj_set_style_pad_column(row, TILE_GAP, 0);
+			lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+		}
 		tile_create(row, &tiles[i]);
 	}
 

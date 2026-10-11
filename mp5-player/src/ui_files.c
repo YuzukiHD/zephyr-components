@@ -37,6 +37,8 @@ struct entry {
 
 static struct entry *entries;
 static int count;
+static enum files_filter filter = FILES_ALL;
+static lv_obj_t *title_label;
 static char dir_path[PATH_MAX_LEN] = ROOT;
 static lv_obj_t *path_label, *list, *spacer, *empty_label;
 static lv_obj_t *rows[POOL];
@@ -116,12 +118,25 @@ static bool before(const struct entry *a, const struct entry *b)
 	return name_cmp(a->name, b->name) < 0;
 }
 
+static bool shown_by_filter(const struct fs_dirent *d)
+{
+	if (d->type == FS_DIR_ENTRY_DIR || filter == FILES_ALL) {
+		return true;
+	}
+	if (filter == FILES_NES) {
+		return has_ext(d->name, ".nes");
+	}
+
+	return has_ext(d->name, ".gb") || has_ext(d->name, ".gbc") || has_ext(d->name, ".gba");
+}
+
 static void entry_add(const struct fs_dirent *d)
 {
 	struct entry e = {.size = d->size, .dir = d->type == FS_DIR_ENTRY_DIR};
 	int at = count;
 
-	if (count >= MAX_ENTRIES || d->name[0] == '.' || strlen(d->name) >= NAME_MAX_LEN) {
+	if (count >= MAX_ENTRIES || d->name[0] == '.' || strlen(d->name) >= NAME_MAX_LEN ||
+	    !shown_by_filter(d)) {
 		return;
 	}
 	/* the font has no glyphs outside ASCII */
@@ -349,6 +364,8 @@ static lv_obj_t *files_create(void)
 	lv_obj_t *scr = ui_screen_new(false);
 	lv_obj_t *bar = ui_title_bar(scr, "Files", back_clicked);
 
+	title_label = lv_obj_get_child(bar, 1);
+
 	path_label = lv_label_create(bar);
 	lv_obj_set_flex_grow(path_label, 1);
 	lv_label_set_long_mode(path_label, LV_LABEL_LONG_DOT);
@@ -388,6 +405,12 @@ static lv_obj_t *files_create(void)
 	return scr;
 }
 
+void ui_files_open(const char *dir, enum files_filter f)
+{
+	filter = f;
+	ui_goto_arg(SCR_FILES, (void *)dir);
+}
+
 /* the argument is a directory to open, or NULL for the root; a file path opens its folder */
 static void files_enter(void *arg)
 {
@@ -399,6 +422,7 @@ static void files_enter(void *arg)
 	} else {
 		strcpy(dir_path, ROOT);
 	}
+	lv_label_set_text(title_label, filter == FILES_NES ? "NES" : filter == FILES_GB ? "Game Boy" : "Files");
 	if (!storage_ready() || dir_load() != 0) {
 		strcpy(dir_path, ROOT);
 		if (!storage_ready() || dir_load() != 0) {

@@ -36,6 +36,7 @@ enum screen_id {
 	SCR_USB,
 	SCR_RECENT,
 	SCR_GAME,
+	SCR_SETTINGS,
 	SCR_COUNT,
 };
 
@@ -67,6 +68,19 @@ void ui_goto_arg(enum screen_id id, void *arg);
 /** Plays a video; the back button of the player returns to @p from (SCR_FILES or SCR_RECENT) */
 void ui_player_open(const char *path, enum screen_id from);
 
+/** What the file browser lists besides the folders */
+enum files_filter {
+	FILES_ALL,
+	FILES_NES,	/**< .nes */
+	FILES_GB,	/**< .gb .gbc .gba */
+};
+
+/** Opens the file browser in @p dir (NULL: the root of the card) listing only @p filter */
+void ui_files_open(const char *dir, enum files_filter filter);
+
+/** The dialog that sets the time of day; used by the home and the settings screen */
+void ui_set_time_dialog(void);
+
 /** Starts a game (.nes .gb .gbc .gba); the cross of the game screen returns to @p from */
 void ui_game_open(const char *path, enum screen_id from);
 
@@ -77,10 +91,20 @@ extern const struct screen_ops home_ops;
 extern const struct screen_ops files_ops;
 extern const struct screen_ops recent_ops;
 extern const struct screen_ops game_ops;
+extern const struct screen_ops settings_ops;
 extern const struct screen_ops player_ops;
 
 /** Raises the CPU clock to CONFIG_SAMPLE_MP5_CPU_MHZ, each step checked */
 void cpu_clock_setup(void);
+
+/* ---- network ---- */
+
+/** One line about the Wi-Fi link, for the settings */
+const char *net_status(void);
+/** One line about the last time from the network */
+const char *net_sync_status(void);
+/** Asks the network for the time and sets the clock with the answer */
+void net_sync_time(void);
 
 /* ---- statistics, printed when they happen ---- */
 

@@ -19,7 +19,7 @@
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/dt-bindings/clock/sun252i-f101-ccu.h>
 #include <zephyr/sys/printk.h>
-#include <gbsp_zephyr/gba.h>
+#include <gbsp_zephyr/gbsp.h>
 
 #include "app.h"
 
@@ -263,7 +263,7 @@ int main(void)
 		return 0;
 	}
 	printk("ROM %s, save %s\n", rom_path, save_path);
-	ret = gba_open(rom_path, save_path, RATE);
+	ret = gbsp_open(rom_path, save_path, RATE);
 	if (ret != 0) {
 		printk("cannot start %s: %d\n", rom_path, ret);
 		return 0;
@@ -287,15 +287,15 @@ int main(void)
 		for (int i = 0; i < n_frames; i++) {
 			uint32_t c0 = k_cycle_get_32();
 
-			gba_set_frame_buffer(video_acquire());
-			gba_set_frameskip(CONFIG_SAMPLE_GBA_BENCH_FRAMESKIP);
-			gba_run_frame();
-			while (gba_audio_read(sink, ARRAY_SIZE(sink) / 2) > 0) {
+			gbsp_set_frame_buffer(video_acquire());
+			gbsp_set_frameskip(CONFIG_SAMPLE_GBA_BENCH_FRAMESKIP);
+			gbsp_run_frame();
+			while (gbsp_audio_read(sink, ARRAY_SIZE(sink) / 2) > 0) {
 			}
 			worst = MAX(worst, k_cycle_get_32() - c0);
 			if ((i + 1) % 200 == 0) {
 				unsigned int w, h;
-				const uint16_t *f = gba_frame(&w, &h);
+				const uint16_t *f = gbsp_frame(&w, &h);
 
 				printk("bench: frame %d crc %08x\n", i + 1,
 				       (uint32_t)crc32_ieee((const uint8_t *)f, w * 2 * h));
@@ -312,8 +312,8 @@ int main(void)
 		uint32_t c0 = k_cycle_get_32();
 		size_t n;
 
-		gba_set_keys(pad_keys());
-		gba_set_frame_buffer(video_acquire());
+		gbsp_set_keys(pad_keys());
+		gbsp_set_frame_buffer(video_acquire());
 		/* behind the sound: draw less until it has caught up */
 		{
 			size_t queued = audio_queued();
@@ -323,19 +323,19 @@ int main(void)
 			} else if (queued > SKIP_RESUME) {
 				catching_up = false;
 			}
-			gba_set_frameskip(catching_up ? MAX(SKIP_COUNT, SKIP_BASE) : SKIP_BASE);
+			gbsp_set_frameskip(catching_up ? MAX(SKIP_COUNT, SKIP_BASE) : SKIP_BASE);
 		}
-		drawn = gba_run_frame();
+		drawn = gbsp_run_frame();
 		emu_us += k_cyc_to_us_floor32(k_cycle_get_32() - c0);
 		if (drawn) {
 			unsigned int w, h;
 
-			gba_frame(&w, &h);
+			gbsp_frame(&w, &h);
 			video_present(w, h);
 		} else {
 			skipped++;
 		}
-		while ((n = gba_audio_read(pcm, ARRAY_SIZE(pcm) / 2)) > 0) {
+		while ((n = gbsp_audio_read(pcm, ARRAY_SIZE(pcm) / 2)) > 0) {
 			size_t done = 0;
 
 			pushed += n;
@@ -353,7 +353,7 @@ int main(void)
 			k_msleep(1);
 		}
 		if (k_uptime_get() - t_save >= SAVE_MS) {
-			gba_save_flush();
+			gbsp_save_flush();
 			t_save = k_uptime_get();
 		}
 		if (k_uptime_get() - t_report >= REPORT_MS) {

@@ -9,7 +9,7 @@ config GBSP
 	  Build the gpSP core (core/) as a library. It translates the ARM code
 	  of the game to RISC-V when CONFIG_GBSP_DYNAREC is on, and interprets it
 	  otherwise. The built-in open source BIOS is used, no BIOS file is
-	  needed. The interface is the one of the mGBA module (gbsp_zephyr/gba.h).
+	  needed. The interface is the one of the mGBA module (gbsp_zephyr/gbsp.h, the functions are called gbsp_*).
 
 if GBSP
 

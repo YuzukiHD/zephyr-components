@@ -27,7 +27,7 @@
 #include "sound.h"
 #include "video.h"
 
-#include <gbsp_zephyr/gba.h>
+#include <gbsp_zephyr/gbsp.h>
 #include "bios.h"
 
 /* ---- what the core expects its application to define ------------------------------------- */
@@ -97,7 +97,7 @@ static int read_file(const char *path, void *buf, size_t max, size_t *got)
 	return 0;
 }
 
-int gba_open(const char *rom_path, const char *save_path, unsigned int out_rate)
+int gbsp_open(const char *rom_path, const char *save_path, unsigned int out_rate)
 {
 	struct fs_dirent st;
 	size_t got;
@@ -141,37 +141,37 @@ int gba_open(const char *rom_path, const char *save_path, unsigned int out_rate)
 	return 0;
 }
 
-void gba_close(void)
+void gbsp_close(void)
 {
 	if (!g.open) {
 		return;
 	}
-	gba_save_flush();
+	gbsp_save_flush();
 	memory_term();
 	g.open = false;
 }
 
-void gba_set_frame_buffer(uint16_t *buf)
+void gbsp_set_frame_buffer(uint16_t *buf)
 {
 	g.frame = buf;
 	gba_screen_pixels = buf;
 }
 
-void gba_set_frameskip(int skip)
+void gbsp_set_frameskip(int skip)
 {
 	g.skip = skip;
 }
 
 /* the bits of GBA_KEY_* are the bits of the key register of the console */
-void gba_set_keys(uint32_t keys)
+void gbsp_set_keys(uint32_t keys)
 {
 	set_input_keys(keys & 0x3ff);
 }
 
-const uint16_t *gba_frame(unsigned int *width, unsigned int *height)
+const uint16_t *gbsp_frame(unsigned int *width, unsigned int *height)
 {
-	*width = GBA_WIDTH;
-	*height = GBA_HEIGHT;
+	*width = GBSP_WIDTH;
+	*height = GBSP_HEIGHT;
 
 	return g.frame;
 }
@@ -216,7 +216,7 @@ static void resample(const int16_t *in, unsigned int n)
 	}
 }
 
-int gba_run_frame(void)
+int gbsp_run_frame(void)
 {
 	static int16_t mix[(GBA_SOUND_FREQUENCY / 60 + 64) * 2];
 	bool drawn;
@@ -244,7 +244,7 @@ int gba_run_frame(void)
 	return drawn;
 }
 
-size_t gba_audio_read(int16_t *out, size_t frames)
+size_t gbsp_audio_read(int16_t *out, size_t frames)
 {
 	size_t n = MIN(frames, (size_t)g.count);
 
@@ -258,12 +258,12 @@ size_t gba_audio_read(int16_t *out, size_t frames)
 	return n;
 }
 
-size_t gba_audio_available(void)
+size_t gbsp_audio_available(void)
 {
 	return g.count;
 }
 
-int gba_save_flush(void)
+int gbsp_save_flush(void)
 {
 	struct fs_file_t f;
 	uint32_t crc;

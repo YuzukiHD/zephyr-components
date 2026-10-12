@@ -20,12 +20,12 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/printk.h>
-#include <gbsp_zephyr/gba.h>
+#include <gbsp_zephyr/gbsp.h>
 
 #include "app.h"
 
-#define STRIDE	(GBA_WIDTH * 2)
-#define BUF_SZ	ROUND_UP(STRIDE * GBA_HEIGHT, 64)
+#define STRIDE	(GBSP_WIDTH * 2)
+#define BUF_SZ	ROUND_UP(STRIDE * GBSP_HEIGHT, 64)
 #define NBUF	4
 
 static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));

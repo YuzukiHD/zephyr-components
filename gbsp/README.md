@@ -14,10 +14,10 @@ that was changed to build here, not a submodule:
 - the zip loader, the diagnostic probes and the libretro front end are gone;
 - the cheat parser has no `sscanf` (the minimal C library has none).
 
-`src/gbsp_player.c` gives the core the interface of the mGBA module (`include/gbsp_zephyr/gba.h`
-has the same functions as `mgba_zephyr/gba.h`): `gba_open()`, `gba_run_frame()`,
-`gba_audio_read()` (the 32768 Hz sound of the core resampled to the rate asked for),
-`gba_set_keys()`, `gba_save_flush()`. Only Game Boy Advance ROMs are supported (no Game Boy).
+`src/gbsp_player.c` gives the core the interface of the mGBA module (`include/gbsp_zephyr/gbsp.h`
+has the same functions as `mgba_zephyr/gba.h`, named `gbsp_*`, so both can be in one image): `gbsp_open()`, `gbsp_run_frame()`,
+`gbsp_audio_read()` (the 32768 Hz sound of the core resampled to the rate asked for),
+`gbsp_set_keys()`, `gbsp_save_flush()`. Only Game Boy Advance ROMs are supported (no Game Boy).
 
 ## Use
 

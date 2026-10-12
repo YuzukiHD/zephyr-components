@@ -11,6 +11,7 @@
 #include <zephyr/sys/printk.h>
 
 #include "core/app.h"
+#include "core/cfg.h"
 #include "core/storage.h"
 
 static FATFS fat_fs;
@@ -20,10 +21,20 @@ static struct fs_mount_t mp = {
 	.mnt_point = MP5_MOUNT_POINT,
 };
 static bool mounted;
+static unsigned int generation;
+static K_MUTEX_DEFINE(mount_lock);
+
+#define SCAN_MS		3000	/* between two tries to mount a missing card */
+#define HEALTH_SCANS	2	/* a mounted card is read every 2nd scan */
 
 bool storage_ready(void)
 {
 	return mounted;
+}
+
+unsigned int storage_generation(void)
+{
+	return generation;
 }
 
 bool storage_space(uint64_t *total, uint64_t *free_bytes)
@@ -56,15 +67,72 @@ static void report_unreadable(void)
 }
 
 /* not mounting is no error of the start: the player runs without a card */
-static int storage_mount(void)
+static int try_mount(bool first)
 {
-	int ret = fs_mount(&mp);
+	int ret;
 
-	mounted = ret == 0;
-	printk("mp5: SD card %s (%d)\n", mounted ? "mounted" : "not available", ret);
-	if (!mounted) {
+	k_mutex_lock(&mount_lock, K_FOREVER);
+	ret = mounted ? 0 : fs_mount(&mp);
+	if (ret == 0 && !mounted) {
+		mounted = true;
+		generation++;
+		printk("mp5: SD card mounted\n");
+		if (!first) {
+			cfg_load();
+		}
+	} else if (ret != 0 && first) {
+		printk("mp5: SD card not available (%d), trying again every %d s\n", ret,
+		       SCAN_MS / 1000);
 		report_unreadable();
 	}
+	k_mutex_unlock(&mount_lock);
+
+	return ret;
+}
+
+/* a card that is pulled out is not announced: a read of the first sector tells */
+static void check_card(void)
+{
+	static uint8_t sector0[512] __aligned(64);
+	static int failed;
+
+	if (disk_access_read("SD", sector0, 0, 1) == 0) {
+		failed = 0;
+		return;
+	}
+	if (++failed < 2) {
+		return;
+	}
+	failed = 0;
+	k_mutex_lock(&mount_lock, K_FOREVER);
+	mounted = false;
+	generation++;
+	(void)fs_unmount(&mp);
+	k_mutex_unlock(&mount_lock);
+	printk("mp5: SD card removed\n");
+}
+
+static void storage_watch(void *a, void *b, void *c)
+{
+	unsigned int scan = 0;
+
+	ARG_UNUSED(a);
+	ARG_UNUSED(b);
+	ARG_UNUSED(c);
+	for (;;) {
+		k_msleep(SCAN_MS);
+		if (!mounted) {
+			(void)try_mount(false);
+		} else if (++scan % HEALTH_SCANS == 0) {
+			check_card();
+		}
+	}
+}
+K_THREAD_DEFINE(storage_watch_thread, 4096, storage_watch, NULL, NULL, NULL, 14, 0, 0);
+
+static int storage_mount(void)
+{
+	(void)try_mount(true);
 
 	return 0;
 }

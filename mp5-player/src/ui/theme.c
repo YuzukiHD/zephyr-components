@@ -119,6 +119,21 @@ void ui_theme_set(bool dark, int accent)
 	ui_rebuild_all();
 }
 
+void ui_theme_reload(void)
+{
+	bool dark = ui_theme_dark();
+	int accent = theme_accent;
+	const char *b = cfg_get("brightness");
+
+	theme_load();
+	if (b != NULL) {
+		ui_brightness_set(atoi(b), false);
+	}
+	if (dark != ui_theme_dark() || accent != theme_accent) {
+		ui_rebuild_all();
+	}
+}
+
 static int theme_step(void)
 {
 	const char *b;

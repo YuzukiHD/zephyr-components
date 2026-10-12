@@ -40,6 +40,9 @@ uint32_t ui_theme_accent_color(int index);
 /** Sets the theme, saves it and builds the screens again */
 void ui_theme_set(bool dark, int accent);
 
+/** Takes the saved theme and brightness again, after the settings file became readable */
+void ui_theme_reload(void);
+
 /** Brightness of the backlight, 10..255 */
 int ui_brightness(void);
 /** Sets the brightness; @p save also writes it to the settings */

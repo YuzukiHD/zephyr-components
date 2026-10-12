@@ -16,6 +16,7 @@
 #include <zephyr/sys/printk.h>
 
 #include "core/app.h"
+#include "core/storage.h"
 #include "debug/stats.h"
 #include "ui/ui.h"
 
@@ -155,7 +156,16 @@ void ui_loop(void)
 	       (int)lv_display_get_vertical_resolution(NULL));
 	for (;;) {
 		static uint32_t slow, worst_us, report_ms;
+		static unsigned int card_seen;
 		uint32_t t0 = k_cycle_get_32(), next, us;
+
+		/* a card that came later: the saved theme and brightness are in the settings now */
+		if (card_seen != storage_generation()) {
+			card_seen = storage_generation();
+			if (storage_ready()) {
+				ui_theme_reload();
+			}
+		}
 
 		next = lv_timer_handler();
 		us = k_cyc_to_us_floor32(k_cycle_get_32() - t0);

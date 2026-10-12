@@ -132,10 +132,18 @@ static void clock_refresh(void)
 
 static lv_timer_t *clock_tmr;
 
+static void storage_refresh(void);
+
 static void clock_timer(lv_timer_t *t)
 {
+	static unsigned int card_seen;
+
 	ARG_UNUSED(t);
 	clock_refresh();
+	if (card_seen != storage_generation()) {
+		card_seen = storage_generation();
+		storage_refresh();
+	}
 }
 
 static void storage_refresh(void)

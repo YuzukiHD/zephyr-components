@@ -53,13 +53,25 @@ static void save(void)
 	fs_close(&f);
 }
 
+static int cfg_find(const char *key, int n)
+{
+	for (int i = 0; i < n; i++) {
+		if (strcmp(items[i].key, key) == 0) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
 void cfg_load(void)
 {
 	char buf[3072];
-	int n;
+	int n, kept;
 
 	k_mutex_lock(&lock, K_FOREVER);
-	count = 0;
+	/* settings that were changed while there was no card win over the ones in the file */
+	kept = count;
 	n = storage_ready() ? file_read_text(CFG_FILE, buf, sizeof(buf)) : -1;
 	if (n >= 0) {
 		if (n > 0) {
@@ -77,11 +89,17 @@ void cfg_load(void)
 					continue;
 				}
 				*sp++ = '\0';
+				if (cfg_find(line, kept) >= 0) {
+					continue;
+				}
 				strncpy(items[count].key, line, KEY_LEN - 1);
 				strncpy(items[count].val, sp, VAL_LEN - 1);
 				count++;
 			}
 		}
+	}
+	if (kept > 0 && n >= 0) {
+		save();
 	}
 	k_mutex_unlock(&lock);
 }

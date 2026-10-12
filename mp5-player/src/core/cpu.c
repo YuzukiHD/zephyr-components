@@ -6,6 +6,7 @@
 
 /* Raises the CPU clock above what the boot stub sets up (600 MHz) */
 
+#include <stdlib.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/dt-bindings/clock/sun252i-f101-ccu.h>
@@ -17,25 +18,32 @@
 /* A busy loop over a checksummed block of memory: a CPU that is too fast corrupts it */
 static bool cpu_selftest(void)
 {
-	static uint32_t blk[16 * 1024];
+	/* from the malloc arena, so that no RAM stays reserved after the start */
+	const unsigned int words = 16 * 1024;
+	uint32_t *blk = malloc(words * sizeof(*blk));
 	uint32_t sum = 0, ref = 0;
+	bool ok = true;
 
-	for (unsigned int i = 0; i < ARRAY_SIZE(blk); i++) {
+	if (blk == NULL) {
+		return true;
+	}
+	for (unsigned int i = 0; i < words; i++) {
 		blk[i] = i * 2654435761U;
 	}
-	for (int round = 0; round < 50; round++) {
+	for (int round = 0; ok && round < 50; round++) {
 		sum = 0;
-		for (unsigned int i = 0; i < ARRAY_SIZE(blk); i++) {
+		for (unsigned int i = 0; i < words; i++) {
 			sum = (sum << 1 | sum >> 31) ^ blk[i] ^ (sum * 3U);
 		}
 		if (round == 0) {
 			ref = sum;
 		} else if (sum != ref) {
-			return false;
+			ok = false;
 		}
 	}
+	free(blk);
 
-	return true;
+	return ok;
 }
 
 void cpu_clock_setup(void)

@@ -25,7 +25,7 @@
 #include "app.h"
 
 #define STRIDE	(GBSP_WIDTH * 2)
-#define BUF_SZ	ROUND_UP(STRIDE * GBSP_HEIGHT, 64)
+#define BUF_SZ	ROUND_UP(GBSP_FRAME_BYTES, 64)
 #define NBUF	4
 
 static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));

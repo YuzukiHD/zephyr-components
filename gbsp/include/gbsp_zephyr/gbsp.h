@@ -24,6 +24,12 @@ extern "C" {
 
 #define GBSP_WIDTH  240
 #define GBSP_HEIGHT 160
+/**
+ * Size of a frame buffer the core draws into: the picture and one more line, which the object
+ * window pass uses as scratch. A buffer of GBSP_WIDTH x GBSP_HEIGHT only is overrun by 480 bytes.
+ */
+#define GBSP_FRAME_BYTES ((GBSP_WIDTH) * ((GBSP_HEIGHT) + 1) * 2)
+
 /** Frame rate of the console, 16777216 / 280896 */
 #define GBSP_FPS_X1000 59727
 

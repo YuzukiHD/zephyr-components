@@ -15,6 +15,7 @@ settings row and no file type behind.
 | Photos | `MP5_FEATURE_PHOTOS` | JPEG and PNG with pinch zoom |
 | Calculator | `MP5_FEATURE_CALCULATOR` | four function pocket calculator |
 | Games | `MP5_FEATURE_GAMES` | NES, Game Boy, Game Boy Color, Game Boy Advance |
+| Paged GBA ROM | `MP5_GAMES_PAGED_ROM` | MMU on, the GBA ROM (up to 32 MiB) is mapped from the card and paged in; fixed 8 MiB malloc arena, about 3.4 MiB page frames. Off: ROMs up to 6 MiB are read into memory |
 | USB Display | `MP5_FEATURE_USB_DISPLAY` | second screen of a PC with touch |
 | Network | `MP5_FEATURE_NET` | Wi-Fi (AIC8800, saved passwords) and the time from NTP |
 | Bluetooth | `MP5_FEATURE_BT` | the connection is shown in the settings |

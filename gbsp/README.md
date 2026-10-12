@@ -78,6 +78,15 @@ translated code calls 7%, the rest is timers, sound and the frame loop.
 - The core uses almost no floating point (fixed point everywhere, the sound resampler is integer),
   so the FPU has nothing to speed up.
 
+## Playing
+
+`west build -b yuzukineko -d build/gbsp zephyr-components/gbsp/samples/gbsp_player` runs
+`/SD:/Pokemon-FireRed.gba` (`CONFIG_SAMPLE_GBA_ROM`; when it does not exist the first GBA ROM
+in the root of the card is used). CPU 960 MHz, every frame drawn (60 fps), 48 kHz sound that
+paces the emulation, the keys are the touch buttons on the screen, the save file
+`Pokemon-FireRed.sav` is next to the ROM and written every 3 s. Measured on the board: 4-6 ms of
+emulation per frame, no sound underrun.
+
 ## Notes
 
 - The routines between C and the translated code (`core/riscv/riscv_stubs.c`) are generated at

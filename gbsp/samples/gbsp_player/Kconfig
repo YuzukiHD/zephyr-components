@@ -4,7 +4,7 @@ mainmenu "GBA player (gpSP)"
 
 config SAMPLE_GBA_ROM
 	string "ROM file"
-	default "/SD:/game.gba"
+	default "/SD:/Pokemon-FireRed.gba"
 
 config SAMPLE_GBA_RATE
 	int "Sound output rate"

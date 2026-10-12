@@ -38,23 +38,33 @@ configure_file(${S}/core/version.c.in ${MGBA_GEN}/version.c)
 
 zephyr_library_named(mgba)
 
+# The code relocation of an application finds a file by the name of its object. The files below
+# have the same name as a file of the Game Boy or of the core, so the Game Boy Advance ones (and
+# the sound of the Game Boy, that the Game Boy Advance shares) are compiled from copies with a name
+# of their own.
+set(HOT_GBA_FILES audio core io timer video)
+foreach(f ${HOT_GBA_FILES})
+  configure_file(${S}/gba/${f}.c ${MGBA_GEN}/gba_${f}_hot.c COPYONLY)
+endforeach()
+configure_file(${S}/gb/audio.c ${MGBA_GEN}/gb_audio_hot.c COPYONLY)
+
 zephyr_library_sources(
   ${S}/arm/arm.c ${S}/arm/decoder-arm.c ${S}/arm/decoder.c
   ${S}/arm/decoder-thumb.c ${S}/arm/isa-arm.c ${S}/arm/isa-thumb.c
 
-  ${S}/gb/audio.c
+  ${MGBA_GEN}/gb_audio_hot.c
   ${S}/gb/cheats.c ${S}/gb/core.c ${S}/gb/gb.c ${S}/gb/input.c ${S}/gb/io.c ${S}/gb/mbc.c ${S}/gb/mbc/huc-3.c ${S}/gb/mbc/licensed.c ${S}/gb/mbc/mbc.c ${S}/gb/mbc/pocket-cam.c ${S}/gb/mbc/tama5.c ${S}/gb/mbc/unlicensed.c ${S}/gb/memory.c ${S}/gb/overrides.c ${S}/gb/serialize.c ${S}/gb/renderers/cache-set.c ${S}/gb/renderers/software.c ${S}/gb/sio.c ${S}/gb/timer.c ${S}/gb/video.c
   ${S}/sm83/decoder.c ${S}/sm83/isa-sm83.c ${S}/sm83/sm83.c
-  ${S}/gba/audio.c ${S}/gba/bios.c ${S}/gba/cart/ereader.c ${S}/gba/cart/gpio.c
+  ${MGBA_GEN}/gba_audio_hot.c ${S}/gba/bios.c ${S}/gba/cart/ereader.c ${S}/gba/cart/gpio.c
   ${S}/gba/cart/matrix.c ${S}/gba/cart/unlicensed.c ${S}/gba/cart/vfame.c
   ${S}/gba/cheats.c ${S}/gba/cheats/codebreaker.c ${S}/gba/cheats/gameshark.c
-  ${S}/gba/cheats/parv3.c ${S}/gba/core.c ${S}/gba/dma.c ${S}/gba/gba.c
-  ${S}/gba/hle-bios.c ${S}/gba/input.c ${S}/gba/io.c src/gba_memory.c
+  ${S}/gba/cheats/parv3.c ${MGBA_GEN}/gba_core_hot.c ${S}/gba/dma.c ${S}/gba/gba.c
+  ${S}/gba/hle-bios.c ${S}/gba/input.c ${MGBA_GEN}/gba_io_hot.c src/gba_memory.c
   ${S}/gba/overrides.c ${S}/gba/renderers/cache-set.c ${S}/gba/renderers/common.c
   ${S}/gba/renderers/software-bg.c src/renderers/software-mode0.c
   ${S}/gba/renderers/software-obj.c ${S}/gba/renderers/video-software.c
   ${S}/gba/savedata.c ${S}/gba/serialize.c ${S}/gba/sharkport.c ${S}/gba/sio.c ${S}/gba/sio/gbp.c
-  ${S}/gba/timer.c ${S}/gba/video.c
+  ${MGBA_GEN}/gba_timer_hot.c ${MGBA_GEN}/gba_video_hot.c
 
   ${S}/core/bitmap-cache.c ${S}/core/cache-set.c ${S}/core/cheats.c ${S}/core/config.c ${S}/core/serialize.c
   ${S}/core/core.c ${S}/core/input.c

@@ -2607,7 +2607,12 @@ u32 load_gamepak(const char *name,
 
 s32 load_bios(char *name)
 {
+  struct fs_dirent ent;
   struct fs_file_t fd;
+
+  /* the file is optional: do not make the file system log an error when it is not there */
+  if(fs_stat(name, &ent) != 0)
+    return -1;
 
   fs_file_t_init(&fd);
   if(fs_open(&fd, name, FS_O_READ) != 0)

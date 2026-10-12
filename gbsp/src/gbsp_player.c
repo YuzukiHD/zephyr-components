@@ -78,10 +78,17 @@ static struct {
 
 static int read_file(const char *path, void *buf, size_t max, size_t *got)
 {
+	struct fs_dirent ent;
 	struct fs_file_t f;
 	ssize_t n;
 	int ret;
 
+	/* a file that is not there is normal (the first run has no save): do not make the file
+	 * system log an error for it */
+	ret = fs_stat(path, &ent);
+	if (ret < 0) {
+		return ret;
+	}
 	fs_file_t_init(&f);
 	ret = fs_open(&f, path, FS_O_READ);
 	if (ret < 0) {

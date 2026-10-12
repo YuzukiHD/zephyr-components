@@ -15,7 +15,7 @@
 #include <zephyr/sys/printk.h>
 
 #define MAX_SAMPLES	6000
-#define CODE_LO		0x40010000UL
+#define CODE_LO		0x40000000UL
 #define CODE_HI		0x40200000UL
 
 K_THREAD_STACK_DEFINE(prof_stack, 2048);

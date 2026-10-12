@@ -4,15 +4,6 @@
  * 0x0e000000. The window is 6 MiB, up to the end of the 16 MiB flash.
  */
 
-/*
- * The SoC description keeps the first 64 KiB of the PSRAM free for a boot loader that hands a
- * configuration block over. This image starts from the flash and nobody writes there: the memory
- * is RAM like the rest.
- */
-&sram0 {
-	reg = <0x40000000 0x1000000>;
-};
-
 / {
 	soc {
 		xip_flash: flash@e000000 {

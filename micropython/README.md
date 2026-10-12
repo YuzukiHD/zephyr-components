@@ -15,7 +15,7 @@ zephyr-components/micropython/build.sh [build/upy] [-DCONFIG_MICROPY_HEAP_SIZE=.
 
 `build.sh` configures with the cross toolchain and builds with `CROSS_COMPILE` unset:
 the build also compiles `mpy-cross` for the host, and with `CROSS_COMPILE` set it is
-built for RISC-V and fails to link.  The image goes to `0x40010000` like the other
+built for RISC-V and fails to link.  The image goes to `0x40000000` like the other
 samples; the REPL is on the console (UART3 of the EVB, 115200).
 
 ## What works (verified on the EVB)

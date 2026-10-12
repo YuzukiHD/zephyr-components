@@ -23,4 +23,4 @@ west build -b yuzukineko -d build/gpio zephyr-components/examples/gpio_api
 ```
 
 Download `build/gpio/zephyr/zephyr.bin` as described in the documentation (`xfel ddr f101-s3`,
-`xfel write 0x40010000 zephyr.bin`, `xfel exec 0x40010000`). The console is UART1 (PB0/PB1), 115200 8N1.
+`xfel write 0x40000000 zephyr.bin`, `xfel exec 0x40000000`). The console is UART1 (PB0/PB1), 115200 8N1.

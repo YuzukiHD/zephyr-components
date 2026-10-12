@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Make a .uf2 file (or a raw flash image) for the F101 boards.
 
-  mkuf2.py app zephyr.bin -o app.uf2             application at 0x200000, loaded to 0x40010000
+  mkuf2.py app zephyr.bin -o app.uf2             application at 0x200000, loaded to 0x40000000
   mkuf2.py app zephyr.bin --load 0x40000000 ...  another load (= entry) address
   mkuf2.py system zephyr.bin -o downloader.uf2   system program (the UF2 downloader) at 0x30000
   mkuf2.py loader boot.img -o loader.uf2         the boot loader, written at 0 (family: system)
@@ -47,7 +47,7 @@ def main():
     ap.add_argument("kind", choices=["app", "system", "loader"])
     ap.add_argument("input")
     ap.add_argument("-o", "--output", required=True)
-    ap.add_argument("--load", type=lambda v: int(v, 0), default=0x40010000, help="PSRAM address of the program (default 0x40010000)")
+    ap.add_argument("--load", type=lambda v: int(v, 0), default=0x40000000, help="PSRAM address of the program (default 0x40010000)")
     ap.add_argument("--id", type=lambda v: int(v, 0), default=0)
     ap.add_argument("--raw", action="store_true", help="write the flash image, not a UF2 file")
     a = ap.parse_args()

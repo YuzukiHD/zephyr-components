@@ -59,7 +59,7 @@ timer for comparing two builds (`CONFIG_BOCHS_DIGEST`), `0005` guest RAM starts 
 
 ## Memory
 
-The board has 16 MB of RAM in total (0x40000000), the image starts at 0x40010000 and the C library
+The board has 16 MB of RAM in total (0x40000000), the image starts at 0x40000000 and the C library
 heap takes everything above it (13.7 MB with the display, about 14.8 without).
 
 | | Size |

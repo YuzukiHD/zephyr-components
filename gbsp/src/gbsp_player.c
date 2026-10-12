@@ -123,6 +123,9 @@ int gbsp_open(const char *rom_path, const char *save_path, unsigned int out_rate
 	}
 	gbsp_rom_blocks = MIN((unsigned)((st.size + 0xFFFFF) >> 20), CONFIG_GBSP_ROM_BUFFER_MB);
 
+	if (gpsp_ram_alloc() != 0) {
+		return -ENOMEM;
+	}
 	init_gamepak_buffer();
 	init_sound();
 	if (load_bios("/SD:/gba_bios.bin") != 0) {
@@ -155,6 +158,8 @@ void gbsp_close(void)
 	}
 	gbsp_save_flush();
 	memory_term();
+	unmap_jit_block(rom_translation_cache, 0);
+	gpsp_ram_free();
 	g.open = false;
 }
 

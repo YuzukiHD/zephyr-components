@@ -20,6 +20,14 @@ config NEKOBOX_THEME_TEST
 	  Theme, brightness, saved passwords, a Wi-Fi scan and joining the saved network, and
 	  starting and leaving a game, for the features that are built.
 
+config NEKOBOX_SOAK
+	bool "Play every video and game on the card, twice, and print the free memory after each"
+	depends on NEKOBOX_DEBUG
+	help
+	  Finds memory that is not given back: the largest block and the free memory in total
+	  of the malloc arena are printed before the first file and after every one. Ends with PASS
+	  or FAIL.
+
 config NEKOBOX_PROFILE
 	bool "Sample where the game thread spends its time and print the busiest code blocks"
 	depends on NEKOBOX_DEBUG && NEKOBOX_FEATURE_GAMES

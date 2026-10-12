@@ -31,16 +31,19 @@
 static void *jit_base;
 
 void *map_jit_block(unsigned size) {
-    if (jit_base)
-        return jit_base;
-    jit_base = aligned_alloc(64, (size + 63) & ~63U);
+    if (!jit_base)
+        jit_base = aligned_alloc(64, (size + 63) & ~63U);
     return jit_base;
 }
 
+/* Given back when the game is closed: the memory is the same arena the video decoder takes
+ * its pictures from. */
 void unmap_jit_block(void *bufptr, unsigned size) {
-    /* the caches live as long as the game */
-    (void)bufptr;
     (void)size;
+    if (bufptr == jit_base) {
+        free(jit_base);
+        jit_base = NULL;
+    }
 }
 #else /* !__ZEPHYR__ */
 

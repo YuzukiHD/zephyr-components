@@ -1454,9 +1454,6 @@ u8 *memory_map_read [8 * 1024];
 u16 oam_ram[512];
 u16 palette_ram[512];
 u16 palette_ram_converted[512];
-u8 ewram[1024 * 256 * 2];
-u8 iwram[1024 * 32 * 2];
-u8 vram[1024 * 96];
 u16 io_registers[512];
 #endif
 

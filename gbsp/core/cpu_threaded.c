@@ -78,7 +78,6 @@ typedef struct
   u32 next_entry;
 } hashhdr_type;
 
-u32 rom_branch_hash[ROM_BRANCH_HASH_SIZE];
 
 typedef struct
 {
@@ -3407,14 +3406,14 @@ void flush_translation_cache_rom(void)
   last_rom_translation_ptr = &rom_translation_cache[rom_cache_watermark];
   rom_translation_ptr      = &rom_translation_cache[rom_cache_watermark];
 
-  memset(rom_branch_hash, 0, sizeof(rom_branch_hash));
+  memset(rom_branch_hash, 0, ROM_BRANCH_HASH_SIZE * sizeof(u32));
 }
 
 void init_dynarec_caches(void)
 {
   /* Initialize caches so that we can start initalizing the emitter. */
   rom_translation_ptr = last_rom_translation_ptr = &rom_translation_cache[0];
-  memset(rom_branch_hash, 0, sizeof(rom_branch_hash));
+  memset(rom_branch_hash, 0, ROM_BRANCH_HASH_SIZE * sizeof(u32));
 
   ram_translation_ptr = last_ram_translation_ptr = &ram_translation_cache[0];
   memset(iwram, 0, 0x8000);

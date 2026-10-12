@@ -957,7 +957,7 @@ static const u8 obj_dim_table[3][4][2] = {
   { {8, 16}, {8, 32}, {16, 32}, {32, 64} }
 };
 
-static u8 obj_priority_list[5][160][128];
+extern "C" u8 (*obj_priority_list)[160][128];   // allocated with the other arrays
 static u8 obj_priority_count[5][160];
 static u8 obj_alpha_count[160];
 

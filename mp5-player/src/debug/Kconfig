@@ -20,4 +20,11 @@ config MP5_THEME_TEST
 	  Theme, brightness, saved passwords, a Wi-Fi scan and joining the saved network, and
 	  starting and leaving a game, for the features that are built.
 
+config MP5_PROFILE
+	bool "Sample where the game thread spends its time and print the busiest code blocks"
+	depends on MP5_DEBUG && MP5_FEATURE_GAMES
+	help
+	  20 seconds after a game starts, 6000 samples of the program counter are taken (one a
+	  millisecond) and the busiest 64 byte blocks are printed as "prof <address> <count>".
+
 endmenu

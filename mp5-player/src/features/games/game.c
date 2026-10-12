@@ -33,7 +33,11 @@
 #include <mgba_zephyr/gba.h>
 #include <nes_zephyr/nesemu.h>
 
+#ifdef CONFIG_DEMAND_PAGING_STATS
+#include <zephyr/kernel/mm/demand_paging.h>
+#endif
 #include "core/app.h"
+#include "debug/profile.h"
 #include "features/games/game.h"
 #include "ui/ui.h"
 
@@ -49,6 +53,9 @@
 #define SLAB_BLOCKS	6
 #define PREFILL		3
 #define RING_BLOCKS	8
+
+/* below the user interface thread (the main thread, 8), which must always get its turn */
+#define EMU_PRIO	9
 
 #define NBUF		4
 #define BUF_STRIDE	(256 * 2)
@@ -242,6 +249,8 @@ static uint32_t keys_nes(uint32_t k)
 
 /* ---- the emulator thread ------------------------------------------------------------------- */
 
+static uint32_t pad_mask(void);
+
 static void emu_main(void *a, void *b, void *c)
 {
 	static int16_t pcm[2 * 2048];
@@ -265,7 +274,7 @@ static void emu_main(void *a, void *b, void *c)
 	t_save = t_report = k_uptime_get();
 	while (!quit) {
 		uint32_t c0 = k_cycle_get_32();
-		uint32_t keys = (uint32_t)atomic_get(&pad_bits);
+		uint32_t keys = pad_mask();
 		size_t n;
 		int drawn;
 
@@ -319,6 +328,18 @@ static void emu_main(void *a, void *b, void *c)
 		if (k_uptime_get() - t_report >= 5000) {
 			printk("game: %u frames in 5 s, emulation %u us per frame, %u not drawn, sound queued %u\n",
 			       frames, emu_us / MAX(frames, 1U), skipped, (unsigned)audio_queued());
+#ifdef CONFIG_DEMAND_PAGING_STATS
+			{
+				static unsigned long last_faults;
+				struct k_mem_paging_stats_t st;
+
+				k_mem_paging_stats_get(&st);
+				printk("game: %lu page faults in 5 s, %lu clean and %lu dirty pages evicted so far\n",
+				       st.pagefaults.cnt - last_faults, st.eviction.clean,
+				       st.eviction.dirty);
+				last_faults = st.pagefaults.cnt;
+			}
+#endif
 			frames = emu_us = skipped = 0;
 			t_report = k_uptime_get();
 		}
@@ -379,12 +400,15 @@ static void touch_event(struct input_event *evt, void *user_data)
 }
 INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_CHOSEN(zephyr_touch)), touch_event, NULL);
 
-/* which keys have a finger on them; runs in the user interface thread, shows the state too */
-static void touch_scan(lv_timer_t *t)
+/*
+ * Which keys have a finger on them. Called by the emulation thread before every frame, so the
+ * keys do not depend on the user interface thread, which has no CPU to spare while the game
+ * runs. A key stays down for a short time after the finger left it (RELEASE_HOLD_MS).
+ */
+static uint32_t pad_mask(void)
 {
 	uint32_t mask = 0, now = k_uptime_get_32();
 
-	ARG_UNUSED(t);
 	for (int k = 0; k < K_COUNT; k++) {
 		struct pad_key *key = &keytab[k];
 		bool pressed = false;
@@ -408,6 +432,25 @@ static void touch_scan(lv_timer_t *t)
 		if (pressed) {
 			mask |= BIT(k);
 		}
+	}
+	atomic_set(&pad_bits, mask);
+
+	return mask;
+}
+
+/* the state of the start-up and of an error; shows the keys that are down, for the eye only */
+static void touch_scan(lv_timer_t *t)
+{
+	uint32_t mask = (uint32_t)atomic_get(&pad_bits);
+
+	ARG_UNUSED(t);
+	for (int k = 0; k < K_COUNT; k++) {
+		struct pad_key *key = &keytab[k];
+		bool pressed = (mask & BIT(k)) != 0U;
+
+		if (key->w == 0) {
+			continue;
+		}
 		if (pressed != key->shown) {
 			if (pressed) {
 				lv_obj_add_state(pad_objs[k], LV_STATE_PRESSED);
@@ -417,9 +460,7 @@ static void touch_scan(lv_timer_t *t)
 			key->shown = pressed;
 		}
 	}
-	atomic_set(&pad_bits, mask);
 
-	/* the state of the start-up and of an error */
 	if (status < 0 && lv_obj_has_flag(msg_label, LV_OBJ_FLAG_HIDDEN)) {
 		lv_label_set_text_fmt(msg_label, LV_SYMBOL_WARNING "\n%s",
 				      status == -EFBIG ? "This game is too large for the memory" :
@@ -614,12 +655,13 @@ static void game_enter(void *arg)
 			NULL, NULL, NULL, 3, 0, K_NO_WAIT);
 	k_thread_name_set(&game_audio_thread, "game_audio");
 	k_thread_create(&emu_thread, game_emu_stack, K_THREAD_STACK_SIZEOF(game_emu_stack), emu_main, NULL,
-			NULL, NULL, 6, 0, K_NO_WAIT);
+			NULL, NULL, EMU_PRIO, 0, K_NO_WAIT);
 	k_thread_name_set(&emu_thread, "game_emu");
+	mp5_profile_start(&emu_thread);
 	threads_started = true;
 	mp5_background_hold(true);
 	if (poll == NULL) {
-		poll = lv_timer_create(touch_scan, 16, NULL);
+		poll = lv_timer_create(touch_scan, 33, NULL);
 	}
 	lv_timer_resume(poll);
 }

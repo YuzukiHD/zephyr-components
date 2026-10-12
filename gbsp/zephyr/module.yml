@@ -1,0 +1,4 @@
+name: gbsp
+build:
+  cmake: .
+  kconfig: Kconfig

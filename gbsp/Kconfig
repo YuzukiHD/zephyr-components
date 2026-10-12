@@ -1,0 +1,54 @@
+# Copyright (c) 2026 Yuzuki Tsuru
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+config GBSP
+	bool "gpSP Game Boy Advance emulator core with a RISC-V dynamic recompiler"
+	depends on RISCV
+	select FILE_SYSTEM
+	help
+	  Build the gpSP core (core/) as a library. It translates the ARM code
+	  of the game to RISC-V when CONFIG_GBSP_DYNAREC is on, and interprets it
+	  otherwise. The built-in open source BIOS is used, no BIOS file is
+	  needed. The interface is the one of the mGBA module (gbsp_zephyr/gba.h).
+
+if GBSP
+
+config GBSP_DYNAREC
+	bool "Dynamic recompiler (translates the ARM code to RISC-V)"
+	default y
+	help
+	  Without it the core interprets the game code, which is much slower.
+	  The translated code is kept in two caches that are allocated when a
+	  game starts.
+
+config GBSP_ROM_CACHE_KB
+	int "Translation cache for the ROM code (KiB)"
+	depends on GBSP_DYNAREC
+	default 1024
+
+config GBSP_RAM_CACHE_KB
+	int "Translation cache for the code that runs from RAM (KiB)"
+	depends on GBSP_DYNAREC
+	default 256
+
+config GBSP_OPT_LEVEL
+	string "Optimisation level of the core (-O3, -O2, -Os)"
+	default "-O3"
+
+config GBSP_MAX_ROM_SIZE_MB
+	int "Largest ROM (MiB)"
+	default 32
+	range 1 32
+	help
+	  Blocks of the ROM are kept in memory as far as the memory goes; the
+	  rest is read from the file when the game needs it.
+
+config GBSP_ROM_BUFFER_MB
+	int "Memory for the ROM (MiB)"
+	default 8
+	range 1 32
+	help
+	  The ROM is kept in memory as far as this goes; the pages of a larger ROM are read from
+	  the file when the game needs them.
+
+endif # GBSP

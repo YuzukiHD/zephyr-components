@@ -12,6 +12,7 @@
 #ifndef MP5_CORE_APP_H_
 #define MP5_CORE_APP_H_
 
+#include <stdbool.h>
 #include <zephyr/sys/iterable_sections.h>
 
 enum mp5_stage {
@@ -38,5 +39,16 @@ struct mp5_init {
 
 /** Runs the steps of a stage; returns the first error (the rest of the stage is not run) */
 int mp5_run_stage(enum mp5_stage stage);
+
+/*
+ * Background activity (the network, Bluetooth, the scan of the SD card) is held back while a
+ * game runs: the emulator needs all of the CPU. A service that starts late waits in
+ * mp5_background_wait(), a running one registers a function that is called with true when the
+ * hold begins and false when it ends.
+ */
+void mp5_background_hold(bool hold);
+bool mp5_background_held(void);
+void mp5_background_wait(void);
+void mp5_background_register(void (*fn)(bool hold));
 
 #endif /* MP5_CORE_APP_H_ */

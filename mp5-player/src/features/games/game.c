@@ -617,6 +617,7 @@ static void game_enter(void *arg)
 			NULL, NULL, 6, 0, K_NO_WAIT);
 	k_thread_name_set(&emu_thread, "game_emu");
 	threads_started = true;
+	mp5_background_hold(true);
 	if (poll == NULL) {
 		poll = lv_timer_create(touch_scan, 16, NULL);
 	}
@@ -635,6 +636,7 @@ static void game_leave(void)
 		k_thread_join(&game_audio_thread, K_SECONDS(5));
 		k_thread_join(&game_video_thread, K_SECONDS(5));
 	}
+	mp5_background_hold(false);
 	display_sunxi_hide_yuv(disp);
 	for (int i = 0; i < NBUF; i++) {
 		free(buf[i]);

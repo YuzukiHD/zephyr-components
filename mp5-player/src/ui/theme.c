@@ -87,7 +87,9 @@ static void theme_load(void)
 	palette_make(mode == NULL || strcmp(mode, "light") != 0, acc != NULL ? atoi(acc) : 0);
 }
 
-static int brightness = 255;
+#define BRIGHTNESS_DEFAULT 10	/* the lowest the slider allows */
+
+static int brightness = BRIGHTNESS_DEFAULT;
 
 int ui_brightness(void)
 {
@@ -140,9 +142,7 @@ static int theme_step(void)
 
 	theme_load();
 	b = cfg_get("brightness");
-	if (b != NULL) {
-		ui_brightness_set(atoi(b), false);
-	}
+	ui_brightness_set(b != NULL ? atoi(b) : BRIGHTNESS_DEFAULT, false);
 
 	return 0;
 }

@@ -46,7 +46,7 @@ enum link_state {
 	LINK_FAILED,
 };
 
-enum command { CMD_SCAN, CMD_CONNECT, CMD_DISCONNECT, CMD_SYNC };
+enum command { CMD_SCAN, CMD_CONNECT, CMD_DISCONNECT, CMD_SYNC, CMD_PAUSE, CMD_RESUME };
 
 struct request {
 	enum command cmd;
@@ -60,6 +60,8 @@ static struct k_thread net_thread;
 
 static struct k_mutex lock;
 static volatile enum link_state link = LINK_STARTING;
+static volatile bool net_started;	/* the thread is past its start and takes requests */
+static bool resume_pending;		/* the link was up when a game paused the network */
 static char ssid_now[33];
 static char addr_now[NET_IPV4_ADDR_LEN];
 static char fail_text[40];
@@ -389,6 +391,9 @@ static void net_main(void *a, void *b, void *c)
 	net_mgmt_add_event_callback(&ipv4_cb);
 	k_sleep(K_SECONDS(1));
 	link = LINK_IDLE;
+	/* a game that is running now has the CPU: the chip is not started until it is over */
+	mp5_background_wait();
+	net_started = true;
 
 	/* copies: connecting saves the network again in the same place */
 	v = cfg_get("wifi_ssid");
@@ -432,6 +437,28 @@ static void net_main(void *a, void *b, void *c)
 			cfg_set("wifi_psk", NULL);
 			link = LINK_IDLE;
 			break;
+		case CMD_PAUSE:
+			/* the network is only used to set the time: not while a game runs */
+			if (link == LINK_ONLINE || link == LINK_CONNECTED) {
+				resume_pending = true;
+				net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
+				link = LINK_IDLE;
+				printk("net: disconnected for the game\n");
+			}
+			break;
+		case CMD_RESUME:
+			if (resume_pending) {
+				resume_pending = false;
+				v = cfg_get("wifi_ssid");
+				if (v != NULL) {
+					snprintf(saved_ssid, sizeof(saved_ssid), "%s", v);
+					v = cfg_get("wifi_psk");
+					snprintf(saved_psk, sizeof(saved_psk), "%s", v != NULL ? v : "");
+					printk("net: joining %s again\n", saved_ssid);
+					do_connect(iface, saved_ssid, saved_psk);
+				}
+			}
+			break;
 		case CMD_SYNC:
 			if (link == LINK_ONLINE) {
 				time_sync();
@@ -452,8 +479,21 @@ static void app_net_init(void)
 	k_thread_name_set(&net_thread, "net");
 }
 
+static void put(const struct request *r);
+
+static void net_hold(bool hold)
+{
+	struct request r = {.cmd = hold ? CMD_PAUSE : CMD_RESUME};
+
+	/* before the thread has started it waits for the end of the hold by itself */
+	if (net_started) {
+		put(&r);
+	}
+}
+
 static int net_step(void)
 {
+	mp5_background_register(net_hold);
 	app_net_init();
 
 	return 0;

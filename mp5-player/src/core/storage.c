@@ -121,6 +121,9 @@ static void storage_watch(void *a, void *b, void *c)
 	ARG_UNUSED(c);
 	for (;;) {
 		k_msleep(SCAN_MS);
+		if (mp5_background_held()) {
+			continue;
+		}
 		if (!mounted) {
 			(void)try_mount(false);
 		} else if (++scan % HEALTH_SCANS == 0) {

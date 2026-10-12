@@ -61,7 +61,9 @@ static void bt_disconnected_cb(struct bt_conn *conn, uint8_t reason)
 	}
 	bt_state = BT_READY;
 	printk("bt: disconnected (%u)\n", reason);
-	adv_start();
+	if (!mp5_background_held()) {
+		adv_start();
+	}
 }
 
 BT_CONN_CB_DEFINE(bt_conn_cbs) = {
@@ -73,6 +75,7 @@ static void bt_main(void *a, void *b, void *c)
 {
 	int err;
 
+	mp5_background_wait();
 	bt_state = BT_STARTING;
 	err = bt_enable(NULL);
 	if (err != 0) {
@@ -87,8 +90,25 @@ static void bt_main(void *a, void *b, void *c)
 K_THREAD_STACK_DEFINE(bt_stack, 4096);
 static struct k_thread bt_thread;
 
+/* nobody connects while a game runs: the link is closed and there is no advertising */
+static void bt_hold(bool hold)
+{
+	if (bt_state != BT_READY && bt_state != BT_LINKED) {
+		return;
+	}
+	if (hold) {
+		bt_le_adv_stop();
+		if (bt_peer != NULL) {
+			bt_conn_disconnect(bt_peer, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+		}
+	} else if (bt_state == BT_READY) {
+		adv_start();
+	}
+}
+
 static int bt_step(void)
 {
+	mp5_background_register(bt_hold);
 	k_thread_create(&bt_thread, bt_stack, K_THREAD_STACK_SIZEOF(bt_stack), bt_main, NULL, NULL,
 			NULL, 12, 0, K_MSEC(3500));
 	k_thread_name_set(&bt_thread, "bt");

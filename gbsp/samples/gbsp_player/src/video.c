@@ -30,8 +30,14 @@
 
 static const struct device *const disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 static uint8_t *buf[NBUF];
-static unsigned int cur;
-static atomic_t ready_idx;
+/*
+ * Who has which buffer: the emulator draws into `drawing`, hands it over as `ready`, the video
+ * thread takes it (`inflight`) and when the display has switched to it, it is `shown`. A buffer
+ * that is any of these is not given to the emulator, which at 60 fps can run several frames in a
+ * row after a stall and would otherwise draw into the picture that is being scanned out.
+ */
+static int drawing = -1, ready = -1, inflight = -1, shown = -1;
+static struct k_spinlock own_lock;
 static unsigned int ready_w, ready_h;
 
 K_SEM_DEFINE(frame_sem, 0, 1);
@@ -48,16 +54,23 @@ static void video_main(void *a, void *b, void *c)
 
 	while (true) {
 		struct display_sunxi_rgb img = {.width = 0};
-		int idx, ret;
+		int idx = 0, ret;
 
 		k_sem_take(&frame_sem, K_FOREVER);
-		idx = atomic_get(&ready_idx);
+		K_SPINLOCK(&own_lock) {
+			idx = ready;
+			inflight = idx;
+		}
 		img.data = buf[idx];
 		img.width = ready_w;
 		img.height = ready_h;
 		img.stride = STRIDE;
 		img.nonblock = false;
 		ret = display_sunxi_show_rgb(disp, &img);
+		K_SPINLOCK(&own_lock) {
+			shown = idx;
+			inflight = -1;
+		}
 		if (ret != 0 && !warned) {
 			printk("video: show_rgb failed: %d\n", ret);
 			warned = true;
@@ -85,15 +98,28 @@ int video_init(void)
 
 uint16_t *video_acquire(void)
 {
-	return (uint16_t *)buf[(cur + 1) % NBUF];
+	int pick = -1;
+
+	K_SPINLOCK(&own_lock) {
+		for (int i = 0; i < NBUF; i++) {
+			if (i != ready && i != inflight && i != shown) {
+				pick = i;
+				break;
+			}
+		}
+		drawing = pick;
+	}
+
+	return (uint16_t *)buf[pick];
 }
 
 void video_present(unsigned int width, unsigned int height)
 {
-	cur = (cur + 1) % NBUF;
-	sys_cache_data_flush_range(buf[cur], STRIDE * height);
+	sys_cache_data_flush_range(buf[drawing], STRIDE * height);
 	ready_w = width;
 	ready_h = height;
-	atomic_set(&ready_idx, cur);
+	K_SPINLOCK(&own_lock) {
+		ready = drawing;
+	}
 	k_sem_give(&frame_sem);
 }

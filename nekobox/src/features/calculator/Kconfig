@@ -1,4 +1,4 @@
-config MP5_FEATURE_CALCULATOR
+config NEKOBOX_FEATURE_CALCULATOR
 	bool "Calculator"
 	default y
 	help

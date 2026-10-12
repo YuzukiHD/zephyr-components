@@ -6,8 +6,8 @@
 
 /* Building blocks shared by the screens */
 
-#ifndef MP5_UI_WIDGETS_H_
-#define MP5_UI_WIDGETS_H_
+#ifndef NEKOBOX_UI_WIDGETS_H_
+#define NEKOBOX_UI_WIDGETS_H_
 
 #include <lvgl.h>
 #include <stdbool.h>
@@ -30,4 +30,4 @@ void ui_set_time_dialog(void (*done)(void));
  */
 void ui_overlay_set(bool show);
 
-#endif /* MP5_UI_WIDGETS_H_ */
+#endif /* NEKOBOX_UI_WIDGETS_H_ */

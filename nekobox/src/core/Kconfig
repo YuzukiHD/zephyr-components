@@ -1,4 +1,4 @@
-config MP5_CPU_MHZ
+config NEKOBOX_CPU_MHZ
 	int "CPU clock in MHz, 0 keeps what the boot stub set up (600)"
 	default 960
 	help

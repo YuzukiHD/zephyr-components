@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef MP5_PLAYER_H_
-#define MP5_PLAYER_H_
+#ifndef NEKOBOX_PLAYER_H_
+#define NEKOBOX_PLAYER_H_
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -46,4 +46,4 @@ uint32_t player_position_ms(void);
 void player_set_volume(int percent);
 int player_volume(void);
 
-#endif /* MP5_PLAYER_H_ */
+#endif /* NEKOBOX_PLAYER_H_ */

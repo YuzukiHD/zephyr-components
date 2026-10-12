@@ -155,7 +155,7 @@ static void civil_from_days(int64_t z, int *y, int *m, int *d)
 
 static void clock_from_unix(int64_t unix_s)
 {
-	int64_t local = unix_s + (int64_t)CONFIG_MP5_UTC_OFFSET_MIN * 60;
+	int64_t local = unix_s + (int64_t)CONFIG_NEKOBOX_UTC_OFFSET_MIN * 60;
 	int64_t days = local / 86400;
 	int sec = local % 86400, y, m, d;
 	struct tm tm = {0};
@@ -192,7 +192,7 @@ static void clock_from_unix(int64_t unix_s)
 
 static bool time_sync(void)
 {
-	static const char *const servers[] = {CONFIG_MP5_NTP_SERVER, "cn.pool.ntp.org",
+	static const char *const servers[] = {CONFIG_NEKOBOX_NTP_SERVER, "cn.pool.ntp.org",
 					      "pool.ntp.org"};
 	struct sntp_time ts;
 
@@ -392,7 +392,7 @@ static void net_main(void *a, void *b, void *c)
 	k_sleep(K_SECONDS(1));
 	link = LINK_IDLE;
 	/* a game that is running now has the CPU: the chip is not started until it is over */
-	mp5_background_wait();
+	nekobox_background_wait();
 	net_started = true;
 
 	/* copies: connecting saves the network again in the same place */
@@ -493,12 +493,12 @@ static void net_hold(bool hold)
 
 static int net_step(void)
 {
-	mp5_background_register(net_hold);
+	nekobox_background_register(net_hold);
 	app_net_init();
 
 	return 0;
 }
-MP5_INIT(MP5_STAGE_SERVICES, 10, "network", net_step);
+NEKOBOX_INIT(NEKOBOX_STAGE_SERVICES, 10, "network", net_step);
 
 static void put(const struct request *r)
 {

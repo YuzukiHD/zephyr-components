@@ -39,7 +39,7 @@ int lv_rvv_argb_opa(lv_draw_sw_blend_image_dsc_t *dsc);
 int lv_rvv_argb_mask(lv_draw_sw_blend_image_dsc_t *dsc);
 int lv_rvv_argb_mask_opa(lv_draw_sw_blend_image_dsc_t *dsc);
 
-#ifdef CONFIG_MP5_GFX_RVV
+#ifdef CONFIG_NEKOBOX_GFX_RVV
 #define LV_DRAW_SW_COLOR_BLEND_TO_ARGB8888(dsc)				lv_rvv_color_fill(dsc)
 #define LV_DRAW_SW_COLOR_BLEND_TO_ARGB8888_WITH_OPA(dsc)		lv_rvv_color_opa(dsc)
 #define LV_DRAW_SW_COLOR_BLEND_TO_ARGB8888_WITH_MASK(dsc)		lv_rvv_color_mask(dsc)
@@ -48,7 +48,7 @@ int lv_rvv_argb_mask_opa(lv_draw_sw_blend_image_dsc_t *dsc);
 #define LV_DRAW_SW_ARGB8888_BLEND_NORMAL_TO_ARGB8888_WITH_OPA(dsc)	lv_rvv_argb_opa(dsc)
 #define LV_DRAW_SW_ARGB8888_BLEND_NORMAL_TO_ARGB8888_WITH_MASK(dsc)	lv_rvv_argb_mask(dsc)
 #define LV_DRAW_SW_ARGB8888_BLEND_NORMAL_TO_ARGB8888_MIX_MASK_OPA(dsc)	lv_rvv_argb_mask_opa(dsc)
-#endif /* CONFIG_MP5_GFX_RVV */
+#endif /* CONFIG_NEKOBOX_GFX_RVV */
 
 #ifdef __cplusplus
 }

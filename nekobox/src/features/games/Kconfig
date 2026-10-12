@@ -1,10 +1,11 @@
 menu "Games"
 
-config MP5_FEATURE_GAMES
-	bool "NES, Game Boy, Game Boy Color and Game Boy Advance"
+config NEKOBOX_FEATURE_GAMES
+	bool "NES, Game Boy, Game Boy Color (mGBA) and Game Boy Advance (gpSP)"
 	default y
-	depends on MP5_FEATURE_FILES
+	depends on NEKOBOX_FEATURE_FILES
 	select MGBA
+	select GBSP
 	select NES
 	select CRC
 	select RING_BUFFER
@@ -14,48 +15,20 @@ config MP5_FEATURE_GAMES
 	select AUDIO_CODEC
 	select DMA
 
-config MP5_GAMES_HOT_RAM
+config NEKOBOX_GAMES_HOT_RAM
 	bool "Run the Game Boy Advance core from RAM"
 	default y
-	depends on XIP && MP5_FEATURE_GAMES
+	depends on XIP && NEKOBOX_FEATURE_GAMES
 	select CODE_DATA_RELOCATION
 	help
 	  In an XIP image every instruction that is not in the cache comes from the flash window.
-	  The interpreter is a big loop that does not fit the cache, so the files that run for every
-	  frame (about 270 KiB of text) are copied to RAM at boot. The memory comes out of the page
-	  frames of the paged ROM.
+	  The renderer and the memory handlers of the GBA core (gpSP) run for every frame, so they
+	  are copied to RAM at boot. The translated game code is in RAM anyway. The Game Boy core
+	  (mGBA) stays in the flash window.
 
-config MP5_GAME
+config NEKOBOX_GAME
 	string "Game to start at boot, for a check without touching (empty: none)"
 	default ""
-	depends on MP5_FEATURE_GAMES
-
-config MP5_GAMES_PAGED_ROM
-	bool "Game Boy Advance ROMs of up to 32 MiB (MMU, the ROM is paged in from the card)"
-	default y
-	depends on MP5_FEATURE_GAMES
-	select SUN252I_F101_MMU
-	select DEMAND_PAGING
-	select DEMAND_PAGING_ALLOW_IRQ
-	select MGBA_ROM_DEMAND_PAGED
-	help
-	  The ROM is not read into the memory but mapped from its file, the pages come in when the
-	  game touches them. Without it a ROM is read as a whole and the limit is 6 MiB, because
-	  the video player needs the rest of the memory for its pictures. The data accesses are
-	  translated by the MMU (a few percent of the speed of the emulator) and the memory that is
-	  not the image or the malloc arena (a fixed size then) is the page frames of the ROM.
-
-choice BACKING_STORE_CHOICE
-	default BACKING_STORE_FS if MP5_GAMES_PAGED_ROM
-endchoice
-
-choice EVICTION_CHOICE
-	default EVICTION_LRU if MP5_GAMES_PAGED_ROM
-endchoice
-
-config MGBA_MAX_ROM_SIZE_MB
-	# without paging a bigger game is refused: the video player needs the memory for its pictures
-	default 32 if MP5_GAMES_PAGED_ROM
-	default 6 if MP5_FEATURE_GAMES
+	depends on NEKOBOX_FEATURE_GAMES
 
 endmenu

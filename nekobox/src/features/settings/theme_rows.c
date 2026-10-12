@@ -61,5 +61,5 @@ static void accent_row(lv_obj_t *list)
 	}
 }
 
-MP5_SETTINGS_ROW(dark, 60, dark_row, NULL);
-MP5_SETTINGS_ROW(accent, 70, accent_row, NULL);
+NEKOBOX_SETTINGS_ROW(dark, 60, dark_row, NULL);
+NEKOBOX_SETTINGS_ROW(accent, 70, accent_row, NULL);

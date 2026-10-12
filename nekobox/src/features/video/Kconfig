@@ -1,9 +1,9 @@
 menu "Video player"
 
-config MP5_FEATURE_VIDEO
+config NEKOBOX_FEATURE_VIDEO
 	bool "Video player (MP4 and raw H.264)"
 	default y
-	depends on MP5_FEATURE_FILES
+	depends on NEKOBOX_FEATURE_FILES
 	select MP4_DEMUX
 	select VDEC
 	select I2S
@@ -12,14 +12,14 @@ config MP5_FEATURE_VIDEO
 	select DMA
 	select OPENCORE_AAC
 
-config MP5_VIDEO_DEFAULT
+config NEKOBOX_VIDEO_DEFAULT
 	string "Video the Videos tile plays when it is not given a file"
 	default "/SD:/video540p-ysjf.mp4"
-	depends on MP5_FEATURE_VIDEO
+	depends on NEKOBOX_FEATURE_VIDEO
 
-config MP5_THREAD_STATS
+config NEKOBOX_THREAD_STATS
 	bool "Print the CPU time of the player threads with the playback statistics"
-	depends on MP5_FEATURE_VIDEO
+	depends on NEKOBOX_FEATURE_VIDEO
 	select THREAD_RUNTIME_STATS
 	select SCHED_THREAD_USAGE_ALL
 	help
@@ -27,10 +27,10 @@ config MP5_THREAD_STATS
 	  access fault inside the scheduler about 8 s after a failed open of a video (seen on the
 	  board), so it is left off unless needed.
 
-config MP5_HOT_RAM
+config NEKOBOX_HOT_RAM
 	bool "Run the video decoder driver and the AAC decoder from RAM"
 	default y
-	depends on XIP && MP5_FEATURE_VIDEO
+	depends on XIP && NEKOBOX_FEATURE_VIDEO
 	select CODE_DATA_RELOCATION
 	help
 	  In an XIP image every instruction that is not in the cache comes from the flash window.

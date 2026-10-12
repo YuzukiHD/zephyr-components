@@ -19,7 +19,7 @@
 #include "core/fsutil.h"
 #include "history.h"
 
-#define HISTORY_FILE "/SD:/.mp5_recent"
+#define HISTORY_FILE "/SD:/.nekobox_recent"
 
 static struct history_entry list[HISTORY_MAX];
 static int count;

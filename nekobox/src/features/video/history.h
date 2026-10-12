@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef MP5_HISTORY_H_
-#define MP5_HISTORY_H_
+#ifndef NEKOBOX_HISTORY_H_
+#define NEKOBOX_HISTORY_H_
 
 #include <stdint.h>
 
@@ -32,4 +32,4 @@ const struct history_entry *history_find(const char *path);
 /** Puts a video at the top of the list with the position it was left at, and saves the list */
 void history_update(const char *path, uint32_t pos_ms, uint32_t dur_ms);
 
-#endif /* MP5_HISTORY_H_ */
+#endif /* NEKOBOX_HISTORY_H_ */

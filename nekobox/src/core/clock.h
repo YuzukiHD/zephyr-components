@@ -6,8 +6,8 @@
 
 /* The date and the time of day, from the real time clock */
 
-#ifndef MP5_CORE_CLOCK_H_
-#define MP5_CORE_CLOCK_H_
+#ifndef NEKOBOX_CORE_CLOCK_H_
+#define NEKOBOX_CORE_CLOCK_H_
 
 #include <stdbool.h>
 #include <time.h>
@@ -19,4 +19,4 @@ void clock_set_tm(const struct tm *tm);
 /** False when the board has no usable real time clock */
 bool clock_valid(void);
 
-#endif /* MP5_CORE_CLOCK_H_ */
+#endif /* NEKOBOX_CORE_CLOCK_H_ */

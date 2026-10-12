@@ -39,16 +39,16 @@ static int display_start(void)
 
 	return 0;
 }
-MP5_INIT(MP5_STAGE_EARLY, 0, "display thread", display_start);
+NEKOBOX_INIT(NEKOBOX_STAGE_EARLY, 0, "display thread", display_start);
 
 static int display_wait_and_lvgl(void)
 {
 	k_sem_take(&display_up, K_FOREVER);
 	if (display_ret != 0 || !device_is_ready(DEVICE_DT_GET(DT_CHOSEN(zephyr_display)))) {
-		printk("mp5: the display is not ready (%d)\n", display_ret);
+		printk("nekobox: the display is not ready (%d)\n", display_ret);
 		return -ENODEV;
 	}
 
 	return lvgl_init();
 }
-MP5_INIT(MP5_STAGE_UI, 0, "display up, LVGL", display_wait_and_lvgl);
+NEKOBOX_INIT(NEKOBOX_STAGE_UI, 0, "display up, LVGL", display_wait_and_lvgl);

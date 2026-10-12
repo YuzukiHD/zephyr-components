@@ -6,8 +6,8 @@
 
 /* The colours of the user interface: they change with the theme (dark or light, and the accent) */
 
-#ifndef MP5_UI_THEME_H_
-#define MP5_UI_THEME_H_
+#ifndef NEKOBOX_UI_THEME_H_
+#define NEKOBOX_UI_THEME_H_
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -48,4 +48,4 @@ int ui_brightness(void);
 /** Sets the brightness; @p save also writes it to the settings */
 void ui_brightness_set(int value, bool save);
 
-#endif /* MP5_UI_THEME_H_ */
+#endif /* NEKOBOX_UI_THEME_H_ */

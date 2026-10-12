@@ -8,7 +8,7 @@
 
 #include "features/video/player_priv.h"
 
-#ifdef CONFIG_MP5_THREAD_STATS
+#ifdef CONFIG_NEKOBOX_THREAD_STATS
 static uint64_t cpu_ms(struct k_thread *t)
 {
 	k_thread_runtime_stats_t st;

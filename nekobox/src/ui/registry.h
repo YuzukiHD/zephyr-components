@@ -10,22 +10,22 @@
  * not in the lists: no tile on the home screen, no row in the settings, no file type.
  */
 
-#ifndef MP5_UI_REGISTRY_H_
-#define MP5_UI_REGISTRY_H_
+#ifndef NEKOBOX_UI_REGISTRY_H_
+#define NEKOBOX_UI_REGISTRY_H_
 
 #include <lvgl.h>
 #include <zephyr/sys/iterable_sections.h>
 
 /** A screen; it is found by its name (ui_goto("photos")) */
-struct mp5_screen {
+struct nekobox_screen {
 	const char *name;
 	lv_obj_t *(*create)(void);
 	void (*enter)(void *arg);	/**< every time the screen is shown; arg of ui_goto_arg() */
 	void (*leave)(void);
 };
 
-#define MP5_SCREEN(_sym, _name, _create, _enter, _leave)                                         \
-	const STRUCT_SECTION_ITERABLE(mp5_screen, mp5_screen_##_sym) = {                         \
+#define NEKOBOX_SCREEN(_sym, _name, _create, _enter, _leave)                                         \
+	const STRUCT_SECTION_ITERABLE(nekobox_screen, nekobox_screen_##_sym) = {                         \
 		.name = (_name), .create = (_create), .enter = (_enter), .leave = (_leave),      \
 	}
 
@@ -33,7 +33,7 @@ struct mp5_screen {
  * A tile of the home screen. It opens the screen @c screen, or the file browser listing the
  * files of @c kind when @c screen is NULL (kind NULL: all files).
  */
-struct mp5_home_tile {
+struct nekobox_home_tile {
 	int order;
 	const char *symbol;
 	const char *title;
@@ -43,18 +43,18 @@ struct mp5_home_tile {
 	const char *kind;
 };
 
-#define MP5_HOME_TILE(_sym, ...)                                                                 \
-	const STRUCT_SECTION_ITERABLE(mp5_home_tile, mp5_tile_##_sym) = {__VA_ARGS__}
+#define NEKOBOX_HOME_TILE(_sym, ...)                                                                 \
+	const STRUCT_SECTION_ITERABLE(nekobox_home_tile, nekobox_tile_##_sym) = {__VA_ARGS__}
 
 /** A row of the settings screen */
-struct mp5_settings_row {
+struct nekobox_settings_row {
 	int order;
 	void (*create)(lv_obj_t *list);
 	void (*refresh)(void);		/**< once a second while the screen is shown; may be NULL */
 };
 
-#define MP5_SETTINGS_ROW(_sym, _order, _create, _refresh)                                        \
-	const STRUCT_SECTION_ITERABLE(mp5_settings_row, mp5_row_##_sym) = {                      \
+#define NEKOBOX_SETTINGS_ROW(_sym, _order, _create, _refresh)                                        \
+	const STRUCT_SECTION_ITERABLE(nekobox_settings_row, nekobox_row_##_sym) = {                      \
 		.order = (_order), .create = (_create), .refresh = (_refresh),                   \
 	}
 
@@ -62,7 +62,7 @@ struct mp5_settings_row {
  * A kind of file the browser knows: which names belong to it, how it looks in the list and what
  * opens it. The browser only lists the files of a kind when it is opened for that kind.
  */
-struct mp5_file_handler {
+struct nekobox_file_handler {
 	const char *kind;		/**< "video", "photo", "nes", "gb" */
 	const char *title;		/**< title of the browser opened for this kind */
 	const char *symbol;
@@ -73,7 +73,7 @@ struct mp5_file_handler {
 	const char *extra_label;
 };
 
-#define MP5_FILE_HANDLER(_sym, ...)                                                              \
-	const STRUCT_SECTION_ITERABLE(mp5_file_handler, mp5_files_##_sym) = {__VA_ARGS__}
+#define NEKOBOX_FILE_HANDLER(_sym, ...)                                                              \
+	const STRUCT_SECTION_ITERABLE(nekobox_file_handler, nekobox_files_##_sym) = {__VA_ARGS__}
 
-#endif /* MP5_UI_REGISTRY_H_ */
+#endif /* NEKOBOX_UI_REGISTRY_H_ */

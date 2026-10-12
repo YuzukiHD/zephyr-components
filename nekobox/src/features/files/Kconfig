@@ -1,4 +1,4 @@
-config MP5_FEATURE_FILES
+config NEKOBOX_FEATURE_FILES
 	bool "File browser"
 	default y
 	help

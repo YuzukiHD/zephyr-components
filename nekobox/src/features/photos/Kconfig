@@ -1,5 +1,5 @@
-config MP5_FEATURE_PHOTOS
+config NEKOBOX_FEATURE_PHOTOS
 	bool "Photo viewer (JPEG and PNG, pinch zoom)"
 	default y
-	depends on MP5_FEATURE_FILES
+	depends on NEKOBOX_FEATURE_FILES
 	select VDEC

@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* The screen manager. Screens register with MP5_SCREEN (ui/registry.h) and are found by name. */
+/* The screen manager. Screens register with NEKOBOX_SCREEN (ui/registry.h) and are found by name. */
 
-#ifndef MP5_UI_UI_H_
-#define MP5_UI_UI_H_
+#ifndef NEKOBOX_UI_UI_H_
+#define NEKOBOX_UI_UI_H_
 
 #include <lvgl.h>
 
@@ -21,7 +21,7 @@ void ui_goto(const char *name);
 void ui_goto_arg(const char *name, void *arg);
 
 /** Opens the file browser in @p dir (NULL: the root of the card) listing the files of @p kind */
-#ifdef CONFIG_MP5_FEATURE_FILES
+#ifdef CONFIG_NEKOBOX_FEATURE_FILES
 void ui_files_open(const char *dir, const char *kind);
 #else
 static inline void ui_files_open(const char *dir, const char *kind)
@@ -38,4 +38,4 @@ void ui_loop(void);
 /** Makes every screen again (the theme changed) */
 void ui_rebuild_all(void);
 
-#endif /* MP5_UI_UI_H_ */
+#endif /* NEKOBOX_UI_UI_H_ */

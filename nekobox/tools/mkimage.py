@@ -2,11 +2,11 @@
 # Copyright (c) 2026 Yuzuki Tsuru
 # SPDX-License-Identifier: Apache-2.0
 """
-Builds the complete flash image of the MP5 player: the boot stub (SPL image for the SPI NOR, which
+Builds the complete flash image of the NEKOBOX player: the boot stub (SPL image for the SPI NOR, which
 brings up the PSRAM and maps the flash window) in front, then the Zephyr image at its XIP offset.
 One file for the whole flash up to the end of the application, written with
 
-    xfel spinor write 0 mp5-full.img
+    xfel spinor write 0 nekobox-full.img
 
 Layout: 0..128 KiB the boot stub (one copy at 0, the BROM starts it), 128..192 KiB the parameter area
 of the flash (left blank here: the first start trains the sampling and the stub saves the result there),

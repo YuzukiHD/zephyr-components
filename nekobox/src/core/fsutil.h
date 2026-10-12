@@ -6,8 +6,8 @@
 
 /* Small helpers for names of files */
 
-#ifndef MP5_CORE_FSUTIL_H_
-#define MP5_CORE_FSUTIL_H_
+#ifndef NEKOBOX_CORE_FSUTIL_H_
+#define NEKOBOX_CORE_FSUTIL_H_
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -23,4 +23,4 @@ bool name_has_ext(const char *name, const char *ext);
  */
 int file_read_text(const char *path, char *buf, size_t size);
 
-#endif /* MP5_CORE_FSUTIL_H_ */
+#endif /* NEKOBOX_CORE_FSUTIL_H_ */

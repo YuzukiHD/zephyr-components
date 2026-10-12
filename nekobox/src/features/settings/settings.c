@@ -6,7 +6,7 @@
 
 /*
  * The settings screen: the date and time and the board are its own rows, every other row is
- * registered by the feature it belongs to (MP5_SETTINGS_ROW) and listed in the order field.
+ * registered by the feature it belongs to (NEKOBOX_SETTINGS_ROW) and listed in the order field.
  */
 
 #include <stdio.h>
@@ -105,22 +105,22 @@ static void about_row(lv_obj_t *list)
 	lv_label_set_text(about, buf);
 }
 
-MP5_SETTINGS_ROW(time, 10, time_row, time_refresh);
-MP5_SETTINGS_ROW(about, 90, about_row, NULL);
+NEKOBOX_SETTINGS_ROW(time, 10, time_row, time_refresh);
+NEKOBOX_SETTINGS_ROW(about, 90, about_row, NULL);
 
 /* calls @p fn for every row in the order of their order field */
-static void rows_each(void (*fn)(const struct mp5_settings_row *r, void *arg), void *arg)
+static void rows_each(void (*fn)(const struct nekobox_settings_row *r, void *arg), void *arg)
 {
-	const struct mp5_settings_row *prev = NULL;
+	const struct nekobox_settings_row *prev = NULL;
 	int n = 0;
 
-	STRUCT_SECTION_FOREACH(mp5_settings_row, r) {
+	STRUCT_SECTION_FOREACH(nekobox_settings_row, r) {
 		n++;
 	}
 	for (int k = 0; k < n; k++) {
-		const struct mp5_settings_row *best = NULL;
+		const struct nekobox_settings_row *best = NULL;
 
-		STRUCT_SECTION_FOREACH(mp5_settings_row, r) {
+		STRUCT_SECTION_FOREACH(nekobox_settings_row, r) {
 			if ((prev == NULL || r->order > prev->order) &&
 			    (best == NULL || r->order < best->order)) {
 				best = r;
@@ -131,12 +131,12 @@ static void rows_each(void (*fn)(const struct mp5_settings_row *r, void *arg), v
 	}
 }
 
-static void row_make(const struct mp5_settings_row *r, void *list)
+static void row_make(const struct nekobox_settings_row *r, void *list)
 {
 	r->create(list);
 }
 
-static void row_refresh(const struct mp5_settings_row *r, void *unused)
+static void row_refresh(const struct nekobox_settings_row *r, void *unused)
 {
 	ARG_UNUSED(unused);
 	if (r->refresh != NULL) {
@@ -186,7 +186,7 @@ static void settings_leave(void)
 	}
 }
 
-MP5_SCREEN(settings, "settings", settings_create, settings_enter, settings_leave);
-MP5_HOME_TILE(settings, .order = 70, .symbol = LV_SYMBOL_SETTINGS, .title = "Settings",
+NEKOBOX_SCREEN(settings, "settings", settings_create, settings_enter, settings_leave);
+NEKOBOX_HOME_TILE(settings, .order = 70, .symbol = LV_SYMBOL_SETTINGS, .title = "Settings",
 	      .subtitle = "Time and network", .color_top = 0x8B95A8, .color_bottom = 0x5B6478,
 	      .screen = "settings");

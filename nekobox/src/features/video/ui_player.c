@@ -385,7 +385,7 @@ static lv_obj_t *player_create(void)
 
 static void player_enter(void *arg)
 {
-	const char *path = arg != NULL ? arg : CONFIG_MP5_VIDEO_DEFAULT;
+	const char *path = arg != NULL ? arg : CONFIG_NEKOBOX_VIDEO_DEFAULT;
 	const char *name = strrchr(path, '/');
 	struct player_info info;
 	char buf[16];
@@ -452,7 +452,7 @@ static void player_leave(void)
 	player_close();
 }
 
-MP5_SCREEN(player, "player", player_create, player_enter, player_leave);
+NEKOBOX_SCREEN(player, "player", player_create, player_enter, player_leave);
 
 static void video_file_open(const char *path)
 {
@@ -461,9 +461,9 @@ static void video_file_open(const char *path)
 
 static const char *const video_exts[] = {".mp4", ".h264", ".264", NULL};
 
-MP5_FILE_HANDLER(video, .kind = "video", .title = "Videos", .symbol = LV_SYMBOL_VIDEO,
+NEKOBOX_FILE_HANDLER(video, .kind = "video", .title = "Videos", .symbol = LV_SYMBOL_VIDEO,
 		 .color = &ui_pal.accent, .exts = video_exts, .open = video_file_open,
 		 .extra_screen = "recent", .extra_label = LV_SYMBOL_LIST "  Recent");
-MP5_HOME_TILE(videos, .order = 10, .symbol = LV_SYMBOL_VIDEO, .title = "Videos",
+NEKOBOX_HOME_TILE(videos, .order = 10, .symbol = LV_SYMBOL_VIDEO, .title = "Videos",
 	      .subtitle = "MP4 and H.264", .color_top = 0x6C8CFF, .color_bottom = 0x4A5DE8,
 	      .kind = "video");

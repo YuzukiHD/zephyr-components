@@ -146,4 +146,4 @@ static int theme_step(void)
 
 	return 0;
 }
-MP5_INIT(MP5_STAGE_UI, 15, "theme", theme_step);
+NEKOBOX_INIT(NEKOBOX_STAGE_UI, 15, "theme", theme_step);

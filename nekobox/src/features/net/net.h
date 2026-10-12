@@ -6,8 +6,8 @@
 
 /* Wi-Fi and the network time */
 
-#ifndef MP5_FEATURES_NET_NET_H_
-#define MP5_FEATURES_NET_NET_H_
+#ifndef NEKOBOX_FEATURES_NET_NET_H_
+#define NEKOBOX_FEATURES_NET_NET_H_
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -39,4 +39,4 @@ bool app_net_connected(void);
 /** True when the board has a Wi-Fi module that answered */
 bool app_net_available(void);
 
-#endif /* MP5_FEATURES_NET_NET_H_ */
+#endif /* NEKOBOX_FEATURES_NET_NET_H_ */

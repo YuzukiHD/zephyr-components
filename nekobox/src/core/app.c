@@ -11,12 +11,12 @@
 
 #define MAX_STEPS 32
 
-int mp5_run_stage(enum mp5_stage stage)
+int nekobox_run_stage(enum nekobox_stage stage)
 {
-	const struct mp5_init *steps[MAX_STEPS];
+	const struct nekobox_init *steps[MAX_STEPS];
 	int n = 0;
 
-	STRUCT_SECTION_FOREACH(mp5_init, step) {
+	STRUCT_SECTION_FOREACH(nekobox_init, step) {
 		if (step->stage == stage && n < MAX_STEPS) {
 			int at = n++;
 
@@ -31,7 +31,7 @@ int mp5_run_stage(enum mp5_stage stage)
 	for (int i = 0; i < n; i++) {
 		int ret = steps[i]->fn();
 
-		printk("mp5: boot %u ms: %s%s\n", k_uptime_get_32(), steps[i]->name,
+		printk("nekobox: boot %u ms: %s%s\n", k_uptime_get_32(), steps[i]->name,
 		       ret != 0 ? " FAILED" : "");
 		if (ret != 0) {
 			return ret;
@@ -46,7 +46,7 @@ int mp5_run_stage(enum mp5_stage stage)
 static atomic_t held;
 static void (*hooks[MAX_HOOKS])(bool hold);
 
-void mp5_background_register(void (*fn)(bool hold))
+void nekobox_background_register(void (*fn)(bool hold))
 {
 	for (int i = 0; i < MAX_HOOKS; i++) {
 		if (hooks[i] == NULL) {
@@ -56,7 +56,7 @@ void mp5_background_register(void (*fn)(bool hold))
 	}
 }
 
-void mp5_background_hold(bool hold)
+void nekobox_background_hold(bool hold)
 {
 	if (atomic_set(&held, hold ? 1 : 0) == (hold ? 1 : 0)) {
 		return;
@@ -66,14 +66,14 @@ void mp5_background_hold(bool hold)
 	}
 }
 
-bool mp5_background_held(void)
+bool nekobox_background_held(void)
 {
 	return atomic_get(&held) != 0;
 }
 
-void mp5_background_wait(void)
+void nekobox_background_wait(void)
 {
-	while (mp5_background_held()) {
+	while (nekobox_background_held()) {
 		k_msleep(200);
 	}
 }

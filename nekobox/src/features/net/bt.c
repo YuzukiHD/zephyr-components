@@ -61,7 +61,7 @@ static void bt_disconnected_cb(struct bt_conn *conn, uint8_t reason)
 	}
 	bt_state = BT_READY;
 	printk("bt: disconnected (%u)\n", reason);
-	if (!mp5_background_held()) {
+	if (!nekobox_background_held()) {
 		adv_start();
 	}
 }
@@ -75,7 +75,7 @@ static void bt_main(void *a, void *b, void *c)
 {
 	int err;
 
-	mp5_background_wait();
+	nekobox_background_wait();
 	bt_state = BT_STARTING;
 	err = bt_enable(NULL);
 	if (err != 0) {
@@ -108,14 +108,14 @@ static void bt_hold(bool hold)
 
 static int bt_step(void)
 {
-	mp5_background_register(bt_hold);
+	nekobox_background_register(bt_hold);
 	k_thread_create(&bt_thread, bt_stack, K_THREAD_STACK_SIZEOF(bt_stack), bt_main, NULL, NULL,
 			NULL, 12, 0, K_MSEC(3500));
 	k_thread_name_set(&bt_thread, "bt");
 
 	return 0;
 }
-MP5_INIT(MP5_STAGE_SERVICES, 20, "bluetooth", bt_step);
+NEKOBOX_INIT(NEKOBOX_STAGE_SERVICES, 20, "bluetooth", bt_step);
 
 void bt_status(char *buf, size_t size)
 {

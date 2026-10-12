@@ -39,7 +39,7 @@ static void check(bool ok, const char *what)
 /* the steps of a feature that is not built are left out; the dead calls are not linked */
 static bool net_up(void)
 {
-	return IS_ENABLED(CONFIG_MP5_FEATURE_NET) && app_net_connected();
+	return IS_ENABLED(CONFIG_NEKOBOX_FEATURE_NET) && app_net_connected();
 }
 
 static void test_step(lv_timer_t *t)
@@ -87,12 +87,12 @@ static void test_step(lv_timer_t *t)
 		/* the Wi-Fi screen scans for networks while the board is online */
 		ui_goto("wifi");
 		/* what the Scan button does */
-		if (IS_ENABLED(CONFIG_MP5_FEATURE_NET)) {
+		if (IS_ENABLED(CONFIG_NEKOBOX_FEATURE_NET)) {
 			app_net_scan();
 		}
 	} else if (step >= 10 && step <= 16) {
 		/* the Scan button again and again, with the list made again each time */
-		if (IS_ENABLED(CONFIG_MP5_FEATURE_NET)) {
+		if (IS_ENABLED(CONFIG_NEKOBOX_FEATURE_NET)) {
 			app_net_scan();
 		}
 	} else if (step == 9) {
@@ -104,7 +104,7 @@ static void test_step(lv_timer_t *t)
 			printk("theme: connecting to the network that is joined already\n");
 			app_net_connect("ChinaNet-K5ii", psk);
 		}
-		if (IS_ENABLED(CONFIG_MP5_FEATURE_NET)) {
+		if (IS_ENABLED(CONFIG_NEKOBOX_FEATURE_NET)) {
 			int n = app_net_scan_results(list, ARRAY_SIZE(list));
 
 			printk("theme: the Wi-Fi screen found %d networks\n", n);
@@ -116,7 +116,7 @@ static void test_step(lv_timer_t *t)
 		ui_goto("settings");
 	} else if (step == 18) {
 		/* a game with sound, then leaving it: the amplifier must go off */
-		if (IS_ENABLED(CONFIG_MP5_FEATURE_GAMES)) {
+		if (IS_ENABLED(CONFIG_NEKOBOX_FEATURE_GAMES)) {
 			ui_game_open("/SD:/Legend-of-Zelda.gb", "home");
 		}
 	} else if (step == 21) {
@@ -135,17 +135,17 @@ static void test_step(lv_timer_t *t)
 	step++;
 }
 
-#ifdef CONFIG_MP5_THEME_TEST
+#ifdef CONFIG_NEKOBOX_THEME_TEST
 static int theme_test_start(void)
 {
 	lv_timer_create(test_step, 2500, NULL);
 
 	return 0;
 }
-MP5_INIT(MP5_STAGE_READY, 10, "theme test", theme_test_start);
+NEKOBOX_INIT(NEKOBOX_STAGE_READY, 10, "theme test", theme_test_start);
 #endif
 
-#ifdef CONFIG_MP5_SELFTEST
+#ifdef CONFIG_NEKOBOX_SELFTEST
 /* The files in the root of the card, to see what there is to play */
 static void list_root(void)
 {
@@ -153,7 +153,7 @@ static void list_root(void)
 	struct fs_dirent ent;
 
 	fs_dir_t_init(&dir);
-	if (fs_opendir(&dir, MP5_MOUNT_POINT) != 0) {
+	if (fs_opendir(&dir, NEKOBOX_MOUNT_POINT) != 0) {
 		return;
 	}
 	while (fs_readdir(&dir, &ent) == 0 && ent.name[0] != '\0') {
@@ -220,5 +220,5 @@ static int playback_start(void)
 
 	return 0;
 }
-MP5_INIT(MP5_STAGE_READY, 5, "playback test", playback_start);
+NEKOBOX_INIT(NEKOBOX_STAGE_READY, 5, "playback test", playback_start);
 #endif

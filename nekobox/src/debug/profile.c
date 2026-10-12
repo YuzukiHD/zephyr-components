@@ -85,7 +85,7 @@ static void prof_main(void *target, void *b, void *c)
 	}
 }
 
-void mp5_profile_start(struct k_thread *target)
+void nekobox_profile_start(struct k_thread *target)
 {
 	k_thread_create(&prof_thread, prof_stack, K_THREAD_STACK_SIZEOF(prof_stack), prof_main,
 			target, NULL, NULL, 1, 0, K_NO_WAIT);

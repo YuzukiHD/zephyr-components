@@ -291,4 +291,4 @@ static void wifi_leave(void)
 	}
 }
 
-MP5_SCREEN(wifi, "wifi", wifi_create, wifi_enter, wifi_leave);
+NEKOBOX_SCREEN(wifi, "wifi", wifi_create, wifi_enter, wifi_leave);

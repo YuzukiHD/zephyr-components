@@ -191,4 +191,4 @@ static void recent_enter(void *arg)
 	lv_obj_scroll_to_y(list, 0, LV_ANIM_OFF);
 }
 
-MP5_SCREEN(recent, "recent", recent_create, recent_enter, NULL);
+NEKOBOX_SCREEN(recent, "recent", recent_create, recent_enter, NULL);

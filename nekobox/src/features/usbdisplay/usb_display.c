@@ -578,8 +578,8 @@ static void usb_leave(void)
 	ui_overlay_set(true);
 }
 
-MP5_SCREEN(usb, "usb", usb_create, usb_enter, usb_leave);
+NEKOBOX_SCREEN(usb, "usb", usb_create, usb_enter, usb_leave);
 
-MP5_HOME_TILE(usb, .order = 40, .symbol = LV_SYMBOL_USB, .title = "USB Display",
+NEKOBOX_HOME_TILE(usb, .order = 40, .symbol = LV_SYMBOL_USB, .title = "USB Display",
 	      .subtitle = "Second screen for a PC", .color_top = 0xFF6C9B, .color_bottom = 0xD443A8,
 	      .screen = "usb");

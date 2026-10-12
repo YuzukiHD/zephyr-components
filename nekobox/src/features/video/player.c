@@ -245,7 +245,7 @@ int player_open(const char *path, struct player_info *info)
 		pl_req_post(0, true);
 		k_thread_create(&pl_video_thread, video_stack, K_THREAD_STACK_SIZEOF(video_stack),
 				pl_raw_main, NULL, NULL, NULL, 6, 0, K_NO_WAIT);
-		k_thread_name_set(&pl_video_thread, "mp5_video");
+		k_thread_name_set(&pl_video_thread, "nekobox_video");
 		pl_opened = true;
 		printk("player: %s, %ux%u, %u us per picture, about %u s, no sound\n", path, pl_raw_w,
 		       pl_raw_h, pl_raw_period_us, (unsigned)(pl_raw_duration_us / 1000000));
@@ -283,11 +283,11 @@ int player_open(const char *path, struct player_info *info)
 	pl_req_post(0, true);
 	k_thread_create(&pl_video_thread, video_stack, K_THREAD_STACK_SIZEOF(video_stack), pl_video_main,
 			NULL, NULL, NULL, 6, 0, K_NO_WAIT);
-	k_thread_name_set(&pl_video_thread, "mp5_video");
+	k_thread_name_set(&pl_video_thread, "nekobox_video");
 	if (pl_audio_present) {
 		k_thread_create(&pl_audio_thread, audio_stack, K_THREAD_STACK_SIZEOF(audio_stack),
 				pl_audio_main, NULL, NULL, NULL, 3, 0, K_NO_WAIT);
-		k_thread_name_set(&pl_audio_thread, "mp5_audio");
+		k_thread_name_set(&pl_audio_thread, "nekobox_audio");
 	}
 	pl_opened = true;
 	printk("player: %s, %ux%u, %u frames, %s\n", path, v->width, v->height, v->sample_count,

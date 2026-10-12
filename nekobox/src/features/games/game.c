@@ -5,8 +5,8 @@
  */
 
 /*
- * The game screen: a Game Boy, Game Boy Color or Game Boy Advance (mGBA core) or a NES (nofrendo
- * core) from the SD card. The emulator thread runs the console a frame at a time and is paced by
+ * The game screen: a Game Boy or Game Boy Color (mGBA core), a Game Boy Advance (gpSP core) or a NES
+ * (nofrendo core) from the SD card. The emulator thread runs the console a frame at a time and is paced by
  * the sound: the codec takes 48000 stereo frames a second, a full ring holds the emulation back.
  * The picture goes to the scaling plane of the display engine, the keys are translucent buttons
  * of LVGL over it; the fingers are read straight from the touch events (one per slot), because
@@ -30,12 +30,10 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/ring_buffer.h>
 
+#include <gbsp_zephyr/gbsp.h>
 #include <mgba_zephyr/gba.h>
 #include <nes_zephyr/nesemu.h>
 
-#ifdef CONFIG_DEMAND_PAGING_STATS
-#include <zephyr/kernel/mm/demand_paging.h>
-#endif
 #include "core/app.h"
 #include "debug/profile.h"
 #include "features/games/game.h"
@@ -61,7 +59,32 @@
 #define BUF_STRIDE	(256 * 2)
 #define BUF_SIZE	ROUND_UP(BUF_STRIDE * 240, 64)
 
-enum core { CORE_NONE, CORE_GBA, CORE_NES };
+enum core { CORE_NONE, CORE_GB, CORE_GBA, CORE_NES };
+
+/* the two Game Boy cores have the same interface under different names */
+struct gb_ops {
+	int (*open)(const char *rom, const char *save, unsigned int rate);
+	void (*close)(void);
+	int (*run_frame)(void);
+	void (*set_frame_buffer)(uint16_t *buf);
+	void (*set_frameskip)(int skip);
+	const uint16_t *(*frame)(unsigned int *w, unsigned int *h);
+	void (*set_keys)(uint32_t keys);
+	size_t (*audio_read)(int16_t *out, size_t frames);
+	int (*save_flush)(void);
+	/* frames skipped between two drawn ones in normal running */
+	int skip;
+};
+
+static const struct gb_ops ops_mgba = {
+	gba_open, gba_close, gba_run_frame, gba_set_frame_buffer, gba_set_frameskip, gba_frame,
+	gba_set_keys, gba_audio_read, gba_save_flush, 1,
+};
+static const struct gb_ops ops_gpsp = {
+	gbsp_open, gbsp_close, gbsp_run_frame, gbsp_set_frame_buffer, gbsp_set_frameskip, gbsp_frame,
+	gbsp_set_keys, gbsp_audio_read, gbsp_save_flush, 0,
+};
+static const struct gb_ops *gb;
 
 /* the keys of the pad, whatever the console: translated for the core when the frame starts */
 enum {
@@ -86,8 +109,14 @@ static volatile int status;		/* 0: loading, 1: playing, <0: the error that stopp
 static enum core core;
 static char rom_path[192], save_path[200];
 static uint8_t *buf[NBUF];
-static unsigned int cur;
-static atomic_t ready_idx;
+/*
+ * Who has which buffer: the emulator draws into `drawing`, hands it over as `ready`, the video
+ * thread takes it (`inflight`) and when the display has switched to it, it is `shown`. A buffer
+ * that is any of these is not given to the emulator, which can run several frames in a row after
+ * a stall and would otherwise draw into the picture that is being scanned out.
+ */
+static int drawing = -1, ready = -1, inflight = -1, shown = -1;
+static struct k_spinlock own_lock;
 static unsigned int ready_w, ready_h, ready_stride;
 static atomic_t pad_bits;		/* BIT(K_...) of the fingers on the pad */
 
@@ -177,18 +206,40 @@ static void video_main(void *a, void *b, void *c)
 		if (k_sem_take(&frame_sem, K_MSEC(200)) != 0) {
 			continue;
 		}
-		img.data = buf[atomic_get(&ready_idx)];
+		int idx = 0;
+
+		K_SPINLOCK(&own_lock) {
+			idx = ready;
+			inflight = idx;
+		}
+		img.data = buf[idx];
 		img.width = ready_w;
 		img.height = ready_h;
 		img.stride = ready_stride;
 		img.nonblock = false;
 		display_sunxi_show_rgb(disp, &img);
+		K_SPINLOCK(&own_lock) {
+			shown = idx;
+			inflight = -1;
+		}
 	}
 }
 
 static uint16_t *video_acquire(void)
 {
-	return (uint16_t *)buf[(cur + 1) % NBUF];
+	int pick = 0;
+
+	K_SPINLOCK(&own_lock) {
+		for (int i = 0; i < NBUF; i++) {
+			if (i != ready && i != inflight && i != shown) {
+				pick = i;
+				break;
+			}
+		}
+		drawing = pick;
+	}
+
+	return (uint16_t *)buf[pick];
 }
 
 /*
@@ -199,12 +250,13 @@ static void video_present(unsigned int w, unsigned int h)
 {
 	unsigned int stride = (core == CORE_NES ? 256 : 240) * 2;
 
-	cur = (cur + 1) % NBUF;
-	sys_cache_data_flush_range(buf[cur], stride * h);
+	sys_cache_data_flush_range(buf[drawing], stride * h);
 	ready_stride = stride;
 	ready_w = w;
 	ready_h = h;
-	atomic_set(&ready_idx, cur);
+	K_SPINLOCK(&own_lock) {
+		ready = drawing;
+	}
 	k_sem_give(&frame_sem);
 }
 
@@ -249,6 +301,35 @@ static uint32_t keys_nes(uint32_t k)
 
 /* ---- the emulator thread ------------------------------------------------------------------- */
 
+/*
+ * The statistics are printed by a thread of its own, at the lowest priority: the console is
+ * written byte by byte and a line takes 8 ms, which the emulation must not wait for. When the
+ * CPU has no time to spare the line is late, or dropped when the next one is ready first.
+ */
+static char report_text[192];
+static K_SEM_DEFINE(report_sem, 0, 1);
+
+static void report_put(const char *text)
+{
+	if (k_sem_count_get(&report_sem) == 0) {
+		strncpy(report_text, text, sizeof(report_text) - 1);
+		report_text[sizeof(report_text) - 1] = '\0';
+		k_sem_give(&report_sem);
+	}
+}
+
+static void report_main(void *a, void *b, void *c)
+{
+	ARG_UNUSED(a);
+	ARG_UNUSED(b);
+	ARG_UNUSED(c);
+	for (;;) {
+		k_sem_take(&report_sem, K_FOREVER);
+		printk("%s", report_text);
+	}
+}
+K_THREAD_DEFINE(game_report, 1024, report_main, NULL, NULL, NULL, K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
+
 static uint32_t pad_mask(void);
 
 static void emu_main(void *a, void *b, void *c)
@@ -263,7 +344,7 @@ static void emu_main(void *a, void *b, void *c)
 	ARG_UNUSED(b);
 	ARG_UNUSED(c);
 	ret = core == CORE_NES ? nesemu_open(rom_path, save_path, RATE)
-			       : gba_open(rom_path, save_path, RATE);
+			       : gb->open(rom_path, save_path, RATE);
 	if (ret != 0) {
 		printk("game: cannot start %s: %d\n", rom_path, ret);
 		status = ret;
@@ -290,20 +371,21 @@ static void emu_main(void *a, void *b, void *c)
 		} else {
 			size_t queued = audio_queued();
 
-			gba_set_keys(keys_gba(keys));
-			gba_set_frame_buffer(video_acquire());
+			gb->set_keys(keys_gba(keys));
+			gb->set_frame_buffer(video_acquire());
 			if (queued < SKIP_BELOW) {
 				catching_up = true;
 			} else if (queued > SKIP_RESUME) {
 				catching_up = false;
 			}
-			/* the picture is drawn at 30 fps; the emulation and sound run at full rate */
-			gba_set_frameskip(catching_up ? 3 : 1);
-			drawn = gba_run_frame();
+			/* mGBA draws at 30 fps, gpSP is fast enough for 60; the emulation and sound
+			 * always run at full rate */
+			gb->set_frameskip(catching_up ? 3 : gb->skip);
+			drawn = gb->run_frame();
 			if (drawn) {
 				unsigned int w, h;
 
-				gba_frame(&w, &h);
+				gb->frame(&w, &h);
 				video_present(w, h);
 			}
 		}
@@ -311,7 +393,7 @@ static void emu_main(void *a, void *b, void *c)
 		frames++;
 		skipped += drawn ? 0 : 1;
 		while ((n = core == CORE_NES ? nesemu_audio_read(pcm, ARRAY_SIZE(pcm) / 2)
-					     : gba_audio_read(pcm, ARRAY_SIZE(pcm) / 2)) > 0) {
+					     : gb->audio_read(pcm, ARRAY_SIZE(pcm) / 2)) > 0) {
 			size_t done = 0;
 
 			while (done < n && !quit) {
@@ -326,20 +408,12 @@ static void emu_main(void *a, void *b, void *c)
 			k_msleep(1);
 		}
 		if (k_uptime_get() - t_report >= 5000) {
-			printk("game: %u frames in 5 s, emulation %u us per frame, %u not drawn, sound queued %u\n",
-			       frames, emu_us / MAX(frames, 1U), skipped, (unsigned)audio_queued());
-#ifdef CONFIG_DEMAND_PAGING_STATS
-			{
-				static unsigned long last_faults;
-				struct k_mem_paging_stats_t st;
-
-				k_mem_paging_stats_get(&st);
-				printk("game: %lu page faults in 5 s, %lu clean and %lu dirty pages evicted so far\n",
-				       st.pagefaults.cnt - last_faults, st.eviction.clean,
-				       st.eviction.dirty);
-				last_faults = st.pagefaults.cnt;
-			}
-#endif
+			char line[160];
+			snprintf(line, sizeof(line),
+					 "game: %u frames in 5 s, emulation %u us per frame, %u not drawn, sound queued %u\n",
+					 frames, emu_us / MAX(frames, 1U), skipped,
+					 (unsigned)audio_queued());
+			report_put(line);
 			frames = emu_us = skipped = 0;
 			t_report = k_uptime_get();
 		}
@@ -347,7 +421,7 @@ static void emu_main(void *a, void *b, void *c)
 			if (core == CORE_NES) {
 				nesemu_save_flush();
 			} else {
-				gba_save_flush();
+				gb->save_flush();
 			}
 			t_save = k_uptime_get();
 		}
@@ -356,8 +430,8 @@ static void emu_main(void *a, void *b, void *c)
 		nesemu_save_flush();
 		nesemu_close();
 	} else {
-		gba_save_flush();
-		gba_close();
+		gb->save_flush();
+		gb->close();
 	}
 	running = false;
 }
@@ -598,14 +672,14 @@ static void game_file_open(const char *path)
 static const char *const nes_exts[] = {".nes", NULL};
 static const char *const gb_exts[] = {".gb", ".gbc", ".gba", NULL};
 
-MP5_FILE_HANDLER(nes, .kind = "nes", .title = "NES", .symbol = LV_SYMBOL_KEYBOARD,
+NEKOBOX_FILE_HANDLER(nes, .kind = "nes", .title = "NES", .symbol = LV_SYMBOL_KEYBOARD,
 		 .color = &ui_pal.pink, .exts = nes_exts, .open = game_file_open);
-MP5_FILE_HANDLER(gb, .kind = "gb", .title = "Game Boy", .symbol = LV_SYMBOL_KEYBOARD,
+NEKOBOX_FILE_HANDLER(gb, .kind = "gb", .title = "Game Boy", .symbol = LV_SYMBOL_KEYBOARD,
 		 .color = &ui_pal.pink, .exts = gb_exts, .open = game_file_open);
-MP5_HOME_TILE(nes, .order = 50, .symbol = LV_SYMBOL_KEYBOARD, .title = "NES",
+NEKOBOX_HOME_TILE(nes, .order = 50, .symbol = LV_SYMBOL_KEYBOARD, .title = "NES",
 	      .subtitle = "Famicom games", .color_top = 0xE5484D, .color_bottom = 0xB02A37,
 	      .kind = "nes");
-MP5_HOME_TILE(gb, .order = 60, .symbol = LV_SYMBOL_PLAY, .title = "Game Boy",
+NEKOBOX_HOME_TILE(gb, .order = 60, .symbol = LV_SYMBOL_PLAY, .title = "Game Boy",
 	      .subtitle = "GB, GBC and GBA", .color_top = 0x9B6CFF, .color_bottom = 0x6A3FD0,
 	      .kind = "gb");
 
@@ -620,7 +694,8 @@ static void game_enter(void *arg)
 	}
 	strncpy(rom_path, path, sizeof(rom_path) - 1);
 	rom_path[sizeof(rom_path) - 1] = '\0';
-	core = ext_is(rom_path, ".nes") ? CORE_NES : CORE_GBA;
+	core = ext_is(rom_path, ".nes") ? CORE_NES : ext_is(rom_path, ".gba") ? CORE_GBA : CORE_GB;
+	gb = core == CORE_GBA ? &ops_gpsp : &ops_mgba;
 	strncpy(save_path, rom_path, sizeof(save_path) - 5);
 	save_path[sizeof(save_path) - 5] = '\0';
 	dot = strrchr(save_path, '.');
@@ -629,11 +704,11 @@ static void game_enter(void *arg)
 
 	status = 0;
 	quit = false;
-	cur = 0;
+	drawing = ready = inflight = shown = -1;
 	ring_buf_reset(&ring);
 	lv_obj_remove_flag(load_label, LV_OBJ_FLAG_HIDDEN);
 	lv_obj_add_flag(msg_label, LV_OBJ_FLAG_HIDDEN);
-	if (core == CORE_NES) {
+	if (core != CORE_GBA) {
 		lv_obj_add_flag(gba_only_l, LV_OBJ_FLAG_HIDDEN);
 		lv_obj_add_flag(gba_only_r, LV_OBJ_FLAG_HIDDEN);
 	} else {
@@ -657,9 +732,9 @@ static void game_enter(void *arg)
 	k_thread_create(&emu_thread, game_emu_stack, K_THREAD_STACK_SIZEOF(game_emu_stack), emu_main, NULL,
 			NULL, NULL, EMU_PRIO, 0, K_NO_WAIT);
 	k_thread_name_set(&emu_thread, "game_emu");
-	mp5_profile_start(&emu_thread);
+	nekobox_profile_start(&emu_thread);
 	threads_started = true;
-	mp5_background_hold(true);
+	nekobox_background_hold(true);
 	if (poll == NULL) {
 		poll = lv_timer_create(touch_scan, 33, NULL);
 	}
@@ -678,7 +753,7 @@ static void game_leave(void)
 		k_thread_join(&game_audio_thread, K_SECONDS(5));
 		k_thread_join(&game_video_thread, K_SECONDS(5));
 	}
-	mp5_background_hold(false);
+	nekobox_background_hold(false);
 	display_sunxi_hide_yuv(disp);
 	for (int i = 0; i < NBUF; i++) {
 		free(buf[i]);
@@ -693,15 +768,15 @@ static void game_leave(void)
 	}
 }
 
-MP5_SCREEN(game, "game", game_create, game_enter, game_leave);
+NEKOBOX_SCREEN(game, "game", game_create, game_enter, game_leave);
 
-/* CONFIG_MP5_GAME starts a game at boot (for the check of the emulators) */
+/* CONFIG_NEKOBOX_GAME starts a game at boot (for the check of the emulators) */
 static int game_autostart(void)
 {
-	if (sizeof(CONFIG_MP5_GAME) > 1) {
-		ui_game_open(CONFIG_MP5_GAME, "home");
+	if (sizeof(CONFIG_NEKOBOX_GAME) > 1) {
+		ui_game_open(CONFIG_NEKOBOX_GAME, "home");
 	}
 
 	return 0;
 }
-MP5_INIT(MP5_STAGE_READY, 50, "game autostart", game_autostart);
+NEKOBOX_INIT(NEKOBOX_STAGE_READY, 50, "game autostart", game_autostart);

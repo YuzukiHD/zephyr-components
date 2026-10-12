@@ -5,7 +5,7 @@
  */
 
 /*
- * The screen manager: screens register with MP5_SCREEN and are found by name. A screen is made
+ * The screen manager: screens register with NEKOBOX_SCREEN and are found by name. A screen is made
  * the first time it is shown and kept; a change of theme makes all of them again.
  */
 
@@ -23,20 +23,20 @@
 #define MAX_SCREENS	16
 
 static lv_obj_t *screens[MAX_SCREENS];
-static const struct mp5_screen *current;
+static const struct nekobox_screen *current;
 
-static int screen_index(const struct mp5_screen *s)
+static int screen_index(const struct nekobox_screen *s)
 {
-	const struct mp5_screen *first;
+	const struct nekobox_screen *first;
 
-	STRUCT_SECTION_GET(mp5_screen, 0, &first);
+	STRUCT_SECTION_GET(nekobox_screen, 0, &first);
 
 	return s - first;
 }
 
-static const struct mp5_screen *screen_find(const char *name)
+static const struct nekobox_screen *screen_find(const char *name)
 {
-	STRUCT_SECTION_FOREACH(mp5_screen, s) {
+	STRUCT_SECTION_FOREACH(nekobox_screen, s) {
 		if (strcmp(s->name, name) == 0) {
 			return s;
 		}
@@ -57,7 +57,7 @@ static void screen_drawn(lv_event_t *e)
 
 void ui_goto_arg(const char *name, void *arg)
 {
-	const struct mp5_screen *s = screen_find(name);
+	const struct nekobox_screen *s = screen_find(name);
 	int i;
 
 	if (s == NULL) {
@@ -93,7 +93,7 @@ void ui_goto(const char *name)
 /* every screen is made again with the new colours */
 static void rebuild(void *unused)
 {
-	const struct mp5_screen *cur = current;
+	const struct nekobox_screen *cur = current;
 	bool made[MAX_SCREENS] = {0};
 	lv_obj_t *tmp = lv_obj_create(NULL);
 
@@ -102,7 +102,7 @@ static void rebuild(void *unused)
 		cur->leave();
 	}
 	lv_screen_load(tmp);
-	STRUCT_SECTION_FOREACH(mp5_screen, s) {
+	STRUCT_SECTION_FOREACH(nekobox_screen, s) {
 		int i = screen_index(s);
 
 		made[i] = screens[i] != NULL;
@@ -112,7 +112,7 @@ static void rebuild(void *unused)
 		}
 	}
 	/* the screens that have timers of their own must have their objects again at once */
-	STRUCT_SECTION_FOREACH(mp5_screen, s) {
+	STRUCT_SECTION_FOREACH(nekobox_screen, s) {
 		int i = screen_index(s);
 
 		if (made[i]) {
@@ -137,7 +137,7 @@ static int ui_step(void)
 
 	return 0;
 }
-MP5_INIT(MP5_STAGE_UI, 20, "interface", ui_step);
+NEKOBOX_INIT(NEKOBOX_STAGE_UI, 20, "interface", ui_step);
 
 /* the first picture: drawn, then the panel is switched on */
 void ui_present(void)
@@ -146,13 +146,13 @@ void ui_present(void)
 
 	lv_timer_handler();
 	display_blanking_off(disp);
-	printk("mp5: boot %u ms: first picture\n", k_uptime_get_32());
+	printk("nekobox: boot %u ms: first picture\n", k_uptime_get_32());
 }
 
 /* the user interface thread: how long a redraw takes shows in the log when it is slow */
 void ui_loop(void)
 {
-	printk("mp5: %d x %d\n", (int)lv_display_get_horizontal_resolution(NULL),
+	printk("nekobox: %d x %d\n", (int)lv_display_get_horizontal_resolution(NULL),
 	       (int)lv_display_get_vertical_resolution(NULL));
 	for (;;) {
 		static uint32_t slow, worst_us, report_ms;

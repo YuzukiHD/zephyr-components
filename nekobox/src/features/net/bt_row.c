@@ -25,4 +25,4 @@ static void bt_refresh(void)
 	lv_label_set_text(bt_value, line);
 }
 
-MP5_SETTINGS_ROW(bluetooth, 30, bt_row, bt_refresh);
+NEKOBOX_SETTINGS_ROW(bluetooth, 30, bt_row, bt_refresh);

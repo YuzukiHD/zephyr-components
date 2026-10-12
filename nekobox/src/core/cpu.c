@@ -49,7 +49,7 @@ static bool cpu_selftest(void)
 void cpu_clock_setup(void)
 {
 	const struct device *cctl = DEVICE_DT_GET(DT_NODELABEL(cctl));
-	uint32_t rate, target = CONFIG_MP5_CPU_MHZ * 1000000U;
+	uint32_t rate, target = CONFIG_NEKOBOX_CPU_MHZ * 1000000U;
 
 	clock_control_get_rate(cctl, (clock_control_subsys_t)CLK_CPU, &rate);
 	/* in steps, each one checked: the voltage is not changed */
@@ -79,4 +79,4 @@ static int cpu_step(void)
 
 	return 0;
 }
-MP5_INIT(MP5_STAGE_EARLY, 10, "cpu clock", cpu_step);
+NEKOBOX_INIT(NEKOBOX_STAGE_EARLY, 10, "cpu clock", cpu_step);

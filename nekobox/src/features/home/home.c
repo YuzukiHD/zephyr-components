@@ -29,7 +29,7 @@ static int tile_count(void)
 {
 	int n = 0;
 
-	STRUCT_SECTION_FOREACH(mp5_home_tile, t) {
+	STRUCT_SECTION_FOREACH(nekobox_home_tile, t) {
 		n++;
 	}
 
@@ -37,14 +37,14 @@ static int tile_count(void)
 }
 
 /* the n-th tile in the order of their order field */
-static const struct mp5_home_tile *tile_nth(int n)
+static const struct nekobox_home_tile *tile_nth(int n)
 {
-	const struct mp5_home_tile *prev = NULL;
+	const struct nekobox_home_tile *prev = NULL;
 
 	for (int k = 0; k <= n; k++) {
-		const struct mp5_home_tile *best = NULL;
+		const struct nekobox_home_tile *best = NULL;
 
-		STRUCT_SECTION_FOREACH(mp5_home_tile, t) {
+		STRUCT_SECTION_FOREACH(nekobox_home_tile, t) {
 			if ((prev == NULL || t->order > prev->order) &&
 			    (best == NULL || t->order < best->order)) {
 				best = t;
@@ -58,7 +58,7 @@ static const struct mp5_home_tile *tile_nth(int n)
 
 static void tile_clicked(lv_event_t *e)
 {
-	const struct mp5_home_tile *t = lv_event_get_user_data(e);
+	const struct nekobox_home_tile *t = lv_event_get_user_data(e);
 
 	if (t->screen == NULL) {
 		ui_files_open(NULL, t->kind);
@@ -67,7 +67,7 @@ static void tile_clicked(lv_event_t *e)
 	}
 }
 
-static lv_obj_t *tile_create(lv_obj_t *parent, const struct mp5_home_tile *t)
+static lv_obj_t *tile_create(lv_obj_t *parent, const struct nekobox_home_tile *t)
 {
 	lv_obj_t *card = lv_obj_create(parent);
 	lv_obj_t *badge = lv_obj_create(card);
@@ -222,12 +222,12 @@ static lv_obj_t *home_create(void)
 	lv_obj_set_style_text_font(brand, &lv_font_montserrat_16, 0);
 	lv_obj_set_style_text_color(brand, lv_color_hex(0xD6DDFF), 0);
 	lv_obj_set_style_text_letter_space(brand, 3, 0);
-	lv_label_set_text(brand, "YUZUKINEKO  MP5");
+	lv_label_set_text(brand, "YUZUKINEKO  NEKOBOX");
 
 	/* the functions, four to a row */
 	row = NULL;
 	for (int i = 0; i < tile_count(); i++) {
-		const struct mp5_home_tile *t = tile_nth(i);
+		const struct nekobox_home_tile *t = tile_nth(i);
 
 		if (i % 4 == 0) {
 			row = lv_obj_create(scr);
@@ -264,4 +264,4 @@ static void home_enter(void *arg)
 	storage_refresh();
 }
 
-MP5_SCREEN(home, "home", home_create, home_enter, NULL);
+NEKOBOX_SCREEN(home, "home", home_create, home_enter, NULL);

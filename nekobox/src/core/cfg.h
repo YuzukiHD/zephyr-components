@@ -6,8 +6,8 @@
 
 /* The settings kept in a file on the card */
 
-#ifndef MP5_CORE_CFG_H_
-#define MP5_CORE_CFG_H_
+#ifndef NEKOBOX_CORE_CFG_H_
+#define NEKOBOX_CORE_CFG_H_
 
 /** Reads the settings file of the card (call after the card is mounted) */
 void cfg_load(void);
@@ -16,4 +16,4 @@ const char *cfg_get(const char *key);
 /** Sets a key (NULL deletes it) and writes the file */
 void cfg_set(const char *key, const char *value);
 
-#endif /* MP5_CORE_CFG_H_ */
+#endif /* NEKOBOX_CORE_CFG_H_ */

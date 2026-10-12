@@ -2,11 +2,11 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 # the emulator modules sit next to this application
-list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR}/../mgba ${CMAKE_CURRENT_SOURCE_DIR}/../nes
+list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR}/../mgba ${CMAKE_CURRENT_SOURCE_DIR}/../gbsp ${CMAKE_CURRENT_SOURCE_DIR}/../nes
 	${CMAKE_CURRENT_SOURCE_DIR}/../aic8800)
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(mp5_player)
+project(nekobox)
 
 # sources include each other as "core/cfg.h"; LVGL includes lv_rvv.h from its blend sources
 zephyr_include_directories(src src/gfx)

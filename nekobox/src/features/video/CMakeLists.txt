@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
-target_sources_ifdef(CONFIG_MP5_FEATURE_VIDEO app PRIVATE
+target_sources_ifdef(CONFIG_NEKOBOX_FEATURE_VIDEO app PRIVATE
 	player.c player_audio.c player_video.c player_raw.c ui_player.c recent.c history.c)
 
-if(CONFIG_MP5_HOT_RAM)
+if(CONFIG_NEKOBOX_HOT_RAM)
   # only the files that run for every picture; relocating a whole library keeps every function
   set(V ${ZEPHYR_BASE}/drivers/vdec/sunxi)
   zephyr_code_relocate(FILES

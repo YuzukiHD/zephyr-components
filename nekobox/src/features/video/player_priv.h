@@ -9,8 +9,8 @@
  * threads. Only the files player*.c include it.
  */
 
-#ifndef MP5_FEATURES_VIDEO_PLAYER_PRIV_H_
-#define MP5_FEATURES_VIDEO_PLAYER_PRIV_H_
+#ifndef NEKOBOX_FEATURES_VIDEO_PLAYER_PRIV_H_
+#define NEKOBOX_FEATURES_VIDEO_PLAYER_PRIV_H_
 
 #include <errno.h>
 #include <pvmp4audiodecoder_api.h>
@@ -115,4 +115,4 @@ int pl_raw_probe(uint64_t file_size);
 void pl_raw_main(void *a, void *b, void *c);
 bool pl_is_raw_name(const char *path);
 
-#endif /* MP5_FEATURES_VIDEO_PLAYER_PRIV_H_ */
+#endif /* NEKOBOX_FEATURES_VIDEO_PLAYER_PRIV_H_ */

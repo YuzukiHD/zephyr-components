@@ -51,5 +51,5 @@ static void net_refresh(void)
 	lv_label_set_text(sync_value, line);
 }
 
-MP5_SETTINGS_ROW(wifi, 20, net_row, net_refresh);
-MP5_SETTINGS_ROW(sync, 40, sync_row, NULL);
+NEKOBOX_SETTINGS_ROW(wifi, 20, net_row, net_refresh);
+NEKOBOX_SETTINGS_ROW(sync, 40, sync_row, NULL);

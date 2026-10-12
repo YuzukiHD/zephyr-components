@@ -332,7 +332,7 @@ static lv_obj_t *calc_create(void)
 	return scr;
 }
 
-MP5_SCREEN(calculator, "calculator", calc_create, NULL, NULL);
-MP5_HOME_TILE(calculator, .order = 65, .symbol = LV_SYMBOL_LIST, .title = "Calculator",
+NEKOBOX_SCREEN(calculator, "calculator", calc_create, NULL, NULL);
+NEKOBOX_HOME_TILE(calculator, .order = 65, .symbol = LV_SYMBOL_LIST, .title = "Calculator",
 	      .subtitle = "Four functions", .color_top = 0xF59E0B, .color_bottom = 0xD9480F,
 	      .screen = "calculator");

@@ -698,7 +698,7 @@ static void photos_leave(void)
 	ui_overlay_set(true);
 }
 
-MP5_SCREEN(photos, "photos", photos_create, photos_enter, photos_leave);
+NEKOBOX_SCREEN(photos, "photos", photos_create, photos_enter, photos_leave);
 
 static void photo_open(const char *path)
 {
@@ -707,8 +707,8 @@ static void photo_open(const char *path)
 
 static const char *const photo_exts[] = {".jpg", ".jpeg", ".png", NULL};
 
-MP5_FILE_HANDLER(photo, .kind = "photo", .title = "Photos", .symbol = LV_SYMBOL_IMAGE,
+NEKOBOX_FILE_HANDLER(photo, .kind = "photo", .title = "Photos", .symbol = LV_SYMBOL_IMAGE,
 		 .color = &ui_pal.ok, .exts = photo_exts, .open = photo_open);
-MP5_HOME_TILE(photos, .order = 30, .symbol = LV_SYMBOL_IMAGE, .title = "Photos",
+NEKOBOX_HOME_TILE(photos, .order = 30, .symbol = LV_SYMBOL_IMAGE, .title = "Photos",
 	      .subtitle = "JPEG and PNG", .color_top = 0x3DDC97, .color_bottom = 0x1FA97A,
 	      .kind = "photo");

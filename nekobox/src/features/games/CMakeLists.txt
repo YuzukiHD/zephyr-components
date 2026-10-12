@@ -1,21 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
-target_sources_ifdef(CONFIG_MP5_FEATURE_GAMES app PRIVATE game.c)
+target_sources_ifdef(CONFIG_NEKOBOX_FEATURE_GAMES app PRIVATE game.c)
 
-if(CONFIG_MP5_GAMES_HOT_RAM)
-  # the interpreter, the memory access, the timers and DMA, the sound and the software renderer
-  set(M ${ZEPHYR_MGBA_MODULE_DIR})
-  set(G ${M}/mgba/src)
-  # copies with a name of their own, see the CMakeLists.txt of the module
-  set(H ${CMAKE_BINARY_DIR}/modules/mgba/gen)
+if(CONFIG_NEKOBOX_GAMES_HOT_RAM)
+  # the renderer, the memory access and the emulation loop of gpSP
+  set(C ${ZEPHYR_GBSP_MODULE_DIR}/core)
   zephyr_code_relocate(FILES
-    ${G}/arm/arm.c ${G}/arm/isa-arm.c ${G}/arm/isa-thumb.c
-    ${G}/gba/gba.c ${G}/gba/dma.c ${G}/core/timing.c
-    ${H}/gba_io_hot.c ${H}/gba_timer_hot.c ${H}/gba_video_hot.c ${H}/gba_audio_hot.c
-    ${H}/gb_audio_hot.c ${H}/gba_core_hot.c
-    ${G}/util/audio-buffer.c ${G}/util/circle-buffer.c ${G}/gba/renderers/common.c
-    ${G}/gba/renderers/software-bg.c ${G}/gba/renderers/software-obj.c
-    ${G}/gba/renderers/video-software.c
-    ${M}/src/gba_memory.c ${M}/src/renderers/software-mode0.c
+    ${C}/video.cpp ${C}/cpu.cpp ${C}/gba_memory.c ${C}/sound.c ${C}/gba_cc_lut.c
+    ${C}/riscv/riscv_emit.c ${C}/riscv/riscv_stubs.c
     LOCATION RAM_TEXT)
 endif()

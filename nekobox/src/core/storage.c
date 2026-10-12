@@ -18,7 +18,7 @@ static FATFS fat_fs;
 static struct fs_mount_t mp = {
 	.type = FS_FATFS,
 	.fs_data = &fat_fs,
-	.mnt_point = MP5_MOUNT_POINT,
+	.mnt_point = NEKOBOX_MOUNT_POINT,
 };
 static bool mounted;
 static unsigned int generation;
@@ -41,7 +41,7 @@ bool storage_space(uint64_t *total, uint64_t *free_bytes)
 {
 	struct fs_statvfs sv;
 
-	if (!mounted || fs_statvfs(MP5_MOUNT_POINT, &sv) != 0) {
+	if (!mounted || fs_statvfs(NEKOBOX_MOUNT_POINT, &sv) != 0) {
 		return false;
 	}
 	*total = (uint64_t)sv.f_frsize * sv.f_blocks;
@@ -59,10 +59,10 @@ static void report_unreadable(void)
 	if (disk_access_init("SD") == 0 &&
 	    disk_access_ioctl("SD", DISK_IOCTL_GET_SECTOR_COUNT, &sectors) == 0 &&
 	    disk_access_read("SD", sector0, 0, 1) == 0) {
-		printk("mp5: SD sectors %u, sector 0 starts %02x %02x %02x %02x, boot signature %02x%02x\n",
+		printk("nekobox: SD sectors %u, sector 0 starts %02x %02x %02x %02x, boot signature %02x%02x\n",
 		       sectors, sector0[0], sector0[1], sector0[2], sector0[3], sector0[510], sector0[511]);
 	} else {
-		printk("mp5: the card does not answer to reads\n");
+		printk("nekobox: the card does not answer to reads\n");
 	}
 }
 
@@ -76,12 +76,12 @@ static int try_mount(bool first)
 	if (ret == 0 && !mounted) {
 		mounted = true;
 		generation++;
-		printk("mp5: SD card mounted\n");
+		printk("nekobox: SD card mounted\n");
 		if (!first) {
 			cfg_load();
 		}
 	} else if (ret != 0 && first) {
-		printk("mp5: SD card not available (%d), trying again every %d s\n", ret,
+		printk("nekobox: SD card not available (%d), trying again every %d s\n", ret,
 		       SCAN_MS / 1000);
 		report_unreadable();
 	}
@@ -109,7 +109,7 @@ static void check_card(void)
 	generation++;
 	(void)fs_unmount(&mp);
 	k_mutex_unlock(&mount_lock);
-	printk("mp5: SD card removed\n");
+	printk("nekobox: SD card removed\n");
 }
 
 static void storage_watch(void *a, void *b, void *c)
@@ -121,7 +121,7 @@ static void storage_watch(void *a, void *b, void *c)
 	ARG_UNUSED(c);
 	for (;;) {
 		k_msleep(SCAN_MS);
-		if (mp5_background_held()) {
+		if (nekobox_background_held()) {
 			continue;
 		}
 		if (!mounted) {
@@ -139,4 +139,4 @@ static int storage_mount(void)
 
 	return 0;
 }
-MP5_INIT(MP5_STAGE_STORAGE, 0, "card", storage_mount);
+NEKOBOX_INIT(NEKOBOX_STAGE_STORAGE, 0, "card", storage_mount);

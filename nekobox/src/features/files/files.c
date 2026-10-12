@@ -41,7 +41,7 @@ struct entry {
 static struct entry *entries;
 static int count;
 /* the kind of file the browser lists, NULL: all */
-static const struct mp5_file_handler *filter;
+static const struct nekobox_file_handler *filter;
 static lv_obj_t *title_label, *recent_btn;
 static char dir_path[PATH_MAX_LEN] = ROOT;
 static lv_obj_t *path_label, *list, *spacer, *empty_label;
@@ -49,9 +49,9 @@ static lv_obj_t *rows[POOL];
 static int row_idx[POOL];
 
 /* the kind of file a name is: the handler that lists its extension */
-static const struct mp5_file_handler *handler_of(const char *name)
+static const struct nekobox_file_handler *handler_of(const char *name)
 {
-	STRUCT_SECTION_FOREACH(mp5_file_handler, h) {
+	STRUCT_SECTION_FOREACH(nekobox_file_handler, h) {
 		for (const char *const *ext = h->exts; *ext != NULL; ext++) {
 			if (name_has_ext(name, *ext)) {
 				return h;
@@ -64,7 +64,7 @@ static const struct mp5_file_handler *handler_of(const char *name)
 
 static const char *icon_of(const struct entry *e)
 {
-	const struct mp5_file_handler *h = e->dir ? NULL : handler_of(e->name);
+	const struct nekobox_file_handler *h = e->dir ? NULL : handler_of(e->name);
 
 	if (e->dir) {
 		return LV_SYMBOL_DIRECTORY;
@@ -75,7 +75,7 @@ static const char *icon_of(const struct entry *e)
 
 static uint32_t icon_color(const struct entry *e)
 {
-	const struct mp5_file_handler *h = e->dir ? NULL : handler_of(e->name);
+	const struct nekobox_file_handler *h = e->dir ? NULL : handler_of(e->name);
 
 	if (e->dir) {
 		return C_WARN;
@@ -203,7 +203,7 @@ static void row_clicked(lv_event_t *e)
 		}
 		list_show();
 	} else {
-		const struct mp5_file_handler *h = handler_of(entries[idx].name);
+		const struct nekobox_file_handler *h = handler_of(entries[idx].name);
 
 		if (h != NULL && h->open != NULL) {
 			h->open(path);
@@ -403,7 +403,7 @@ static lv_obj_t *files_create(void)
 void ui_files_open(const char *dir, const char *kind)
 {
 	filter = NULL;
-	STRUCT_SECTION_FOREACH(mp5_file_handler, h) {
+	STRUCT_SECTION_FOREACH(nekobox_file_handler, h) {
 		if (kind != NULL && strcmp(h->kind, kind) == 0) {
 			filter = h;
 		}
@@ -443,7 +443,7 @@ static void files_leave(void)
 	entries_free();
 }
 
-MP5_SCREEN(files, "files", files_create, files_enter, files_leave);
+NEKOBOX_SCREEN(files, "files", files_create, files_enter, files_leave);
 
-MP5_HOME_TILE(files, .order = 20, .symbol = LV_SYMBOL_DIRECTORY, .title = "Files",
+NEKOBOX_HOME_TILE(files, .order = 20, .symbol = LV_SYMBOL_DIRECTORY, .title = "Files",
 	      .subtitle = "Browse the SD card", .color_top = 0xFFB547, .color_bottom = 0xF2822C);

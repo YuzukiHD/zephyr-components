@@ -396,10 +396,10 @@ bool lv_rvv_selftest(void)
 static int rvv_step(void)
 {
 	if (!lv_rvv_selftest()) {
-		printk("mp5: the vector blends differ from LVGL, switched off\n");
+		printk("nekobox: the vector blends differ from LVGL, switched off\n");
 		lv_rvv_enable(false);
 	}
 
 	return 0;
 }
-MP5_INIT(MP5_STAGE_EARLY, 20, "vector blends", rvv_step);
+NEKOBOX_INIT(NEKOBOX_STAGE_EARLY, 20, "vector blends", rvv_step);

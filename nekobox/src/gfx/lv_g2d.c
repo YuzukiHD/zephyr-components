@@ -44,7 +44,7 @@ static int32_t g2d_evaluate(lv_draw_unit_t *u, lv_draw_task_t *t)
 		return 0;
 	}
 	px = lv_area_get_width(&a) * lv_area_get_height(&a);
-	if (px < CONFIG_MP5_GFX_G2D_MIN_PIXELS) {
+	if (px < CONFIG_NEKOBOX_GFX_G2D_MIN_PIXELS) {
 		return 0;
 	}
 	t->preference_score = 0;
@@ -137,4 +137,4 @@ static int g2d_step(void)
 
 	return 0;
 }
-MP5_INIT(MP5_STAGE_UI, 10, "g2d", g2d_step);
+NEKOBOX_INIT(NEKOBOX_STAGE_UI, 10, "g2d", g2d_step);

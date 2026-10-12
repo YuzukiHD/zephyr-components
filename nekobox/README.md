@@ -1,25 +1,24 @@
-# mp5-player
+# NekoBox
 
-A media player with a touch user interface for the YuzukiNeko, built on LVGL. Not a module but an
+A media and game box with a touch user interface for the YuzukiNeko, built on LVGL. Not a module but an
 application, like `uf2-downloader`. Every function is a feature with a switch of its own
-(`CONFIG_MP5_FEATURE_*`); a feature that is switched off is not built and leaves no tile, no
+(`CONFIG_NEKOBOX_FEATURE_*`); a feature that is switched off is not built and leaves no tile, no
 settings row and no file type behind.
 
 | Feature | Switch | What it is |
 |---|---|---|
 | Home | always | the clock (tap it to set the time) and the tiles of the features |
-| File browser | `MP5_FEATURE_FILES` | browse the SD card |
-| Settings | `MP5_FEATURE_SETTINGS` | the screen with the rows the other features add |
-| Brightness, theme | `MP5_FEATURE_BRIGHTNESS`, `MP5_FEATURE_THEME_PICKER` | settings rows: backlight, dark or light, accent colour |
-| Videos | `MP5_FEATURE_VIDEO` | MP4 (H.264 + AAC) and raw H.264, resume, recent list |
-| Photos | `MP5_FEATURE_PHOTOS` | JPEG and PNG with pinch zoom |
-| Calculator | `MP5_FEATURE_CALCULATOR` | four function pocket calculator |
-| Games | `MP5_FEATURE_GAMES` | NES, Game Boy, Game Boy Color, Game Boy Advance |
-| GBA core from RAM | `MP5_GAMES_HOT_RAM` | the interpreter and renderer (about 230 KiB) run from RAM, not from the flash window: FireRed needs 15 instead of 22 ms per frame |
-| Paged GBA ROM | `MP5_GAMES_PAGED_ROM` | MMU on, the GBA ROM (up to 32 MiB) is mapped from the card and paged in; fixed 8 MiB malloc arena, about 3.4 MiB page frames. Off: ROMs up to 6 MiB are read into memory |
-| USB Display | `MP5_FEATURE_USB_DISPLAY` | second screen of a PC with touch |
-| Network | `MP5_FEATURE_NET` | Wi-Fi (AIC8800, saved passwords) and the time from NTP |
-| Bluetooth | `MP5_FEATURE_BT` | the connection is shown in the settings |
+| File browser | `NEKOBOX_FEATURE_FILES` | browse the SD card |
+| Settings | `NEKOBOX_FEATURE_SETTINGS` | the screen with the rows the other features add |
+| Brightness, theme | `NEKOBOX_FEATURE_BRIGHTNESS`, `NEKOBOX_FEATURE_THEME_PICKER` | settings rows: backlight, dark or light, accent colour |
+| Videos | `NEKOBOX_FEATURE_VIDEO` | MP4 (H.264 + AAC) and raw H.264, resume, recent list |
+| Photos | `NEKOBOX_FEATURE_PHOTOS` | JPEG and PNG with pinch zoom |
+| Calculator | `NEKOBOX_FEATURE_CALCULATOR` | four function pocket calculator |
+| Games | `NEKOBOX_FEATURE_GAMES` | NES (nofrendo), Game Boy and Game Boy Color (mGBA, runs from the flash window), Game Boy Advance (gpSP with the RISC-V recompiler; 5 MiB of the ROM are kept in memory, the rest is read from the card in pages, ROMs up to 32 MiB) |
+| Games from RAM | `NEKOBOX_GAMES_HOT_RAM` | the renderer and the memory handlers of the GBA core (gpSP) run from RAM, not from the flash window |
+| USB Display | `NEKOBOX_FEATURE_USB_DISPLAY` | second screen of a PC with touch |
+| Network | `NEKOBOX_FEATURE_NET` | Wi-Fi (AIC8800, saved passwords) and the time from NTP |
+| Bluetooth | `NEKOBOX_FEATURE_BT` | the connection is shown in the settings |
 
 ## Source layout
 
@@ -27,15 +26,15 @@ settings row and no file type behind.
 src/
   main.c           runs the start stages, nothing else
   core/            services without a user interface
-    app.[ch]         start steps: MP5_INIT(stage, order, name, fn)
+    app.[ch]         start steps: NEKOBOX_INIT(stage, order, name, fn)
     storage cfg clock cpu fsutil boot_display
   ui/              the framework, no features in it
     ui.[ch]          screen manager (screens are found by name)
-    registry.h       MP5_SCREEN, MP5_HOME_TILE, MP5_SETTINGS_ROW, MP5_FILE_HANDLER
+    registry.h       NEKOBOX_SCREEN, NEKOBOX_HOME_TILE, NEKOBOX_SETTINGS_ROW, NEKOBOX_FILE_HANDLER
     theme widgets time_dialog
   gfx/             drawing accelerators for LVGL (vector blends, 2D engine)
   features/<name>/ one directory per feature: CMakeLists.txt, Kconfig, sources
-  debug/           statistics and the self tests (MP5_DEBUG)
+  debug/           statistics and the self tests (NEKOBOX_DEBUG)
 ```
 
 Start stages run in this order: `EARLY` (CPU clock, vector check, the display thread), `STORAGE`
@@ -44,22 +43,22 @@ Each module registers its own steps, so `main()` has no `#ifdef`.
 
 The registries are read only records in the flash that the linker collects (`src/*/sections-rom.ld`):
 
-- `MP5_SCREEN(sym, "name", create, enter, leave)` a screen; `ui_goto("name")` shows it and does
+- `NEKOBOX_SCREEN(sym, "name", create, enter, leave)` a screen; `ui_goto("name")` shows it and does
   nothing when the feature is not built.
-- `MP5_HOME_TILE(sym, .order, .symbol, .title, .subtitle, .color_top, .color_bottom, .screen | .kind)`
+- `NEKOBOX_HOME_TILE(sym, .order, .symbol, .title, .subtitle, .color_top, .color_bottom, .screen | .kind)`
   a tile of the home screen: it opens the screen, or the file browser for a kind of file.
-- `MP5_SETTINGS_ROW(sym, order, create, refresh)` a row of the settings.
-- `MP5_FILE_HANDLER(sym, .kind, .title, .symbol, .color, .exts, .open, [.extra_screen, .extra_label])`
+- `NEKOBOX_SETTINGS_ROW(sym, order, create, refresh)` a row of the settings.
+- `NEKOBOX_FILE_HANDLER(sym, .kind, .title, .symbol, .color, .exts, .open, [.extra_screen, .extra_label])`
   a kind of file: its extensions, its icon and what opens it.
 
 ### Adding a feature
 
-1. `src/features/<name>/` with `Kconfig` (`config MP5_FEATURE_<NAME>`, `default y`, `select` what it
-   needs from Zephyr) and `CMakeLists.txt` (`target_sources_ifdef(CONFIG_MP5_FEATURE_<NAME> app PRIVATE ...)`).
+1. `src/features/<name>/` with `Kconfig` (`config NEKOBOX_FEATURE_<NAME>`, `default y`, `select` what it
+   needs from Zephyr) and `CMakeLists.txt` (`target_sources_ifdef(CONFIG_NEKOBOX_FEATURE_<NAME> app PRIVATE ...)`).
 2. `add_subdirectory(src/features/<name>)` in the top `CMakeLists.txt`; the `Kconfig` is found by the
    glob in the top `Kconfig`.
-3. In the sources register what the feature offers: `MP5_SCREEN`, `MP5_HOME_TILE`,
-   `MP5_SETTINGS_ROW`, `MP5_FILE_HANDLER`, `MP5_INIT`.
+3. In the sources register what the feature offers: `NEKOBOX_SCREEN`, `NEKOBOX_HOME_TILE`,
+   `NEKOBOX_SETTINGS_ROW`, `NEKOBOX_FILE_HANDLER`, `NEKOBOX_INIT`.
 
 ## How it works
 
@@ -87,7 +86,7 @@ started by the flash loader yet, so the image does not start by itself at power 
 ```sh
 . ~/f101-zephyr/env.sh
 cd ~/f101-zephyr
-west build -b yuzukineko -d build/mp5 zephyr-components/mp5-player
+west build -b yuzukineko -d build/nekobox zephyr-components/nekobox-player
 
 # SyterKit, the application xip-boot (RISC-V toolchain on PATH)
 cd SyterKit
@@ -102,7 +101,7 @@ decoder shares the memory bus with the display and is slower at the lower clock,
 With the board in FEL mode:
 
 ```sh
-xfel spinor write 0x8000 build/mp5/zephyr/zephyr.bin
+xfel spinor write 0x8000 build/nekobox/zephyr/zephyr.bin
 xfel write 0x20000 out/syterkit/build/yuzukineko/app_sram/xip-boot/xip-boot_fel.bin
 xfel exec 0x20000
 ```
@@ -114,9 +113,9 @@ of the application. Everything in front of the application is overwritten.
 
 ```sh
 python3 tools/mkimage.py --boot out/syterkit/build/yuzukineko/app_sram/xip-boot/xip-boot_spi.bin \
-    --app build/mp5/zephyr/zephyr.bin -o mp5-full.img
+    --app build/nekobox/zephyr/zephyr.bin -o nekobox-full.img
 # board in FEL mode (hold the FEL key at power on)
-xfel spinor write 0 mp5-full.img
+xfel spinor write 0 nekobox-full.img
 ```
 
 After the next power cycle the BROM starts the stub from the flash, which maps the window and jumps to the
@@ -139,18 +138,15 @@ the UF2 application area (`0x200000`) overlaps it, so do not use both.
 
 | Option | Default | |
 |---|---|---|
-| `CONFIG_MP5_FEATURE_*` | on | the features above |
-| `CONFIG_MP5_GFX_RVV` | on | vector blends for LVGL (checked against the C code at boot) |
-| `CONFIG_MP5_GFX_G2D` | off | fills with the 2D engine (slower, see the help) |
-| `CONFIG_MP5_CPU_MHZ` | 960 | CPU clock, raised in steps with a memory check |
-| `CONFIG_MP5_VIDEO_DEFAULT` | `/SD:/video540p-ysjf.mp4` | the file the self test plays |
-| `CONFIG_MP5_GAME` | empty | a game to start at boot, for a check without touching |
-| `CONFIG_MP5_DEBUG` | on | numbers about the user interface |
-| `CONFIG_MP5_SELFTEST` | off | play the default video, seek, pause, resume and change the volume by itself |
-| `CONFIG_MP5_THEME_TEST` | off | settings, theme, Wi-Fi and game steps by themselves, ends with `PASS` or `FAIL` |
-
-The options were called `CONFIG_SAMPLE_MP5_*` before (the two test switches keep their old names as aliases); `SAMPLE_MP5_UI_BENCH`, `_UI_PROFILE`,
-`_UI_DEMO` and `_ROOT` are gone.
+| `CONFIG_NEKOBOX_FEATURE_*` | on | the features above |
+| `CONFIG_NEKOBOX_GFX_RVV` | on | vector blends for LVGL (checked against the C code at boot) |
+| `CONFIG_NEKOBOX_GFX_G2D` | off | fills with the 2D engine (slower, see the help) |
+| `CONFIG_NEKOBOX_CPU_MHZ` | 960 | CPU clock, raised in steps with a memory check |
+| `CONFIG_NEKOBOX_VIDEO_DEFAULT` | `/SD:/video540p-ysjf.mp4` | the file the self test plays |
+| `CONFIG_NEKOBOX_GAME` | empty | a game to start at boot, for a check without touching |
+| `CONFIG_NEKOBOX_DEBUG` | on | numbers about the user interface |
+| `CONFIG_NEKOBOX_SELFTEST` | off | play the default video, seek, pause, resume and change the volume by itself |
+| `CONFIG_NEKOBOX_THEME_TEST` | off | settings, theme, Wi-Fi and game steps by themselves, ends with `PASS` or `FAIL` |
 
 ## Notes
 

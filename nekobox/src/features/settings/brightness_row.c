@@ -36,4 +36,4 @@ static void brightness_row(lv_obj_t *list)
 	lv_obj_add_event_cb(s, brightness_changed, LV_EVENT_RELEASED, NULL);
 }
 
-MP5_SETTINGS_ROW(brightness, 50, brightness_row, NULL);
+NEKOBOX_SETTINGS_ROW(brightness, 50, brightness_row, NULL);

@@ -19,7 +19,7 @@
 #include "core/storage.h"
 #include "core/cfg.h"
 
-#define CFG_FILE	"/SD:/.mp5_settings"
+#define CFG_FILE	"/SD:/.nekobox_settings"
 #define CFG_MAX		28
 #define KEY_LEN		16
 #define VAL_LEN		96
@@ -157,4 +157,4 @@ static int cfg_step(void)
 
 	return 0;
 }
-MP5_INIT(MP5_STAGE_STORAGE, 10, "settings", cfg_step);
+NEKOBOX_INIT(NEKOBOX_STAGE_STORAGE, 10, "settings", cfg_step);

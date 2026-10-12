@@ -14,6 +14,17 @@ config MP5_FEATURE_GAMES
 	select AUDIO_CODEC
 	select DMA
 
+config MP5_GAMES_HOT_RAM
+	bool "Run the Game Boy Advance core from RAM"
+	default y
+	depends on XIP && MP5_FEATURE_GAMES
+	select CODE_DATA_RELOCATION
+	help
+	  In an XIP image every instruction that is not in the cache comes from the flash window.
+	  The interpreter is a big loop that does not fit the cache, so the files that run for every
+	  frame (about 270 KiB of text) are copied to RAM at boot. The memory comes out of the page
+	  frames of the paged ROM.
+
 config MP5_GAME
 	string "Game to start at boot, for a check without touching (empty: none)"
 	default ""

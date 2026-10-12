@@ -1,6 +1,6 @@
 config MP5_CPU_MHZ
 	int "CPU clock in MHz, 0 keeps what the boot stub set up (600)"
-	default 816
+	default 960
 	help
 	  The CPU PLL is raised in steps of 72 MHz and the memory is checked after each step. The
 	  voltage is not changed.

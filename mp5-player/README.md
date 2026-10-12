@@ -15,6 +15,7 @@ settings row and no file type behind.
 | Photos | `MP5_FEATURE_PHOTOS` | JPEG and PNG with pinch zoom |
 | Calculator | `MP5_FEATURE_CALCULATOR` | four function pocket calculator |
 | Games | `MP5_FEATURE_GAMES` | NES, Game Boy, Game Boy Color, Game Boy Advance |
+| GBA core from RAM | `MP5_GAMES_HOT_RAM` | the interpreter and renderer (about 230 KiB) run from RAM, not from the flash window: FireRed needs 15 instead of 22 ms per frame |
 | Paged GBA ROM | `MP5_GAMES_PAGED_ROM` | MMU on, the GBA ROM (up to 32 MiB) is mapped from the card and paged in; fixed 8 MiB malloc arena, about 3.4 MiB page frames. Off: ROMs up to 6 MiB are read into memory |
 | USB Display | `MP5_FEATURE_USB_DISPLAY` | second screen of a PC with touch |
 | Network | `MP5_FEATURE_NET` | Wi-Fi (AIC8800, saved passwords) and the time from NTP |
@@ -141,7 +142,7 @@ the UF2 application area (`0x200000`) overlaps it, so do not use both.
 | `CONFIG_MP5_FEATURE_*` | on | the features above |
 | `CONFIG_MP5_GFX_RVV` | on | vector blends for LVGL (checked against the C code at boot) |
 | `CONFIG_MP5_GFX_G2D` | off | fills with the 2D engine (slower, see the help) |
-| `CONFIG_MP5_CPU_MHZ` | 816 | CPU clock, raised in steps with a memory check |
+| `CONFIG_MP5_CPU_MHZ` | 960 | CPU clock, raised in steps with a memory check |
 | `CONFIG_MP5_VIDEO_DEFAULT` | `/SD:/video540p-ysjf.mp4` | the file the self test plays |
 | `CONFIG_MP5_GAME` | empty | a game to start at boot, for a check without touching |
 | `CONFIG_MP5_DEBUG` | on | numbers about the user interface |

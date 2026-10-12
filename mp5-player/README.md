@@ -13,6 +13,7 @@ settings row and no file type behind.
 | Brightness, theme | `MP5_FEATURE_BRIGHTNESS`, `MP5_FEATURE_THEME_PICKER` | settings rows: backlight, dark or light, accent colour |
 | Videos | `MP5_FEATURE_VIDEO` | MP4 (H.264 + AAC) and raw H.264, resume, recent list |
 | Photos | `MP5_FEATURE_PHOTOS` | JPEG and PNG with pinch zoom |
+| Calculator | `MP5_FEATURE_CALCULATOR` | four function pocket calculator |
 | Games | `MP5_FEATURE_GAMES` | NES, Game Boy, Game Boy Color, Game Boy Advance |
 | USB Display | `MP5_FEATURE_USB_DISPLAY` | second screen of a PC with touch |
 | Network | `MP5_FEATURE_NET` | Wi-Fi (AIC8800, saved passwords) and the time from NTP |

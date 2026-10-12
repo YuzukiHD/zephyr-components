@@ -1,0 +1,5 @@
+config MP5_FEATURE_CALCULATOR
+	bool "Calculator"
+	default y
+	help
+	  The Calculator tile on the home screen, a four function pocket calculator.

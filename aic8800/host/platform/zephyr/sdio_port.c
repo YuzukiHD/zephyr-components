@@ -159,9 +159,30 @@ static int aic_sdio_enable_func(struct sdio_func *func)
 	return sdio_enable_func(func);
 }
 
+/*
+ * The block size of a function lives in two places: the registers of the card and func->block_size,
+ * which the transfer functions of the subsystem divide by. A register write that fails once leaves
+ * the latter at 0 and every transfer after it is refused as invalid, so the write is repeated and,
+ * when the caller has already seen the card report the wanted size, the copy is brought up to date.
+ */
 static int aic_sdio_set_func_block_size(struct sdio_func *func, unsigned int blksize)
 {
-	return sdio_set_block_size(func, blksize);
+	int ret = 0;
+
+	for (int try = 0; try < 4; try++) {
+		ret = sdio_set_block_size(func, blksize);
+		if (ret == 0 && func->block_size == blksize) {
+			return 0;
+		}
+		AIC_LOG_PRINTF("sdio_set_block_size %u failed (%d), try %d\n", blksize, ret, try + 1);
+		rtos_msleep(2);
+	}
+	if (sdio_block_size == blksize) {
+		func->block_size = blksize;
+		return 0;
+	}
+
+	return ret != 0 ? ret : -EIO;
 }
 
 /*
@@ -822,7 +843,10 @@ int aicwf_sdio_send_pkt(u8 *buf, uint count)
         if (ret != -EINVAL && ret != -EBUSY) {
             break;
         }
-        AIC_LOG_PRINTF("sdio write retry %d (%d)\n", try + 1, ret);
+        AIC_LOG_PRINTF("sdio write retry %d (%d) len %u bs %u max_blk %u num %u data %p\n", try + 1, ret,
+                       (unsigned int)count, (unsigned int)sdio_function[FUNC_1]->block_size,
+                       (unsigned int)sdio_function[FUNC_1]->cis.max_blk_size,
+                       (unsigned int)sdio_function[FUNC_1]->num, buf);
         rtos_msleep(2);
     }
 

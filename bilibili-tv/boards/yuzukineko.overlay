@@ -1,0 +1,30 @@
+/*
+ * The image runs in place from the flash: it is linked into the window of the SPIF controller, which
+ * the boot stub (SyterKit xip-boot) maps from the flash offset 0x80000 at 0x0e000000. The window is
+ * 6 MiB, the same as the stub's.
+ */
+/ {
+	soc {
+		xip_flash: flash@e000000 {
+			compatible = "soc-nv-flash";
+			reg = <0x0e000000 0x600000>;
+			erase-block-size = <4096>;
+			write-block-size = <1>;
+		};
+	};
+
+	chosen {
+		zephyr,flash = &xip_flash;
+	};
+
+	/* LVGL reads the touch panel as a pointer: the list can be tapped */
+	lvgl_pointer {
+		compatible = "zephyr,lvgl-pointer-input";
+		input = <&touch>;
+	};
+};
+
+/* spi0 uses the pins of the flash (PC0..PC5): switching them away would cut the window off */
+&spi0 {
+	status = "disabled";
+};

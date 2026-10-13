@@ -1,0 +1,130 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "Bilibili TV"
+
+config BILI_WIFI_SSID
+	string "Wi-Fi network to join at start"
+	default ""
+
+config BILI_WIFI_PSK
+	string "Wi-Fi passphrase (empty: open network)"
+	default ""
+
+config BILI_PROXY
+	string "HTTP proxy (host:port) for every request, empty for a direct connection"
+	default "192.168.1.9:7897"
+	help
+	  With a proxy the plain requests are sent with the full address and the https ones through a
+	  CONNECT tunnel, on which the TLS handshake is done by the application (the certificate of the
+	  server is not checked). It can be changed at run time with  bili proxy <host:port|off>.
+
+config BILI_FEED_COUNT
+	int "Videos asked from the recommendation feed"
+	default 12
+	range 1 30
+
+config BILI_CACHE_DIR
+	string "Directory on the card where videos are stored while they play"
+	default "/SD:/bilibili"
+
+config NEKOBOX_VIDEO_STREAM_KB
+	int "Stream buffer of the video decoder in KiB"
+	default 256
+	help
+	  The videos here are 360P at under 1 Mbit/s: a quarter of a MiB holds seconds of them, and the
+	  memory that the player of NekoBox would keep for 1 MiB goes to the decoder's pictures.
+
+config BILI_HOT_RAM
+	bool "Run the video decoder driver and the AAC decoder from RAM"
+	default y
+	depends on XIP
+	select CODE_DATA_RELOCATION
+	help
+	  In an XIP image every instruction that is not in the cache comes from the flash window.
+	  The decoder driver and the AAC decoder run on every picture, so their text is copied to RAM
+	  at boot; the rest (kernel, other drivers, LVGL, the file system) stays in the flash.
+
+config BILI_DM_MAX_ITEMS
+	int "Most comments (danmaku) kept of a video"
+	default 4000
+	range 100 20000
+
+config BILI_DM_POOL_KB
+	int "Memory for the text of the comments (KiB)"
+	default 160
+	range 16 2048
+
+config BILI_DM_ACTIVE
+	int "Comments on the screen at the same time"
+	default 20
+	range 4 60
+	help
+	  Each one is a label that LVGL has to redraw while it moves: this is what the player pays for the
+	  comments. A comment that finds no free label or lane within a second and a half is dropped.
+
+config BILI_STREAM
+	bool "Play while the file downloads"
+	default y
+	help
+	  Off: the whole file is downloaded first (a long wait for a big video).
+
+config BILI_UI_RAM
+	bool "Run LVGL and the interface code from RAM"
+	depends on XIP
+	select CODE_DATA_RELOCATION
+	default n
+
+config BILI_DM_FETCH
+	bool "Fetch the comments of a video before it plays"
+	default y
+
+config BILI_DM_DEFAULT
+	bool "Show the comments when a video starts"
+	default y
+
+config BILI_SELFTEST
+	bool "Scroll the list, search, play videos and check the memory by itself, ending with PASS or FAIL"
+	select THREAD_MONITOR
+	select THREAD_NAME
+	select THREAD_RUNTIME_STATS
+	select SYS_HEAP_RUNTIME_STATS
+	help
+	  Needs the network and the card. See src/debug/selftest.c.
+
+config BILI_SELFTEST_ROUNDS
+	int "Times the list is scrolled to its end and back"
+	depends on BILI_SELFTEST
+	default 3
+
+config BILI_SELFTEST_PLAYS
+	int "Videos that are played"
+	depends on BILI_SELFTEST
+	default 3
+
+config BILI_HEARTBEAT
+	bool "Print a line with the state of the cover cache every 10 s"
+	default y
+
+config BILI_COVER_THREADS
+	int "Threads that fetch cover pictures at the same time"
+	default 3
+	range 1 6
+
+config BILI_COVER_CACHE
+	int "Cover pictures kept in memory (62 KiB each)"
+	default 24
+	range 8 60
+
+config BILI_CDN_HTTPS
+	bool "Fetch the video over TLS too"
+	help
+	  The video servers also answer on plain HTTP, which costs the CPU nothing; the API always
+	  uses TLS. Switch this on if a server insists on it.
+
+config BILI_TLS_VERIFY
+	bool "Check the certificate of the API server"
+	help
+	  Needs the root certificate to be registered (not done yet): with this off the connection is
+	  encrypted but the server is not authenticated.
+
+source "Kconfig.zephyr"

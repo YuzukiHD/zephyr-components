@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.o
+*.log
+/build/
+tests/host/build/
+tests/host/out/
+*.png
+tests/

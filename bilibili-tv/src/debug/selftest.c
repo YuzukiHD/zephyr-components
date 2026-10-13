@@ -75,7 +75,9 @@ static void to(enum phase p)
 	since = k_uptime_get();
 }
 
-static void memory(const char *tag, bool reference)
+/* reference: remember the figures; compare: check against them (the lists and covers of the tabs and
+ * searches are alive then, only the state after a video is expected to match) */
+static void memory_at(const char *tag, bool reference, bool compare)
 {
 	unsigned int free_kib, biggest, lv_used, lv_peak, lv_free;
 	struct sys_memory_stats st = {0};
@@ -92,12 +94,17 @@ static void memory(const char *tag, bool reference)
 		ref_biggest = biggest;
 		ref_lv_used = lv_used;
 		have_ref = true;
-	} else if (have_ref) {
+	} else if (have_ref && compare) {
 		check(free_kib + MEM_TOLERANCE >= ref_free, "the free memory is as at the reference");
 		check(biggest + MEM_TOLERANCE >= ref_biggest, "the biggest block is as at the reference");
 		check(lv_used <= ref_lv_used + MEM_TOLERANCE / 2, "the LVGL heap is as at the reference");
 	}
 	check(lv_free >= 64, "the LVGL heap has 64 KiB free");
+}
+
+static void memory(const char *tag, bool reference)
+{
+	memory_at(tag, reference, !reference);
 }
 
 static void list_phase(void)
@@ -184,7 +191,7 @@ static void tab_phase(void)
 			since = k_uptime_get();
 		}
 	} else if (k_uptime_get() - since > 3000) {
-		memory("both tabs built", false);
+		memory_at("both tabs built", false, false);
 		ui_home_tab(0);
 		to(P_SEARCH);
 	}
@@ -197,7 +204,7 @@ static void search_phase(void)
 	char what[96];
 
 	if (step >= ARRAY_SIZE(words)) {
-		memory("after the searches", false);
+		memory_at("after the searches", false, false);
 		to(P_PLAY);
 		return;
 	}

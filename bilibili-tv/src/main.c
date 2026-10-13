@@ -655,8 +655,11 @@ static void card_wait(void)
 	}
 }
 
+void cpu_clock_setup(void);
+
 int main(void)
 {
+	cpu_clock_setup();
 	http_set_proxy(CONFIG_BILI_PROXY);
 	ui_init();
 #ifdef CONFIG_BILI_SELFTEST

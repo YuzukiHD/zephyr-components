@@ -28,7 +28,7 @@ target_sources(app PRIVATE
 target_sources(app PRIVATE
 	src/main.c src/wifi.c src/http.c src/http_parse.c src/json.c src/md5.c
 	src/wbi.c src/bili_parse.c src/bili_api.c src/download.c src/cover.c src/inflate.c src/danmaku.c src/ui_danmaku.c
-	src/ui.c src/ui_card.c src/ui_home.c src/ui_search.c src/ui_play.c src/fonts.c src/logo.c src/pinyin_dict.c)
+	src/ui.c src/ui_card.c src/ui_home.c src/ui_search.c src/ui_play.c src/fonts.c src/logo.c src/cpu.c src/pinyin_dict.c)
 target_sources_ifdef(CONFIG_BILI_SELFTEST app PRIVATE src/debug/selftest.c)
 
 # the Chinese font (tools/make_font.py) is part of the image

@@ -12,6 +12,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
+#include "debug/crumbs.h"
 #include "net/download.h"
 #include "net/http.h"
 
@@ -38,6 +39,7 @@ static int flush(struct dl *d)
 	if (d->used == 0) {
 		return 0;
 	}
+	bili_crumb("d-write");
 	n = fs_write(d->fp, d->stage, d->used);
 	if (n != (ssize_t)d->used) {
 		return n < 0 ? (int)n : -EIO;
@@ -46,7 +48,10 @@ static int flush(struct dl *d)
 	d->used = 0;
 	if (d->synced != NULL) {
 		/* a reader opens the file by its own handle: the size must be in the directory entry */
-		int ret = fs_sync(d->fp);
+		int ret;
+
+		bili_crumb("d-sync");
+		ret = fs_sync(d->fp);
 
 		if (ret != 0) {
 			return ret;

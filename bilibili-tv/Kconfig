@@ -156,3 +156,16 @@ config BILI_CRUMBS_TEST_S
 config BILI_COVER_CHECK
 	bool "Decode every cover in software too and report the ones where the engine's colours differ"
 	default n
+
+config BILI_SELFTEST_PLAY_ONLY
+	bool "Self test: load the list and play videos one after another, nothing else"
+	depends on BILI_SELFTEST
+	default n
+
+config BILI_GFX_RVV
+	bool "Vector code for the blends of LVGL and the colour conversion of the covers"
+	default y
+	select SUN252I_F101_RVV
+	help
+	  The blends are compared with the C code of LVGL at start and the vector code is switched off
+	  when they differ; the same for the conversion of the covers.

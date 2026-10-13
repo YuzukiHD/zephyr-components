@@ -107,6 +107,8 @@ static void memory(const char *tag, bool reference)
 	memory_at(tag, reference, !reference);
 }
 
+static void render_event(lv_event_t *e);
+
 static void list_phase(void)
 {
 	struct list_info info;
@@ -117,7 +119,9 @@ static void list_phase(void)
 		check(true, "the recommended list loaded");
 		memory("start", false);
 		round_no = 0;
-		to(P_SCROLL);
+		lv_display_add_event_cb(lv_display_get_default(), render_event, LV_EVENT_RENDER_START, NULL);
+		lv_display_add_event_cb(lv_display_get_default(), render_event, LV_EVENT_RENDER_READY, NULL);
+		to(IS_ENABLED(CONFIG_BILI_SELFTEST_PLAY_ONLY) ? P_PLAY : P_SCROLL);
 	} else if (k_uptime_get() - since > 120000) {
 		check(false, "the recommended list loaded");
 		to(P_SEARCH);
@@ -125,6 +129,24 @@ static void list_phase(void)
 }
 
 /* down to the end of the list (and the pages it loads), up to its top */
+/* the time LVGL needs to draw a frame, over the scrolling */
+static uint32_t render_t0, render_n, render_sum, render_max;
+
+static void render_event(lv_event_t *e)
+{
+	if (lv_event_get_code(e) == LV_EVENT_RENDER_START) {
+		render_t0 = k_cycle_get_32();
+	} else if (render_t0 != 0) {
+		uint32_t us = (uint32_t)((uint64_t)(k_cycle_get_32() - render_t0) * 1000000U /
+					 sys_clock_hw_cycles_per_sec());
+
+		render_n++;
+		render_sum += us;
+		render_max = MAX(render_max, us);
+		render_t0 = 0;
+	}
+}
+
 static void scroll_phase(void)
 {
 	struct list_info info;
@@ -154,6 +176,9 @@ static void scroll_phase(void)
 		snprintf(tag, sizeof(tag), "scroll round %d", round_no + 1);
 		/* the first round pays for the covers and the cards: it is the reference of the others */
 		memory(tag, round_no == 0);
+		printk("selftest: drawing: %u frames, mean %u us, worst %u us\n", render_n,
+		       render_n ? render_sum / render_n : 0, render_max);
+		render_n = render_sum = render_max = 0;
 		if (++round_no >= CONFIG_BILI_SELFTEST_ROUNDS) {
 			check(info.count > 20, "the list holds more than the first page");
 			to(P_TAB);
@@ -243,7 +268,7 @@ static void play_phase(void)
 		return;
 	}
 	if (step == 0) {
-		app_cmd(CMD_PLAY, LIST_RECOMMEND << 16 | index);
+		app_cmd(CMD_PLAY, LIST_RECOMMEND << 16 | (index % 20));
 		printk("selftest: playing video %d\n", index);
 		step = 1;
 		since = now;

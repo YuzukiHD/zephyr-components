@@ -17,6 +17,9 @@
 #include "ui/cover.h"
 #include "net/http.h"
 #include "libs/tjpgd/tjpgd.h"
+#ifdef CONFIG_BILI_GFX_RVV
+#include "gfx/yuv_rvv.h"
+#endif
 
 #define SLOTS		CONFIG_BILI_COVER_CACHE
 #define JPEG_MAX	(48 * 1024)
@@ -234,7 +237,7 @@ static inline uint8_t clamp8(int v)
 }
 
 /* NV12 (full range, BT.601) to RGB565 at the cover size, nearest neighbour when the sizes differ */
-static void to_rgb565(const struct vdec_frame *f, uint16_t *out)
+static void to_rgb565_c(const struct vdec_frame *f, uint16_t *out)
 {
 	for (int y = 0; y < COVER_H; y++) {
 		int sy = y * f->height / COVER_H;
@@ -251,6 +254,52 @@ static void to_rgb565(const struct vdec_frame *f, uint16_t *out)
 			out[y * (COVER_STRIDE / 2) + x] = ((r & 0xf8) << 8) | ((g & 0xfc) << 3) | (b >> 3);
 		}
 	}
+}
+
+#ifdef CONFIG_BILI_GFX_RVV
+static bool yuv_vector_ok;
+
+/* the vector conversion has to give the same pixels as the scalar one, checked once on noise */
+static void yuv_vector_check(void)
+{
+	enum { W = COVER_W, H = COVER_H };
+	uint8_t *y = malloc(W * H * 3 / 2);
+	uint16_t *a = aligned_alloc(64, COVER_BYTES), *b = aligned_alloc(64, COVER_BYTES);
+	uint32_t seed = 12345;
+	bool same = false;
+
+	if (y != NULL && a != NULL && b != NULL) {
+		struct vdec_frame f = {.width = W, .height = H, .plane = {y, y + W * H}, .stride = {W, W}};
+
+		for (int i = 0; i < W * H * 3 / 2; i++) {
+			seed = seed * 1664525U + 1013904223U;
+			y[i] = seed >> 24;
+		}
+		to_rgb565_c(&f, a);
+		yuv_nv12_to_rgb565_rvv(y, W, y + W * H, W, b, COVER_STRIDE / 2, W, H);
+		same = true;
+		for (int r = 0; r < H && same; r++) {
+			same = memcmp(a + r * (COVER_STRIDE / 2), b + r * (COVER_STRIDE / 2), W * 2) == 0;
+		}
+	}
+	free(y);
+	free(a);
+	free(b);
+	yuv_vector_ok = same;
+	printk("cover: vector colour conversion %s\n", same ? "matches the scalar one" : "DIFFERS, not used");
+}
+#endif
+
+static void to_rgb565(const struct vdec_frame *f, uint16_t *out)
+{
+#ifdef CONFIG_BILI_GFX_RVV
+	if (yuv_vector_ok && f->width == COVER_W && f->height == COVER_H) {
+		yuv_nv12_to_rgb565_rvv(f->plane[0], f->stride[0], f->plane[1], f->stride[1], out, COVER_STRIDE / 2,
+				       COVER_W, COVER_H);
+		return;
+	}
+#endif
+	to_rgb565_c(f, out);
 }
 
 /* ---- software decoding for what the video engine refuses (4:4:4, gray, ...) ------------------ */
@@ -490,6 +539,9 @@ static void cover_main(void *a, void *b, void *c)
 
 void cover_init(void)
 {
+#ifdef CONFIG_BILI_GFX_RVV
+	yuv_vector_check();
+#endif
 	for (int i = 0; i < THREADS; i++) {
 		k_thread_create(&threads[i], stacks[i], K_THREAD_STACK_SIZEOF(stacks[i]), cover_main, NULL, NULL,
 				NULL, 9, 0, K_NO_WAIT);

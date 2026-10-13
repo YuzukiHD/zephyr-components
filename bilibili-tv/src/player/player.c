@@ -32,6 +32,7 @@
 #include <zephyr/mp4.h>
 #include <zephyr/sys/printk.h>
 
+#include "debug/crumbs.h"
 #include "player/player_priv.h"
 
 struct mp4 pl_mp4;
@@ -139,8 +140,10 @@ static int pl_grow_wait(struct reader *r, uint64_t off, size_t len)
 	if (need > r->known) {
 		int ret;
 
+		bili_crumb("r-close");
 		fs_close(&r->f);
 		fs_file_t_init(&r->f);
+		bili_crumb("r-open");
 		ret = fs_open(&r->f, pl_path, FS_O_READ);
 		if (ret != 0) {
 			return ret;
@@ -158,21 +161,26 @@ int pl_file_read(void *ctx, uint64_t off, void *buf, size_t len)
 	ssize_t n;
 
 	if (pl_grow != NULL && !(r->win_len > 0 && off >= r->win_off && off + len <= r->win_off + r->win_len)) {
+		bili_crumb("r-grow");
 		ret = pl_grow_wait(r, off, len);
 		if (ret != 0) {
 			return ret;
 		}
 	}
 	if (len > r->win_size) {
+		bili_crumb("r-seek");
 		ret = fs_seek(&r->f, (off_t)off, FS_SEEK_SET);
+		bili_crumb("r-read");
 		n = ret == 0 ? fs_read(&r->f, buf, len) : ret;
 		return n == (ssize_t)len ? 0 : (n < 0 ? (int)n : -EIO);
 	}
 	if (off < r->win_off || off + len > r->win_off + r->win_len) {
+		bili_crumb("r-seek2");
 		ret = fs_seek(&r->f, (off_t)off, FS_SEEK_SET);
 		if (ret != 0) {
 			return ret;
 		}
+		bili_crumb("r-win");
 		n = fs_read(&r->f, r->win, r->win_size);
 		if (n < (ssize_t)len) {
 			r->win_len = 0;

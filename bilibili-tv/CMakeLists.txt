@@ -18,6 +18,8 @@ target_compile_definitions(modules__lvgl PRIVATE LV_TINY_TTF_CACHE_KERNING_CNT=0
 
 # sources include each other by their path below src ("net/http.h")
 target_include_directories(app PRIVATE src)
+# LVGL includes lv_rvv.h from its blend sources
+zephyr_include_directories(src/gfx)
 
 # the video player (MP4 demultiplexer, H.264 and AAC decoders, display and sound) is a copy of the one of
 # the NekoBox application, changed for a file that grows while it is played
@@ -54,3 +56,14 @@ if(CONFIG_BILI_UI_RAM)
 endif()
 
 target_sources_ifdef(CONFIG_BILI_CRUMBS app PRIVATE src/debug/crumbs.c)
+
+if(CONFIG_BILI_GFX_RVV)
+  target_sources(app PRIVATE src/gfx/lv_rvv.c src/gfx/yuv_rvv.c)
+  # only these files use vector instructions; the rest of the image is built as usual
+  set_source_files_properties(src/gfx/lv_rvv.c src/gfx/yuv_rvv.c PROPERTIES COMPILE_OPTIONS
+    "-march=rv32imafdcv_zicsr_zifencei_xtheadcmo_xtheadba_xtheadbb_xtheadbs_xtheadcondmov_xtheadmemidx_xtheadmempair")
+  if(CONFIG_BILI_HOT_RAM)
+    zephyr_code_relocate(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/gfx/lv_rvv.c
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/gfx/yuv_rvv.c LOCATION RAM_TEXT)
+  endif()
+endif()

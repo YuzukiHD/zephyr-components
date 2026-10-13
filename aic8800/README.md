@@ -34,3 +34,14 @@ The driver does not print the passphrase in the log.
 
 The firmware images are the large headers in `host/drv/fw` and are linked into the image.
 The licence of the driver files is the one in their headers; the glue is Apache-2.0.
+
+## Memory
+
+The driver, the supplicant and the packet buffers take their memory from a pool of their own
+(`CONFIG_AIC8800_MEM_POOL_KB`, 1024 KiB, a block of the image, `src/aic_mem.c`): `malloc`,
+`calloc`, `realloc` and `aligned_alloc` of the sources of the module are redirected to it by
+`include/aic_mem_redirect.h`, and `free()` of the whole image is wrapped (`--wrap=free`) so that a
+pointer of the pool goes back to the pool. A request the pool cannot serve fails; it does not take
+the memory of the malloc arena. Before, the small objects of the driver split the arena and the
+largest free block was 6 MB of 11; now it stays whole (9.8 MB with the pool and Wi-Fi up). The
+most the driver has used is printed when the link comes up (about 310 KiB after connecting).

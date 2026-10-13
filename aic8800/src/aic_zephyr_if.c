@@ -20,6 +20,8 @@
 #include "aic_pbuf.h"
 #include "aic_zif.h"
 
+void aic_mem_stats(size_t *used, size_t *peak);
+
 #define CONNECT_STACK_SIZE	6144
 #define CONNECT_PRIORITY	10
 /* the join is reported once the keys are in place; a join that does not complete in this time failed */
@@ -177,6 +179,14 @@ void aicz_link_event(enum aicz_link_event ev)
 		net_eth_carrier_on(d->iface);
 		wifi_mgmt_raise_connect_result_event(d->iface, WIFI_STATUS_CONN_SUCCESS);
 		aicz_zif_dhcp_start(d->iface);
+		{
+			size_t used, peak;
+
+			aic_mem_stats(&used, &peak);
+			printk("memory pool: %u KiB used, at most %u KiB of %u KiB\n",
+			       (unsigned int)(used / 1024), (unsigned int)(peak / 1024),
+			       (unsigned int)CONFIG_AIC8800_MEM_POOL_KB);
+		}
 		break;
 	case AICZ_LINK_DISCONNECTED:
 		if (d->connected) {

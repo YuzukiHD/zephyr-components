@@ -7,12 +7,15 @@
 #ifndef NEKOBOX_FEATURES_NET_BT_H_
 #define NEKOBOX_FEATURES_NET_BT_H_
 
-#include <stdbool.h>
 #include <stddef.h>
 
-/** One line about Bluetooth: ready, or the device that is connected */
+/**
+ * Starts Bluetooth, advertises for a moment and stops it again, to see that the controller of
+ * the chip answers. The chip must be running (aic8800_start); it is not stopped here.
+ */
+void bt_probe(void);
+
+/** One line about Bluetooth: what the check found */
 void bt_status(char *buf, size_t size);
-/** True when a device is connected over Bluetooth */
-bool bt_connected(void);
 
 #endif /* NEKOBOX_FEATURES_NET_BT_H_ */

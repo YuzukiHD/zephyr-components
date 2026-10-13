@@ -21,11 +21,11 @@ config NEKOBOX_FEATURE_NET
 	select TEST_RANDOM_GENERATOR
 
 config NEKOBOX_FEATURE_BT
-	bool "Bluetooth connection shown in the settings"
+	bool "Bluetooth, checked once at the start and then switched off"
 	default y
 	depends on NEKOBOX_FEATURE_NET
 	select BT
-	select BT_PERIPHERAL
+	select BT_BROADCASTER
 	select AIC8800_BT
 
 config NEKOBOX_UTC_OFFSET_MIN
@@ -56,8 +56,6 @@ config BT_RX_STACK_SIZE
 	default 2048 if NEKOBOX_FEATURE_BT
 config BT_LONG_WQ_STACK_SIZE
 	default 3072 if NEKOBOX_FEATURE_BT
-config BT_MAX_CONN
-	default 1 if NEKOBOX_FEATURE_BT
 config BT_DEVICE_NAME
 	default "NEKOBOX Player" if NEKOBOX_FEATURE_BT
 

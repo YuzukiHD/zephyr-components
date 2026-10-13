@@ -17,8 +17,8 @@ settings row and no file type behind.
 | Games | `NEKOBOX_FEATURE_GAMES` | NES (nofrendo), Game Boy and Game Boy Color (mGBA, runs from the flash window), Game Boy Advance (gpSP with the RISC-V recompiler; 5 MiB of the ROM are kept in memory, the rest is read from the card in pages, ROMs up to 32 MiB) |
 | Games from RAM | `NEKOBOX_GAMES_HOT_RAM` | the renderer and the memory handlers of the GBA core (gpSP) run from RAM, not from the flash window |
 | USB Display | `NEKOBOX_FEATURE_USB_DISPLAY` | second screen of a PC with touch |
-| Network | `NEKOBOX_FEATURE_NET` | Wi-Fi (AIC8800, saved passwords) and the time from NTP |
-| Bluetooth | `NEKOBOX_FEATURE_BT` | the connection is shown in the settings |
+| Network | `NEKOBOX_FEATURE_NET` | Wi-Fi (AIC8800, saved passwords) and the time from NTP. The chip is on only while it is used: at the start it joins the saved network and sets the clock, then it is switched off completely (tasks stopped, chip powered off, memory given back). A scan, a join or a time request starts it again (about 2.5 s), 30 s without a request or a game switches it off |
+| Bluetooth | `NEKOBOX_FEATURE_BT` | checked once at the start (the controller answers, it advertises for a moment) and then switched off with the chip; the result is shown in the settings |
 
 ## Source layout
 

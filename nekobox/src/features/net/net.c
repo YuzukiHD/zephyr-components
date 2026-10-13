@@ -8,6 +8,11 @@
  * The network of the player: the Wi-Fi link of the AIC8800 chip (scan, join, address by DHCP), the
  * time of day from an NTP server. Everything that waits runs in one worker thread; the user interface asks
  * for state and gives commands.
+ *
+ * The chip is on only while it is used. After the start it is checked (Bluetooth answers, the saved
+ * network can be joined, the clock is set from the network) and switched off completely. A scan, a
+ * join or a time request switches it on again; when nothing has asked for it for IDLE_OFF_S
+ * seconds, and while a game runs, it is off.
  */
 
 #include <stdio.h>
@@ -29,14 +34,24 @@
 #include "core/storage.h"
 #include "core/fsutil.h"
 #include "features/net/net.h"
+#ifdef CONFIG_NEKOBOX_FEATURE_BT
+#include "features/net/bt.h"
+#endif
+
+#include <aic8800/aic8800.h>
+#ifdef CONFIG_NEKOBOX_DEBUG
+#include "debug/memcheck.h"
+#endif
 
 #define MAX_APS		24
 #define CONNECT_WAIT_S	25
 #define DHCP_WAIT_S	20
 #define SYNC_RETRIES	3
+#define IDLE_OFF_S	30
 
 enum link_state {
 	LINK_NONE,		/* no module */
+	LINK_OFF,		/* the module is off, it is started when it is needed */
 	LINK_STARTING,
 	LINK_IDLE,		/* module ready, no network joined */
 	LINK_SCANNING,
@@ -46,7 +61,7 @@ enum link_state {
 	LINK_FAILED,
 };
 
-enum command { CMD_SCAN, CMD_CONNECT, CMD_DISCONNECT, CMD_SYNC, CMD_PAUSE, CMD_RESUME };
+enum command { CMD_SCAN, CMD_CONNECT, CMD_DISCONNECT, CMD_SYNC, CMD_PAUSE };
 
 struct request {
 	enum command cmd;
@@ -61,7 +76,8 @@ static struct k_thread net_thread;
 static struct k_mutex lock;
 static volatile enum link_state link = LINK_STARTING;
 static volatile bool net_started;	/* the thread is past its start and takes requests */
-static bool resume_pending;		/* the link was up when a game paused the network */
+static bool radio_up;			/* the chip is running */
+static int64_t last_use;		/* uptime of the last request, for the idle switch off */
 static char ssid_now[33];
 static char addr_now[NET_IPV4_ADDR_LEN];
 static char fail_text[40];
@@ -364,14 +380,91 @@ static void wifi_cfg_read(char *ssid, size_t ssid_size, char *psk, size_t psk_si
 	printk("net: network %s from the card\n", ssid);
 }
 
+/* the saved network: from the settings, else from the card */
+static bool saved_network(char *ssid, size_t ssid_size, char *psk, size_t psk_size)
+{
+	const char *v = cfg_get("wifi_ssid");
+
+	ssid[0] = psk[0] = '\0';
+	if (v != NULL) {
+		snprintf(ssid, ssid_size, "%s", v);
+		v = cfg_get("wifi_psk");
+		snprintf(psk, psk_size, "%s", v != NULL ? v : "");
+	}
+	if (ssid[0] == '\0') {
+		wifi_cfg_read(ssid, ssid_size, psk, psk_size);
+	}
+
+	return ssid[0] != '\0';
+}
+
+/* starts the chip if it is not running; false when it does not answer */
+static bool radio_on(void)
+{
+	if (radio_up) {
+		return true;
+	}
+	link = LINK_STARTING;
+	if (aic8800_start() != 0) {
+		link = LINK_NONE;
+		return false;
+	}
+	radio_up = true;
+	link = LINK_IDLE;
+	last_use = k_uptime_get();
+
+	return true;
+}
+
+/* leaves the network, stops the driver and powers the chip off: nothing of it stays allocated */
+static void radio_off(void)
+{
+	if (!radio_up) {
+		return;
+	}
+	aic8800_stop();
+	radio_up = false;
+	k_mutex_lock(&lock, K_FOREVER);
+	addr_now[0] = '\0';
+	k_mutex_unlock(&lock);
+	link = LINK_OFF;
+	printk("net: Wi-Fi and Bluetooth are off\n");
+#ifdef CONFIG_NEKOBOX_DEBUG
+	{
+		size_t largest, total;
+
+		nekobox_mem_probe(&largest, &total);
+		printk("net: malloc arena now: largest block %u KiB, free in total %u KiB\n",
+		       (unsigned int)(largest / 1024), (unsigned int)(total / 1024));
+	}
+#endif
+}
+
+/* joins the saved network (when there is one) so that it is known to work, then back to off */
+static void boot_check(struct net_if *iface)
+{
+	char ssid[33], psk[65];
+
+	if (!radio_on()) {
+		return;
+	}
+#ifdef CONFIG_NEKOBOX_FEATURE_BT
+	bt_probe();
+#endif
+	if (saved_network(ssid, sizeof(ssid), psk, sizeof(psk))) {
+		printk("net: joining %s\n", ssid);
+		do_connect(iface, ssid, psk);
+		printk("net: link state %d (%s)\n", (int)link, addr_now);
+	}
+	radio_off();
+}
+
 static void net_main(void *a, void *b, void *c)
 {
 	struct net_if *iface = NULL;
 	struct request req;
-	char saved_ssid[33] = "", saved_psk[65] = "";
-	const char *v;
 
-	/* the chip starts together with the system, the interface shows up when it answers */
+	/* the interface is registered at the start of the system, the chip is not started yet */
 	for (int i = 0; i < 100 && iface == NULL; i++) {
 		iface = net_if_get_first_wifi();
 		if (iface == NULL) {
@@ -389,43 +482,37 @@ static void net_main(void *a, void *b, void *c)
 	net_mgmt_add_event_callback(&wifi_cb);
 	net_mgmt_init_event_callback(&ipv4_cb, ipv4_event, NET_EVENT_IPV4_ADDR_ADD);
 	net_mgmt_add_event_callback(&ipv4_cb);
-	k_sleep(K_SECONDS(1));
-	link = LINK_IDLE;
+	link = LINK_OFF;
 	/* a game that is running now has the CPU: the chip is not started until it is over */
 	nekobox_background_wait();
 	net_started = true;
-
-	/* copies: connecting saves the network again in the same place */
-	v = cfg_get("wifi_ssid");
-	if (v != NULL) {
-		snprintf(saved_ssid, sizeof(saved_ssid), "%s", v);
-	}
-	v = cfg_get("wifi_psk");
-	if (v != NULL) {
-		snprintf(saved_psk, sizeof(saved_psk), "%s", v);
-	}
-	if (saved_ssid[0] == '\0') {
-		wifi_cfg_read(saved_ssid, sizeof(saved_ssid), saved_psk, sizeof(saved_psk));
-	}
-	if (saved_ssid[0] != '\0') {
-		printk("net: joining %s\n", saved_ssid);
-		do_connect(iface, saved_ssid, saved_psk);
-		printk("net: link state %d (%s)\n", (int)link, addr_now);
-	}
+	boot_check(iface);
 
 	for (;;) {
-		if (k_msgq_get(&requests, &req, K_FOREVER) != 0) {
+		char ssid[33], psk[65];
+
+		if (k_msgq_get(&requests, &req, K_SECONDS(2)) != 0) {
+			if (radio_up && k_uptime_get() - last_use > IDLE_OFF_S * 1000) {
+				radio_off();
+			}
 			continue;
 		}
+		last_use = k_uptime_get();
 		switch (req.cmd) {
 		case CMD_SCAN:
-			do_scan(iface);
+			if (radio_on()) {
+				do_scan(iface);
+			}
 			break;
 		case CMD_CONNECT:
-			do_connect(iface, req.ssid, req.psk);
+			if (radio_on()) {
+				do_connect(iface, req.ssid, req.psk);
+			}
 			break;
 		case CMD_DISCONNECT:
-			net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
+			if (radio_up) {
+				net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
+			}
 			{
 				char key[16];
 
@@ -435,37 +522,24 @@ static void net_main(void *a, void *b, void *c)
 			}
 			cfg_set("wifi_ssid", NULL);
 			cfg_set("wifi_psk", NULL);
-			link = LINK_IDLE;
+			link = radio_up ? LINK_IDLE : LINK_OFF;
 			break;
 		case CMD_PAUSE:
-			/* the network is only used to set the time: not while a game runs */
-			if (link == LINK_ONLINE || link == LINK_CONNECTED) {
-				resume_pending = true;
-				net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
-				link = LINK_IDLE;
-				printk("net: disconnected for the game\n");
-			}
-			break;
-		case CMD_RESUME:
-			if (resume_pending) {
-				resume_pending = false;
-				v = cfg_get("wifi_ssid");
-				if (v != NULL) {
-					snprintf(saved_ssid, sizeof(saved_ssid), "%s", v);
-					v = cfg_get("wifi_psk");
-					snprintf(saved_psk, sizeof(saved_psk), "%s", v != NULL ? v : "");
-					printk("net: joining %s again\n", saved_ssid);
-					do_connect(iface, saved_ssid, saved_psk);
-				}
-			}
+			/* nothing uses the network while a game runs */
+			radio_off();
 			break;
 		case CMD_SYNC:
-			if (link == LINK_ONLINE) {
-				time_sync();
+			if (radio_on()) {
+				if (link != LINK_ONLINE && saved_network(ssid, sizeof(ssid), psk, sizeof(psk))) {
+					do_connect(iface, ssid, psk);
+				} else if (link == LINK_ONLINE) {
+					time_sync();
+				}
 			}
 			sync_pending = false;
 			break;
 		}
+		last_use = k_uptime_get();
 	}
 }
 
@@ -483,10 +557,11 @@ static void put(const struct request *r);
 
 static void net_hold(bool hold)
 {
-	struct request r = {.cmd = hold ? CMD_PAUSE : CMD_RESUME};
+	struct request r = {.cmd = CMD_PAUSE};
 
-	/* before the thread has started it waits for the end of the hold by itself */
-	if (net_started) {
+	/* before the thread has started it waits for the end of the hold by itself; when the hold
+	 * ends the chip stays off until something needs it */
+	if (hold && net_started) {
 		put(&r);
 	}
 }
@@ -513,6 +588,9 @@ void app_net_status(char *buf, size_t size)
 	switch (link) {
 	case LINK_NONE:
 		snprintf(buf, size, "No Wi-Fi module found");
+		break;
+	case LINK_OFF:
+		snprintf(buf, size, "Off, starts when needed");
 		break;
 	case LINK_STARTING:
 		snprintf(buf, size, "Starting");
@@ -556,7 +634,7 @@ void app_net_sync_time(void)
 {
 	struct request r = {.cmd = CMD_SYNC};
 
-	if (link != LINK_ONLINE) {
+	if (link == LINK_NONE || link == LINK_STARTING || link == LINK_CONNECTING) {
 		return;
 	}
 	sync_pending = true;

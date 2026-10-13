@@ -39,7 +39,15 @@ config NEKOBOX_PROFILE
 	bool "Sample where the game thread spends its time and print the busiest code blocks"
 	depends on NEKOBOX_DEBUG && NEKOBOX_FEATURE_GAMES
 	help
-	  20 seconds after a game starts, 6000 samples of the program counter are taken (one a
-	  millisecond) and the busiest 64 byte blocks are printed as "prof <address> <count>".
+	  NEKOBOX_PROFILE_DELAY_S seconds after a game starts, 6000 samples of the program counter
+	  are taken (one a millisecond) and the busiest 64 byte blocks are printed as
+	  "prof <address> <count>".
+
+config NEKOBOX_PROFILE_DELAY_S
+	int "Seconds after the start of a game before the profile is taken"
+	depends on NEKOBOX_PROFILE
+	default 20
+	help
+	  Put it into the scene that is to be looked at.
 
 endmenu

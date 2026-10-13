@@ -27,7 +27,7 @@ zephyr_include_directories(include)
 
 zephyr_library_sources(
   ${C}/cheats.c ${C}/cpu.cpp ${C}/gba_cc_lut.c ${C}/gba_memory.c ${C}/gbp.c
-  ${C}/gpsp_memory_alloc.c ${C}/input.c ${C}/main.c ${C}/memmap.c ${C}/rfu.c ${C}/savestate.c
+  ${C}/gpsp_memory_alloc.c ${C}/input.c ${C}/gbsp_main.c ${C}/memmap.c ${C}/rfu.c ${C}/savestate.c
   ${C}/serial.c ${C}/sound.c ${C}/video.cpp
   src/gbsp_player.c)
 

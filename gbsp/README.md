@@ -107,6 +107,13 @@ Looked at with the counters of `gbsp_get_stats()` (the benchmark prints them eve
   about 2 ms. A scene change that needs 30 pages makes one frame of 60 ms. That is what is left of
   the stutter; the memory for the ROM is what it costs (Kirby is 16 MiB, 5-6 MiB fit).
 
+- In the application (code runs from the flash window) the frame and timer loop (`update_gba`,
+  `update_timers`, the serial events), the block lookup and the recompiler were still in flash: about
+  30% of the profile of that scene. They are copied to RAM now (`gbsp_main.c`, `cpu_threaded.c`,
+  `serial.c`; `main.c` was renamed so the relocation cannot confuse it with the application's).
+  Kirby's scene in NekoBox: 14-16.5 ms -> 10-14.7 ms per frame, dropped frames 54-190 -> 0-12 per
+  5 s, and the sound queue no longer runs down.
+
 The picture checksums of Zelda (all six) and Kirby are the same as before the changes.
 
 ## Notes

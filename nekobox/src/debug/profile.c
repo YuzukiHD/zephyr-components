@@ -18,7 +18,7 @@
 #include "debug/profile.h"
 
 #define MAX_SAMPLES	6000
-#define WAIT_S		20	/* the start (reading the game, the first scenes) is not what is measured */
+#define WAIT_S		CONFIG_NEKOBOX_PROFILE_DELAY_S	/* the start is not what is measured */
 
 static bool in_code(unsigned long pc)
 {

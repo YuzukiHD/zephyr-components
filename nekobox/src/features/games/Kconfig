@@ -22,7 +22,7 @@ config NEKOBOX_GAMES_HOT_RAM
 	select CODE_DATA_RELOCATION
 	help
 	  In an XIP image every instruction that is not in the cache comes from the flash window.
-	  The renderer and the memory handlers of the GBA core (gpSP) run for every frame, so they
+	  The renderer, the memory handlers, the frame and timer loop and the recompiler of the GBA core (gpSP) run for every frame, so they
 	  are copied to RAM at boot. The translated game code is in RAM anyway. The Game Boy core
 	  (mGBA) stays in the flash window.
 

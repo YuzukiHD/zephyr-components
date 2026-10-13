@@ -135,3 +135,15 @@ config BILI_CPU_MHZ
 	help
 	  The CPU PLL is raised in steps of 72 MHz and the memory is checked after each step. The
 	  voltage is not changed.
+
+config BILI_CRUMBS
+	bool "Keep the last context switches in memory and reset by a watchdog when the system stops"
+	default y
+	select WATCHDOG
+	select WDT_SUNXI
+	select THREAD_NAME
+
+config BILI_CRUMBS_TIMEOUT_MS
+	int "Watchdog time out in ms"
+	depends on BILI_CRUMBS
+	default 8000

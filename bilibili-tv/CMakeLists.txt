@@ -56,3 +56,5 @@ if(CONFIG_BILI_UI_RAM)
     ${CMAKE_CURRENT_SOURCE_DIR}/src/cover.c ${CMAKE_CURRENT_SOURCE_DIR}/src/fonts.c
     LOCATION RAM_TEXT)
 endif()
+
+target_sources_ifdef(CONFIG_BILI_CRUMBS app PRIVATE src/debug/crumbs.c)

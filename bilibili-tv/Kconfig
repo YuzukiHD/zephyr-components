@@ -152,3 +152,7 @@ config BILI_CRUMBS_TEST_S
 	int "Stop the system after this many seconds (0: never), to try the recorder"
 	depends on BILI_CRUMBS
 	default 0
+
+config BILI_COVER_CHECK
+	bool "Decode every cover in software too and report the ones where the engine's colours differ"
+	default n

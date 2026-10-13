@@ -6,6 +6,7 @@
 
 /* The picture of an MP4: the H.264 track through the video engine onto the video plane */
 
+#include "debug/crumbs.h"
 #include "player/player_priv.h"
 
 #ifdef CONFIG_NEKOBOX_THREAD_STATS
@@ -142,6 +143,7 @@ static void show(const struct vdec_frame *f)
 		.nonblock = false,
 	};
 
+	bili_crumb("v-show");
 	display_sunxi_show_yuv(pl_disp, &yuv);
 }
 
@@ -282,6 +284,7 @@ static void pl_video_session(const struct request *r, uint8_t *raw, uint8_t *ab)
 
 		pl_release_done();
 		c0 = k_cycle_get_32();
+		bili_crumb("v-get");
 		ret = vdec_stream_get_frame(pl_vdec_dev, stream, &frame);
 		get_us += k_cyc_to_us_floor32(k_cycle_get_32() - c0);
 		if (ret == 0) {
@@ -375,6 +378,7 @@ static void pl_video_session(const struct request *r, uint8_t *raw, uint8_t *ab)
 
 		/* the decoder wants data */
 		if (ab_used >= ab_len) {
+			bili_crumb("v-mp4");
 			if (mp4_next(v, &it, &s) != 0) {
 				eof = true;
 			} else {
@@ -406,6 +410,7 @@ static void pl_video_session(const struct request *r, uint8_t *raw, uint8_t *ab)
 
 			int64_t f0 = k_uptime_get();
 
+			bili_crumb("v-feed");
 			ret = vdec_stream_feed(pl_vdec_dev, stream, ab + ab_used, ab_len - ab_used,
 					       pending_pts, &used);
 			feed_ms += k_uptime_get() - f0;

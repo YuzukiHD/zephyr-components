@@ -10,7 +10,6 @@
 #include <string.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/vdec.h>
-#include <zephyr/fs/fs.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
@@ -343,57 +342,6 @@ static bool jpeg_for_engine(const uint8_t *d, size_t n)
 	return false;
 }
 
-/*
- * The JPEG of a cover is kept on the card under a name made from its address: leaving the player
- * throws the decoded covers away (the memory is needed), and reading a file and decoding it takes
- * milliseconds where fetching it again takes a second.
- */
-static void cache_path(const char *pic, char *out, size_t size)
-{
-	uint32_t h = 2166136261U;
-
-	for (const char *p = pic; *p != '\0'; p++) {
-		h = (h ^ (uint8_t)*p) * 16777619U;
-	}
-	snprintf(out, size, "%s/c%08x.jpg", CONFIG_BILI_CACHE_DIR, (unsigned)h);
-}
-
-/* the bytes of a cached cover, or 0 */
-static int cache_read(const char *pic, uint8_t *jpeg)
-{
-	char path[96];
-	struct fs_file_t f;
-	int n;
-
-	cache_path(pic, path, sizeof(path));
-	fs_file_t_init(&f);
-	if (fs_open(&f, path, FS_O_READ) != 0) {
-		return 0;
-	}
-	n = fs_read(&f, jpeg, JPEG_MAX);
-	fs_close(&f);
-
-	return n > 0 ? n : 0;
-}
-
-static void cache_write(const char *pic, const uint8_t *jpeg, int n)
-{
-	char path[96];
-	struct fs_file_t f;
-
-	cache_path(pic, path, sizeof(path));
-	fs_file_t_init(&f);
-	if (fs_open(&f, path, FS_O_CREATE | FS_O_WRITE) != 0) {
-		return;
-	}
-	if (fs_write(&f, jpeg, n) != n) {
-		fs_close(&f);
-		fs_unlink(path);
-		return;
-	}
-	fs_close(&f);
-}
-
 /* fetches and decodes one cover; the pixels or NULL */
 static uint16_t *load(const char *pic, uint8_t *jpeg, uint32_t *fetch_t, uint32_t *decode_t)
 {
@@ -406,14 +354,8 @@ static uint16_t *load(const char *pic, uint8_t *jpeg, uint32_t *fetch_t, uint32_
 	if (bili_cover_url(pic, COVER_W, COVER_H, url, sizeof(url)) < 0) {
 		return NULL;
 	}
-	n = cache_read(pic, jpeg);
-	if (n <= 0) {
-		n = http_get_text(url, &(struct http_opts){.range_start = -1, .timeout_ms = 8000}, (char *)jpeg,
-				  JPEG_MAX, NULL);
-		if (n > 0) {
-			cache_write(pic, jpeg, n);
-		}
-	}
+	n = http_get_text(url, &(struct http_opts){.range_start = -1, .timeout_ms = 8000}, (char *)jpeg,
+			  JPEG_MAX, NULL);
 	t1 = k_uptime_get_32();
 	*fetch_t = t1 - t0;
 	if (n <= 0) {
@@ -437,13 +379,36 @@ static uint16_t *load(const char *pic, uint8_t *jpeg, uint32_t *fetch_t, uint32_
 			k_mutex_unlock(&lock);
 		}
 	}
-	if (px == NULL) {
-		char path[96];
+#ifdef CONFIG_BILI_COVER_CHECK
+	if (px != NULL && ret == 0) {
+		/* the same picture decoded in software: a large difference means the engine's colours are wrong */
+		uint16_t *ref = decode_soft(jpeg, n);
 
+		if (ref != NULL) {
+			uint32_t diff = 0, uvhw = 0;
+			int rs = 0, bs = 0;
+
+			for (int y = 0; y < COVER_H; y += 4) {
+				for (int x = 0; x < COVER_W; x += 4) {
+					uint16_t a = px[y * (COVER_STRIDE / 2) + x], b = ref[y * (COVER_STRIDE / 2) + x];
+					int dr = (int)(a >> 11) - (int)(b >> 11), db = (int)(a & 31) - (int)(b & 31);
+
+					diff += abs(dr) + abs(db);
+					rs += dr;
+					bs += db;
+					uvhw++;
+				}
+			}
+			if (diff / uvhw > 3) {
+				printk("cover: %s engine and software differ: mean %u, red %d blue %d (sum), %d bytes\n",
+				       pic, (unsigned)(diff / uvhw), rs, bs, n);
+			}
+			free(ref);
+		}
+	}
+#endif
+	if (px == NULL) {
 		printk("cover: %s decode failed (%d, %d bytes)\n", pic, ret, n);
-		/* a file cut short by a power loss must not fail again and again */
-		cache_path(pic, path, sizeof(path));
-		fs_unlink(path);
 	}
 	*decode_t = k_uptime_get_32() - t1;
 

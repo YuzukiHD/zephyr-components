@@ -41,13 +41,13 @@ struct crumbs bili_crumbs __noinit __aligned(64);
 static uint32_t seq;
 static volatile bool armed;
 
-static void put(char mark)
+static void put_tag(char mark, const char *text)
 {
 	if (!armed) {
 		return;
 	}
 	struct crumb *c = &bili_crumbs.ring[seq % RING];
-	const char *name = k_thread_name_get(k_current_get());
+	const char *name = text != NULL ? text : k_thread_name_get(k_current_get());
 
 	c->seq = ++seq;
 	c->cycles = k_cycle_get_32();
@@ -57,6 +57,17 @@ static void put(char mark)
 	sys_cache_data_flush_range(c, sizeof(*c));
 }
 
+static void put(char mark)
+{
+	put_tag(mark, NULL);
+}
+
+/* A mark from the code itself: the last one before a freeze names the call that did not return */
+void bili_crumb(const char *what)
+{
+	put_tag('N', what);
+}
+
 void sys_trace_thread_switched_in_user(void)
 {
 	put('S');
@@ -64,7 +75,16 @@ void sys_trace_thread_switched_in_user(void)
 
 void sys_trace_isr_enter_user(void)
 {
-	put('I');
+	char irq[8];
+	unsigned long cause;
+
+	__asm__ volatile("csrr %0, mcause" : "=r"(cause));
+	irq[0] = 'i';
+	irq[1] = '0' + (char)((cause / 100) % 10);
+	irq[2] = '0' + (char)((cause / 10) % 10);
+	irq[3] = '0' + (char)(cause % 10);
+	irq[4] = '\0';
+	put_tag('I', irq);
 }
 
 void sys_trace_isr_exit_user(void)

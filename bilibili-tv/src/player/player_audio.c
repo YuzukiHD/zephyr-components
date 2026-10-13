@@ -6,6 +6,7 @@
 
 /* The sound of the player: AAC decoded in software, played by the codec, the master clock */
 
+#include "debug/crumbs.h"
 #include "player/player_priv.h"
 
 K_MEM_SLAB_DEFINE_STATIC(pcm_slab, PCM_BLOCK, PCM_BLOCKS, 4);
@@ -59,7 +60,7 @@ static void audio_session(const struct request *r, tPVMP4AudioDecoderExternal *e
 	}
 	pl_audio_running = false;
 
-	while (!pl_req_changed(r->seq) && mp4_next(t, &it, &s) == 0) {
+	while (!pl_req_changed(r->seq) && (bili_crumb("a-mp4"), mp4_next(t, &it, &s) == 0)) {
 		void *blk;
 
 		if (pl_file_read(&pl_afile, s.offset, buf, s.size) != 0) {
@@ -70,6 +71,7 @@ static void audio_session(const struct request *r, tPVMP4AudioDecoderExternal *e
 		ext->inputBufferCurrentLength = s.size;
 		ext->inputBufferUsedLength = 0;
 		ext->remainderBits = 0;
+		bili_crumb("a-dec");
 		ret = PVMP4AudioDecodeFrame(ext, dec);
 		if (ret != MP4AUDEC_SUCCESS) {
 			continue;
@@ -84,6 +86,7 @@ static void audio_session(const struct request *r, tPVMP4AudioDecoderExternal *e
 			break;
 		}
 		memcpy(blk, pcm, PCM_BLOCK);
+		bili_crumb("a-i2s");
 		ret = i2s_write(pl_codec_i2s, blk, PCM_BLOCK);
 		if (ret == -EIO) {
 			/* the stream ran dry: start it again where it was */

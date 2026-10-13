@@ -275,6 +275,18 @@ size_t gbsp_audio_available(void)
 	return g.count;
 }
 
+extern u32 gbsp_page_loads, gbsp_page_load_us, gbsp_stat_translations, gbsp_stat_rom_flushes;
+extern u32 gbsp_stat_ram_flushes;
+
+void gbsp_get_stats(struct gbsp_stats *st)
+{
+	st->rom_loads = gbsp_page_loads;
+	st->rom_load_us = gbsp_page_load_us;
+	st->translations = gbsp_stat_translations;
+	st->rom_flushes = gbsp_stat_rom_flushes;
+	st->ram_flushes = gbsp_stat_ram_flushes;
+}
+
 int gbsp_save_flush(void)
 {
 	struct fs_file_t f;

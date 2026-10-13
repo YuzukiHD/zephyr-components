@@ -2196,6 +2196,10 @@ static u32 evict_gamepak_page(void)
   return ret;
 }
 
+/* how often a page of the ROM was read from the card during the game, and the time it took */
+u32 gbsp_page_loads;
+u32 gbsp_page_load_us;
+
 u8 *load_gamepak_page(u32 physical_index)
 {
   if(physical_index >= (gamepak_size >> 15))
@@ -2211,8 +2215,12 @@ u8 *load_gamepak_page(u32 physical_index)
 
   if (gamepak_file_large)
   {
+    uint32_t t0 = k_cycle_get_32();
+
     fs_seek(gamepak_file_large, physical_index * (32 * 1024), FS_SEEK_SET);
     fs_read(gamepak_file_large, swap_location, 32 * 1024);
+    gbsp_page_loads++;
+    gbsp_page_load_us += k_cyc_to_us_floor32(k_cycle_get_32() - t0);
   }
 
   // Map it to the read handlers now

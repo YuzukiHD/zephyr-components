@@ -47,4 +47,11 @@ config SAMPLE_GBA_ROM_DIAG
 config SAMPLE_GBA_PROFILE
 	bool "Sample the program counter of the emulation thread and print a histogram"
 
+config SAMPLE_GBA_PROFILE_DELAY_S
+	int "Seconds after the start before the profile is taken"
+	depends on SAMPLE_GBA_PROFILE
+	default 4
+	help
+	  Put it into the scene that is to be looked at.
+
 source "Kconfig.zephyr"

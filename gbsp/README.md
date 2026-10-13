@@ -43,8 +43,8 @@ CONFIG_STD_CPP17=y
 | Option | Default | |
 |---|---|---|
 | `GBSP_DYNAREC` | on | the recompiler; off is the interpreter |
-| `GBSP_ROM_CACHE_KB`, `GBSP_RAM_CACHE_KB` | 1024, 256 | the caches for translated code (ROM code, code that runs from RAM) |
-| `GBSP_ROM_BUFFER_MB` | 8 | memory for the ROM; what does not fit is read from the file in 32 KiB pages |
+| `GBSP_ROM_CACHE_KB`, `GBSP_RAM_CACHE_KB` | 2048, 256 | the caches for translated code (ROM code, code that runs from RAM) |
+| `GBSP_ROM_BUFFER_MB` | 6 | memory for the ROM; what does not fit is read from the file in 32 KiB pages |
 | `GBSP_OPT_LEVEL` | `-O3` | optimisation level of the core |
 
 The recompiler needs the RAM it writes the code into to be executable (it is, on the board) and
@@ -86,6 +86,24 @@ in the root of the card is used). CPU 960 MHz, every frame drawn (60 fps), 48 kH
 paces the emulation, the keys are the touch buttons on the screen, the save file
 `Pokemon-FireRed.sav` is next to the ROM and written every 3 s. Measured on the board: 4-6 ms of
 emulation per frame, no sound underrun.
+
+## Slow scenes (Kirby)
+
+Looked at with the counters of `gbsp_get_stats()` (the benchmark prints them every 200 frames):
+
+- **The instruction cache was synchronised from the start of the translation cache after every
+  translated block.** The cost grew with the fill of the cache, so a scene with a lot of new code
+  (a thousand blocks a frame) was ten times slower than the same scene would have been. Only the
+  range written since the last sync is synchronised now (all the patching of a block happens
+  within the translation that started it). Kirby's slow scene: 99 ms to 61 ms per frame.
+- **The ROM translation cache was too small for that scene** (1 MiB: emptied every second frame,
+  1360 blocks translated each time). With 2 MiB it never fills: 11-13 ms per frame instead of 30-100,
+  0-4 frames over 16.7 ms per 200 instead of 130-197.
+- A ROM page that is not in memory is read from the card in the middle of the frame, 32 KiB in
+  about 2 ms. A scene change that needs 30 pages makes one frame of 60 ms. That is what is left of
+  the stutter; the memory for the ROM is what it costs (Kirby is 16 MiB, 5-6 MiB fit).
+
+The picture checksums of Zelda (all six) and Kirby are the same as before the changes.
 
 ## Notes
 

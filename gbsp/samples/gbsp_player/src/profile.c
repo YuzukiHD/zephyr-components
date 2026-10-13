@@ -40,7 +40,7 @@ static void prof_main(void *target, void *b, void *c)
 	struct k_thread *t = target;
 	int n = 0, bad = 0;
 
-	k_sleep(K_SECONDS(4));
+	k_sleep(K_SECONDS(CONFIG_SAMPLE_GBA_PROFILE_DELAY_S));
 	while (n < MAX_SAMPLES) {
 		const struct arch_esf *esf = (const struct arch_esf *)t->callee_saved.sp;
 		unsigned long pc = esf->mepc;

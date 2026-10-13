@@ -273,16 +273,16 @@ typedef struct
 #endif
 
 void translate_icache_sync() {
-    // Cache emitted code can only grow
+    /* Only what was written since the last sync: a block that is patched after a later one
+     * was translated is still inside the range of the same translation, because the exits of a
+     * block are patched before the lookup that started the translation returns. Syncing from the
+     * start of the cache every time costs a flush of the whole filled cache per block. */
     if (last_rom_translation_ptr < rom_translation_ptr) {
-        /* Synchronise from the start of the cache: patching the exit of a block that was
-         * translated before writes into the old range, and a sync of the new range alone
-         * would leave the CPU with the stale instruction. */
-        platform_cache_sync(rom_translation_cache, rom_translation_ptr);
+        platform_cache_sync(last_rom_translation_ptr, rom_translation_ptr);
         last_rom_translation_ptr = rom_translation_ptr;
     }
     if (last_ram_translation_ptr < ram_translation_ptr) {
-        platform_cache_sync(ram_translation_cache, ram_translation_ptr);
+        platform_cache_sync(last_ram_translation_ptr, ram_translation_ptr);
         last_ram_translation_ptr = ram_translation_ptr;
     }
 }
@@ -3030,8 +3030,11 @@ if (ram_region) {                                                             \
 }                                                                             \
 
 
+u32 gbsp_stat_translations, gbsp_stat_rom_flushes, gbsp_stat_ram_flushes;
+
 bool translate_block_arm(u32 pc, bool ram_region)
 {
+  gbsp_stat_translations++;
   u32 opcode = 0;
   u32 last_opcode;
   u32 condition;
@@ -3197,6 +3200,7 @@ bool translate_block_arm(u32 pc, bool ram_region)
 
 bool translate_block_thumb(u32 pc, bool ram_region)
 {
+  gbsp_stat_translations++;
   u32 opcode = 0;
   u32 last_opcode;
   u32 condition;
@@ -3366,6 +3370,7 @@ void flush_translation_cache_ram(void)
 {
   /* Flushes RAM caches avoiding doing too much work (ie. wiping unused memory) */
   flush_ram_count++;
+  gbsp_stat_ram_flushes++;
   /*printf("ram flush %d (pc %x), %x to %x, %x to %x\n",
    flush_ram_count, reg[REG_PC], iwram_code_min, iwram_code_max,
    ewram_code_min, ewram_code_max);*/
@@ -3402,6 +3407,7 @@ void flush_translation_cache_ram(void)
 
 void flush_translation_cache_rom(void)
 {
+  gbsp_stat_rom_flushes++;
   /* We flush the generated code except for everything below the watermark. */
   last_rom_translation_ptr = &rom_translation_cache[rom_cache_watermark];
   rom_translation_ptr      = &rom_translation_cache[rom_cache_watermark];

@@ -24,7 +24,11 @@ config GBSP_DYNAREC
 config GBSP_ROM_CACHE_KB
 	int "Translation cache for the ROM code (KiB)"
 	depends on GBSP_DYNAREC
-	default 1024
+	default 2048
+	help
+	  When it is full all of it is emptied and the code is translated again. A scene whose
+	  code does not fit translates about a thousand blocks per frame, which is more than ten
+	  times the normal cost of a frame (Kirby has such a scene with 1 MiB, none with 2 MiB).
 
 config GBSP_RAM_CACHE_KB
 	int "Translation cache for the code that runs from RAM (KiB)"
@@ -45,7 +49,7 @@ config GBSP_MAX_ROM_SIZE_MB
 
 config GBSP_ROM_BUFFER_MB
 	int "Memory for the ROM (MiB)"
-	default 8
+	default 6
 	range 1 32
 	help
 	  The ROM is kept in memory as far as this goes; the pages of a larger ROM are read from

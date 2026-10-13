@@ -283,22 +283,37 @@ int main(void)
 		static int16_t sink[2 * 2048];
 		uint32_t t0 = k_cycle_get_32(), worst = 0;
 		const int n_frames = CONFIG_SAMPLE_GBA_BENCH_FRAMES;
+		/* every 200 frames: average and worst frame, frames over 16.7 ms, ROM pages read */
+		uint32_t w_sum = 0, w_max = 0, w_slow = 0;
+		struct gbsp_stats prev = {0};
 
 		for (int i = 0; i < n_frames; i++) {
-			uint32_t c0 = k_cycle_get_32();
+			uint32_t c0 = k_cycle_get_32(), us;
 
 			gbsp_set_frame_buffer(video_acquire());
 			gbsp_set_frameskip(CONFIG_SAMPLE_GBA_BENCH_FRAMESKIP);
 			gbsp_run_frame();
 			while (gbsp_audio_read(sink, ARRAY_SIZE(sink) / 2) > 0) {
 			}
+			us = k_cyc_to_us_floor32(k_cycle_get_32() - c0);
 			worst = MAX(worst, k_cycle_get_32() - c0);
+			w_sum += us;
+			w_max = MAX(w_max, us);
+			w_slow += us > 16667 ? 1 : 0;
 			if ((i + 1) % 200 == 0) {
 				unsigned int w, h;
 				const uint16_t *f = gbsp_frame(&w, &h);
+				struct gbsp_stats st;
 
-				printk("bench: frame %d crc %08x\n", i + 1,
-				       (uint32_t)crc32_ieee((const uint8_t *)f, w * 2 * h));
+				gbsp_get_stats(&st);
+				printk("bench: frame %d crc %08x: %u us avg, %u us worst, %u over 16.7 ms, "
+				       "%u ROM pages in %u us, %u blocks translated, flushes rom %u ram %u\n",
+				       i + 1, (uint32_t)crc32_ieee((const uint8_t *)f, w * 2 * h), w_sum / 200,
+				       w_max, w_slow, st.rom_loads - prev.rom_loads,
+				       st.rom_load_us - prev.rom_load_us, st.translations - prev.translations,
+				       st.rom_flushes - prev.rom_flushes, st.ram_flushes - prev.ram_flushes);
+				w_sum = w_max = w_slow = 0;
+				prev = st;
 			}
 		}
 		printk("bench: %d frames, %u us/frame, worst %u us\n", n_frames,

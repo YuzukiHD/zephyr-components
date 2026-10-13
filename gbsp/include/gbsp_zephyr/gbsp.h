@@ -93,6 +93,17 @@ size_t gbsp_audio_read(int16_t *out, size_t frames);
 /** Stereo frames the emulator holds ready at the output rate */
 size_t gbsp_audio_available(void);
 
+/** Counters since the game started, to see where the time of a slow scene goes */
+struct gbsp_stats {
+	uint32_t rom_loads;	/**< pages of the ROM read from the card */
+	uint32_t rom_load_us;	/**< the time they took */
+	uint32_t translations;	/**< blocks of ARM or Thumb code translated */
+	uint32_t rom_flushes;	/**< times the translation cache of the ROM code was emptied */
+	uint32_t ram_flushes;	/**< times the cache of the code that runs from RAM was emptied */
+};
+
+void gbsp_get_stats(struct gbsp_stats *st);
+
 /** Write the save file when the save memory changed; returns 1 when written */
 int gbsp_save_flush(void);
 

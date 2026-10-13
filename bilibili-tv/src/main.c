@@ -22,13 +22,13 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
-#include "app.h"
-#include "cover.h"
-#include "bili_api.h"
-#include "download.h"
-#include "http.h"
-#include "features/video/player.h"
-#include "wifi.h"
+#include "core/app.h"
+#include "ui/cover.h"
+#include "api/bili_api.h"
+#include "net/download.h"
+#include "net/http.h"
+#include "player/player.h"
+#include "net/wifi.h"
 
 struct cmd {
 	enum app_cmd_type type;

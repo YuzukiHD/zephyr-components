@@ -16,23 +16,24 @@ target_compile_options(modules__lvgl PRIVATE -include ${CMAKE_CURRENT_SOURCE_DIR
 # the width is computed directly (its Kconfig symbol is a bool, it cannot be set to 0 there)
 target_compile_definitions(modules__lvgl PRIVATE LV_TINY_TTF_CACHE_KERNING_CNT=0)
 
-# the video player (MP4 demultiplexer, H.264 and AAC decoders, display and sound) is a copy of the one of
-# the NekoBox application in src/features/video, changed for a file that grows while it is played
+# sources include each other by their path below src ("net/http.h")
 target_include_directories(app PRIVATE src)
-target_sources(app PRIVATE
-	src/features/video/player.c
-	src/features/video/player_audio.c
-	src/features/video/player_video.c
-	src/features/video/player_raw.c)
 
-target_sources(app PRIVATE
-	src/main.c src/wifi.c src/http.c src/http_parse.c src/json.c src/md5.c
-	src/wbi.c src/bili_parse.c src/bili_api.c src/download.c src/cover.c src/inflate.c src/danmaku.c src/ui_danmaku.c
-	src/ui.c src/ui_card.c src/ui_home.c src/ui_search.c src/ui_play.c src/fonts.c src/logo.c src/cpu.c src/pinyin_dict.c)
+# the video player (MP4 demultiplexer, H.264 and AAC decoders, display and sound) is a copy of the one of
+# the NekoBox application, changed for a file that grows while it is played
+file(GLOB PLAYER_SRC src/player/*.c)
+target_sources(app PRIVATE ${PLAYER_SRC})
+
+target_sources(app PRIVATE src/main.c src/core/cpu.c)
+# network and file transfer, the Bilibili interface, the screens
+file(GLOB NET_SRC src/net/*.c)
+file(GLOB API_SRC src/api/*.c)
+file(GLOB UI_SRC src/ui/*.c)
+target_sources(app PRIVATE ${NET_SRC} ${API_SRC} ${UI_SRC})
 target_sources_ifdef(CONFIG_BILI_SELFTEST app PRIVATE src/debug/selftest.c)
 
 # the Chinese font (tools/make_font.py) is part of the image
-generate_inc_file_for_target(app src/fonts/NotoSansSC-subset.ttf ${CMAKE_CURRENT_BINARY_DIR}/font.inc)
+generate_inc_file_for_target(app src/ui/fonts/NotoSansSC-subset.ttf ${CMAKE_CURRENT_BINARY_DIR}/font.inc)
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 if(CONFIG_BILI_HOT_RAM)
@@ -49,12 +50,7 @@ if(CONFIG_BILI_UI_RAM)
   # code of the interface runs from RAM: the flash window is not cached for data and every I-cache
   # miss of the drawing loops costs a flash read, which shows when the lists scroll
   zephyr_code_relocate(LIBRARY modules__lvgl LOCATION RAM_TEXT)
-  zephyr_code_relocate(FILES
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui.c ${CMAKE_CURRENT_SOURCE_DIR}/src/ui_card.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui_home.c ${CMAKE_CURRENT_SOURCE_DIR}/src/ui_search.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/ui_play.c ${CMAKE_CURRENT_SOURCE_DIR}/src/ui_danmaku.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/cover.c ${CMAKE_CURRENT_SOURCE_DIR}/src/fonts.c
-    LOCATION RAM_TEXT)
+  zephyr_code_relocate(FILES ${UI_SRC} LOCATION RAM_TEXT)
 endif()
 
 target_sources_ifdef(CONFIG_BILI_CRUMBS app PRIVATE src/debug/crumbs.c)

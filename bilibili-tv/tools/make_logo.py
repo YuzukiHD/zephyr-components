@@ -2,8 +2,8 @@
 # Copyright (c) 2026 Yuzuki Tsuru
 # SPDX-License-Identifier: Apache-2.0
 """
-Renders src/fonts/bilibili.svg (the Simple Icons "Bilibili" mark, CC0) in the brand blue at the given
-size and writes src/logo.c: an LVGL ARGB8888 image (needs cairosvg and pillow).
+Renders src/ui/fonts/bilibili.svg (the Simple Icons "Bilibili" mark, CC0) in the brand blue at the given
+size and writes src/ui/logo.c: an LVGL ARGB8888 image (needs cairosvg and pillow).
 
   tools/make_logo.py [size] [out.c]
 """
@@ -12,7 +12,7 @@ import cairosvg
 from PIL import Image
 
 size = int(sys.argv[1]) if len(sys.argv) > 1 else 48
-out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(__file__), "..", "src", "logo.c")
+out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(__file__), "..", "src", "ui", "logo.c")
 svg = open(os.path.join(os.path.dirname(__file__), "..", "src", "fonts", "bilibili.svg")).read()
 svg = svg.replace("<svg ", '<svg fill="#00A1D6" ', 1)
 png = cairosvg.svg2png(bytestring=svg.encode(), output_width=size, output_height=size)

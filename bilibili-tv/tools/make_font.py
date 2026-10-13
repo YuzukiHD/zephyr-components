@@ -4,7 +4,7 @@
 """
 Cuts the Chinese font of the firmware out of Noto Sans SC (SIL OFL, the copy in the LVGL tests).
 
-  tools/make_font.py [--level1] [-o src/fonts/NotoSansSC-subset.ttf]
+  tools/make_font.py [--level1] [-o src/ui/fonts/NotoSansSC-subset.ttf]
 
 Characters: GB2312 (all 6763 hanzi and its symbols; --level1 keeps the 3755 common ones only), the 8105 hanzi of the
 standard list of 2013 (tools/data/tgh8105.txt, kTGH of Unihan: 1300 more than GB2312, names and everyday words), ASCII and
@@ -20,7 +20,7 @@ SRC = os.path.join(WS, "modules/lib/gui/lvgl/tests/src/test_files/fonts/noto/Not
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--level1", action="store_true", help="only the 3755 level 1 hanzi of GB2312")
-ap.add_argument("-o", default=os.path.join(HERE, "../src/fonts/NotoSansSC-subset.ttf"))
+ap.add_argument("-o", default=os.path.join(HERE, "../src/ui/fonts/NotoSansSC-subset.ttf"))
 a = ap.parse_args()
 
 chars = set()

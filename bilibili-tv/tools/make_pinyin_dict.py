@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Yuzuki Tsuru
 # SPDX-License-Identifier: Apache-2.0
 """
-Writes src/pinyin_dict.c, the dictionary of the pinyin input method of LVGL: one entry per toneless
+Writes src/ui/pinyin_dict.c, the dictionary of the pinyin input method of LVGL: one entry per toneless
 syllable, the hanzi of that syllable by falling frequency. Only characters that the firmware font has.
 
   tools/make_pinyin_dict.py [--max 120]
@@ -18,8 +18,8 @@ WS = os.path.abspath(os.path.join(HERE, "../../.."))
 sys.path.insert(0, os.path.join(WS, "tools-local/pylib"))
 ap = argparse.ArgumentParser()
 ap.add_argument("--max", type=int, default=120, help="most characters per syllable")
-ap.add_argument("--font", default=os.path.join(HERE, "../src/fonts/NotoSansSC-subset.ttf"))
-ap.add_argument("-o", default=os.path.join(HERE, "../src/pinyin_dict.c"))
+ap.add_argument("--font", default=os.path.join(HERE, "../src/ui/fonts/NotoSansSC-subset.ttf"))
+ap.add_argument("-o", default=os.path.join(HERE, "../src/ui/pinyin_dict.c"))
 a = ap.parse_args()
 
 import jieba, pypinyin

@@ -25,11 +25,11 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
-#include "app.h"
+#include "core/app.h"
 #include "lvgl_mem.h"
-#include "cover.h"
-#include "features/video/player.h"
-#include "ui_priv.h"
+#include "ui/cover.h"
+#include "player/player.h"
+#include "ui/ui_priv.h"
 
 #define TICK_MS		250
 #define SCROLL_STEP	320

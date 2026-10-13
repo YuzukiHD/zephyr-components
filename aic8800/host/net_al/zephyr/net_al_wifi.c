@@ -24,6 +24,7 @@
 #include "wlan_if.h"
 #include "aic_log.h"
 #include "aic_zif.h"
+#include "aic8800/aic8800.h"
 
 static bool wifi_started;
 static uint8_t last_ssid[33];
@@ -65,6 +66,60 @@ int aicz_wifi_start(void)
     k_mutex_unlock(&start_lock);
 
     return ret;
+}
+
+int aic8800_start(void)
+{
+    return aicz_wifi_start();
+}
+
+bool aic8800_running(void)
+{
+    return wifi_started;
+}
+
+extern void aic_mem_stats(size_t *used, size_t *peak);
+extern void aic_mem_release(void);
+extern void aic_state_reset(void);
+extern void aic_sdio_irq_off(void);
+extern void aic_bt_reset_assert(void);
+extern void platform_pwr_en_pin_set(bool en);
+
+void aic8800_memory(size_t *used, size_t *peak)
+{
+    aic_mem_stats(used, peak);
+}
+
+int aic8800_stop(void)
+{
+    size_t used, peak;
+    int ret = 0;
+
+    k_mutex_lock(&start_lock, K_FOREVER);
+    if (!wifi_started) {
+        k_mutex_unlock(&start_lock);
+        return -EALREADY;
+    }
+    /* leave the network first, so that the chip is quiet */
+    ret = aicz_wifi_disconnect();
+    k_msleep(200);
+    aicz_zif_down();
+    aic_sdio_irq_off();
+    /* no task may be in the middle of a bus transfer: they are blocked waiting for the chip */
+    k_msleep(100);
+    rtos_al_shutdown();
+    platform_pwr_en_pin_set(false);
+    aic_bt_reset_assert();
+    aic_mem_stats(&used, &peak);
+    AIC_LOG_PRINTF("stopped, the driver had %u KiB allocated (at most %u KiB)\n",
+                   (unsigned int)(used / 1024), (unsigned int)(peak / 1024));
+    /* the static data of the driver as it was at the boot, then the memory back to the arena */
+    aic_state_reset();
+    wifi_started = false;
+    aic_mem_release();
+    k_mutex_unlock(&start_lock);
+
+    return ret < 0 ? ret : 0;
 }
 
 const uint8_t *aicz_wifi_mac(void)

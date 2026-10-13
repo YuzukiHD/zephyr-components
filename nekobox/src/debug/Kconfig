@@ -28,6 +28,13 @@ config NEKOBOX_SOAK
 	  of the malloc arena are printed before the first file and after every one. Ends with PASS
 	  or FAIL.
 
+config NEKOBOX_RADIO_TEST
+	bool "Start the Wi-Fi chip, scan and stop it again several times, and print the free memory"
+	depends on NEKOBOX_DEBUG && NEKOBOX_FEATURE_NET
+	help
+	  Checks that the driver can be shut down completely and started again: after every stop the
+	  memory of the driver must be back in the arena. Ends with PASS or FAIL.
+
 config NEKOBOX_PROFILE
 	bool "Sample where the game thread spends its time and print the busiest code blocks"
 	depends on NEKOBOX_DEBUG && NEKOBOX_FEATURE_GAMES

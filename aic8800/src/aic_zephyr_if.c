@@ -198,6 +198,22 @@ void aicz_link_event(enum aicz_link_event ev)
 	}
 }
 
+/* the interface after the driver was stopped: no carrier, no address lease, nothing connecting */
+void aicz_zif_down(void)
+{
+	struct aicz_data *d = &aicz;
+
+	if (d->iface == NULL) {
+		return;
+	}
+	if (d->connected) {
+		aicz_zif_dhcp_stop(d->iface);
+	}
+	d->connected = false;
+	d->connecting = false;
+	net_eth_carrier_off(d->iface);
+}
+
 /* ---- Ethernet side ---- */
 
 static int aicz_send(const struct device *dev, struct net_pkt *pkt)

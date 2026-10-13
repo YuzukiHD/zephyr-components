@@ -1945,6 +1945,14 @@ static void aicwf_sdio_irq_hdl(const struct device *dev, int reason, const void 
     }
 }
 
+/* no more card interrupts: the driver is being stopped */
+void aic_sdio_irq_off(void)
+{
+    if (sdhc_dev != NULL) {
+        sdhc_disable_interrupt(sdhc_dev, SDHC_INT_SDIO);
+    }
+}
+
 /* the card interrupt is one-shot in the host controller: arm it again */
 static void sdio_irq_rearm(void)
 {

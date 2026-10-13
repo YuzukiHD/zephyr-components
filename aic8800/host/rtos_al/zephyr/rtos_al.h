@@ -128,6 +128,8 @@ int rtos_task_create(rtos_task_fct func,
                      void * const params,
                      rtos_prio prio,
                      rtos_task_handle * const task_handle);
+/** Stops every task and timer that was made (the memory goes with the pool of the driver) */
+void rtos_al_shutdown(void);
 void rtos_task_delete(rtos_task_handle task_handle);
 void rtos_task_suspend(int duration);
 void rtos_task_resume(rtos_task_handle task_handle);

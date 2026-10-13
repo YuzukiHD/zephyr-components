@@ -51,6 +51,9 @@ int aicz_wifi_disconnect(void);
 int aicz_wifi_sta_info(struct aicz_sta_info *info);
 const uint8_t *aicz_wifi_mac(void);
 
+/** The interface after the driver was stopped */
+void aicz_zif_down(void);
+
 /* ---- implemented by the Zephyr side ---- */
 
 enum aicz_link_event {

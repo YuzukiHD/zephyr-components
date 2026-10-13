@@ -43,9 +43,9 @@ config AIC8800_MEM_POOL_KB
 	range 256 8192
 	help
 	  The driver, the supplicant and the packet buffers allocate from a block of this size
-	  that is part of the image, not from the malloc arena. It is lost to the rest of the
-	  system while the driver is built in, and a request it cannot serve fails. The most it
-	  has used is printed when the link comes up.
+	  that is taken from the malloc arena when the driver starts and given back when it
+	  stops. A request the pool cannot serve fails. The most it has used is printed when
+	  the link comes up.
 
 module = AIC8800
 module-str = AIC8800

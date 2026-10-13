@@ -39,6 +39,14 @@ static int aic_bt_reset_hold(void)
 }
 SYS_INIT(aic_bt_reset_hold, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
 
+/* the controller of the Bluetooth part is held in reset again when the chip is switched off */
+void aic_bt_reset_assert(void)
+{
+	if (bt_reset.port != NULL && gpio_is_ready_dt(&bt_reset)) {
+		gpio_pin_set_dt(&bt_reset, 1);
+	}
+}
+
 int bt_hci_transport_setup(const struct device *uart)
 {
 	unsigned char c;

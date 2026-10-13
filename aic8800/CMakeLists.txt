@@ -29,6 +29,7 @@ zephyr_library_sources(
   host/rtos_al/${OS}/rtos_al.c
   src/aic_libc.c
   src/aic_mem.c
+  src/aic_state.c
   src/aic_log.c
   wifi.c
   wifi_monitor.c
@@ -100,3 +101,6 @@ zephyr_library_compile_options(-w -fno-strict-aliasing -include ctype.h
   -Wno-error=implicit-function-declaration)
 
 zephyr_link_libraries(-Wl,--wrap=free)
+
+# the static data of the driver is in sections of its own, to be reset when the driver stops
+zephyr_linker_sources(RAM_SECTIONS ${CMAKE_CURRENT_LIST_DIR}/aic_state.ld)

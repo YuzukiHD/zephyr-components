@@ -35,10 +35,28 @@ The driver does not print the passphrase in the log.
 The firmware images are the large headers in `host/drv/fw` and are linked into the image.
 The licence of the driver files is the one in their headers; the glue is Apache-2.0.
 
+## Start and stop
+
+`aic8800_start()` / `aic8800_stop()` (`include/aic8800/aic8800.h`). The driver starts on first use
+(scan, join, the Bluetooth transport) and stays until it is stopped. A stop leaves nothing behind:
+
+1. the network is left and the card interrupt is switched off;
+2. every task and timer the driver made is stopped (`rtos_al_shutdown()`, they are listed in the
+   RTOS layer);
+3. the chip is powered off (reg_on low, the Bluetooth reset held);
+4. the static data of the driver (`aic_state.ld`: its `.data` and `.bss`, not the glue to the
+   network interface, the pool and the task list) is put back to the values it had at the boot;
+5. the memory pool is given back to the malloc arena.
+
+The next start downloads the firmware again (about 2.5 s, a stop takes 1.3 s). With the driver
+stopped the arena is one block again. Bluetooth must be disabled before the stop. Checked on the
+board: five rounds of start, scan (18-25 networks each) and stop, with the arena back to a single
+block of the same size after each stop (`NEKOBOX_RADIO_TEST` of the application).
+
 ## Memory
 
 The driver, the supplicant and the packet buffers take their memory from a pool of their own
-(`CONFIG_AIC8800_MEM_POOL_KB`, 1024 KiB, a block of the image, `src/aic_mem.c`): `malloc`,
+(`CONFIG_AIC8800_MEM_POOL_KB`, 1024 KiB, taken from the malloc arena at the start and given back at the stop, `src/aic_mem.c`): `malloc`,
 `calloc`, `realloc` and `aligned_alloc` of the sources of the module are redirected to it by
 `include/aic_mem_redirect.h`, and `free()` of the whole image is wrapped (`--wrap=free`) so that a
 pointer of the pool goes back to the pool. A request the pool cannot serve fails; it does not take

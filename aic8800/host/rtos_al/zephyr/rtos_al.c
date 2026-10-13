@@ -23,6 +23,7 @@
 struct os_task {
 	struct k_thread thread;		/* first: the task handle is the thread */
 	k_thread_stack_t *stack;
+	struct os_task *next;
 };
 
 struct os_queue {
@@ -31,6 +32,7 @@ struct os_queue {
 };
 
 struct os_timer {
+	struct os_timer *next;
 	struct k_work_delayable work;
 	rtos_timer_fct func;
 	void *args;
@@ -43,6 +45,10 @@ struct os_timer {
 static K_THREAD_STACK_DEFINE(timer_stack, TIMER_STACK_SIZE);
 static struct k_work_q timer_q;
 static bool timer_q_started;
+
+/* every task and timer the driver has made, to stop them all when the driver is shut down */
+static struct os_task *task_list;
+static struct os_timer *timer_list;
 
 /* "higher is more urgent" driver priorities to Zephyr ones (lower is more urgent) */
 static int prio_map(rtos_prio p)
@@ -175,8 +181,28 @@ int rtos_task_create(rtos_task_fct func, const char *const name, int task_id,
 			prio_map(prio), 0, K_NO_WAIT);
 	k_thread_name_set(&t->thread, name);
 	*task_handle = (rtos_task_handle)&t->thread;
+	{
+		unsigned int key = irq_lock();
+
+		t->next = task_list;
+		task_list = t;
+		irq_unlock(key);
+	}
 
 	return 0;
+}
+
+static void task_unlink(struct os_task *t)
+{
+	unsigned int key = irq_lock();
+
+	for (struct os_task **p = &task_list; *p != NULL; p = &(*p)->next) {
+		if (*p == t) {
+			*p = t->next;
+			break;
+		}
+	}
+	irq_unlock(key);
 }
 
 void rtos_task_delete(rtos_task_handle task_handle)
@@ -188,6 +214,7 @@ void rtos_task_delete(rtos_task_handle task_handle)
 		k_thread_abort(k_current_get());
 		return;
 	}
+	task_unlink(t);
 	k_thread_abort(&t->thread);
 	free(t->stack);
 	free(t);
@@ -420,6 +447,13 @@ uint32_t rtos_timer_create(const char *const name, rtos_timer *timer, const uint
 	t->args = args;
 	k_work_init_delayable(&t->work, timer_handler);
 	*timer = t;
+	{
+		unsigned int key = irq_lock();
+
+		t->next = timer_list;
+		timer_list = t;
+		irq_unlock(key);
+	}
 
 	return 0;
 }
@@ -465,6 +499,17 @@ int rtos_timer_delete(rtos_timer timer, uint32_t wait_ms)
 		return -1;
 	}
 	k_work_cancel_delayable_sync(&t->work, &sync);
+	{
+		unsigned int key = irq_lock();
+
+		for (struct os_timer **p = &timer_list; *p != NULL; p = &(*p)->next) {
+			if (*p == t) {
+				*p = t->next;
+				break;
+			}
+		}
+		irq_unlock(key);
+	}
 	free(t);
 
 	return 0;
@@ -590,4 +635,23 @@ int aic_time_get(enum time_origin_t origin, uint32_t *sec, uint32_t *usec)
 	}
 
 	return 0;
+}
+
+/*
+ * Stops every task and timer the driver has made. Their memory is not freed one by one: it is in
+ * the pool of the driver, which is given back as a whole after this.
+ */
+void rtos_al_shutdown(void)
+{
+	struct k_work_sync sync;
+
+	for (struct os_timer *t = timer_list; t != NULL; t = t->next) {
+		t->active = false;
+		k_work_cancel_delayable_sync(&t->work, &sync);
+	}
+	timer_list = NULL;
+	for (struct os_task *t = task_list; t != NULL; t = t->next) {
+		k_thread_abort(&t->thread);
+	}
+	task_list = NULL;
 }

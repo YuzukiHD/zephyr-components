@@ -96,7 +96,8 @@ size_t gbsp_audio_available(void);
 /** Counters since the game started, to see where the time of a slow scene goes */
 struct gbsp_stats {
 	uint32_t rom_loads;	/**< pages of the ROM read from the card */
-	uint32_t rom_load_us;	/**< the time they took */
+	uint32_t rom_load_us;	/**< the time the emulation spent getting them */
+	uint32_t rom_hits;	/**< of those, served from the read-ahead buffers */
 	uint32_t translations;	/**< blocks of ARM or Thumb code translated */
 	uint32_t rom_flushes;	/**< times the translation cache of the ROM code was emptied */
 	uint32_t ram_flushes;	/**< times the cache of the code that runs from RAM was emptied */

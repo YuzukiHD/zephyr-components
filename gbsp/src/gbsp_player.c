@@ -277,11 +277,13 @@ size_t gbsp_audio_available(void)
 
 extern u32 gbsp_page_loads, gbsp_page_load_us, gbsp_stat_translations, gbsp_stat_rom_flushes;
 extern u32 gbsp_stat_ram_flushes;
+extern u32 gbsp_rom_hits;
 
 void gbsp_get_stats(struct gbsp_stats *st)
 {
 	st->rom_loads = gbsp_page_loads;
 	st->rom_load_us = gbsp_page_load_us;
+	st->rom_hits = gbsp_rom_hits;
 	st->translations = gbsp_stat_translations;
 	st->rom_flushes = gbsp_stat_rom_flushes;
 	st->ram_flushes = gbsp_stat_ram_flushes;

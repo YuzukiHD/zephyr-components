@@ -30,6 +30,35 @@ config GBSP_ROM_CACHE_KB
 	  code does not fit translates about a thousand blocks per frame, which is more than ten
 	  times the normal cost of a frame (Kirby has such a scene with 1 MiB, none with 2 MiB).
 
+config GBSP_ROM_PREFETCH
+	bool "Read the ROM ahead in a background thread (large ROMs only)"
+	select FS_FATFS_REENTRANT
+	help
+	  Measured on Kirby (16 MiB ROM, 5 MiB resident): few of the page misses are sequential,
+	  so few hit the staging buffer, and the speculative reads compete with the demanded ones
+	  for the card: the worst frame went from 50 ms to 119 ms. Off by default.
+
+config GBSP_ROM_READAHEAD
+	int "Pages of the ROM read with one card access, and fetched ahead"
+	default 4
+	range 1 8
+	help
+	  A page of a ROM that does not fit in memory is read from the card when the game needs
+	  it (32 KiB, about 2 ms). On a miss this many consecutive pages are read at once, and the
+	  same number after them by a background thread, so that the next misses find their page
+	  in a staging buffer.
+
+config GBSP_ROM_STAGE_PAGES
+	int "Staging buffers of the read-ahead (32 KiB each, from the malloc arena while a game runs)"
+	default 8
+	range 4 32
+
+config GBSP_ROM_PREFETCH_PRIORITY
+	int "Priority of the read-ahead thread (lower is more urgent)"
+	default 11
+	help
+	  Below the emulation and the user interface: it reads while they wait.
+
 config GBSP_RAM_CACHE_KB
 	int "Translation cache for the code that runs from RAM (KiB)"
 	depends on GBSP_DYNAREC

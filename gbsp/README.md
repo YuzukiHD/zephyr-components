@@ -130,3 +130,11 @@ The picture checksums of Zelda (all six) and Kirby are the same as before the ch
   the file format of mGBA.
 - The open source BIOS is built in (`core/bios/`, its md5 is checked when the header is made); a
   `gba_bios.bin` in the root of the card is used when it is there.
+
+## ROM read-ahead (`CONFIG_GBSP_ROM_PREFETCH`, off)
+
+A background thread can stage the pages after a miss (`GBSP_ROM_READAHEAD`, `GBSP_ROM_STAGE_PAGES`).
+Measured on Kirby (16 MiB ROM, 5 MiB resident, 9000 frames): frame CRCs unchanged, average
+7688 -> 7543 us/frame, but the worst frame went from 50 ms to 119 ms: the page misses are mostly not
+sequential (few staging hits) and the speculative reads compete with the demanded ones for the card.
+Left in the tree for cards or games with sequential access; off by default.

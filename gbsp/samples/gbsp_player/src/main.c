@@ -307,9 +307,9 @@ int main(void)
 
 				gbsp_get_stats(&st);
 				printk("bench: frame %d crc %08x: %u us avg, %u us worst, %u over 16.7 ms, "
-				       "%u ROM pages in %u us, %u blocks translated, flushes rom %u ram %u\n",
+				       "%u ROM pages (%u from read-ahead) in %u us, %u blocks translated, flushes rom %u ram %u\n",
 				       i + 1, (uint32_t)crc32_ieee((const uint8_t *)f, w * 2 * h), w_sum / 200,
-				       w_max, w_slow, st.rom_loads - prev.rom_loads,
+				       w_max, w_slow, st.rom_loads - prev.rom_loads, st.rom_hits - prev.rom_hits,
 				       st.rom_load_us - prev.rom_load_us, st.translations - prev.translations,
 				       st.rom_flushes - prev.rom_flushes, st.ram_flushes - prev.ram_flushes);
 				w_sum = w_max = w_slow = 0;

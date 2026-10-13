@@ -56,7 +56,7 @@ block of the same size after each stop (`NEKOBOX_RADIO_TEST` of the application)
 ## Memory
 
 The driver, the supplicant and the packet buffers take their memory from a pool of their own
-(`CONFIG_AIC8800_MEM_POOL_KB`, 1024 KiB, taken from the malloc arena at the start and given back at the stop, `src/aic_mem.c`): `malloc`,
+(`CONFIG_AIC8800_MEM_POOL_KB`, 640 KiB, taken from the malloc arena at the start and given back at the stop, `src/aic_mem.c`): `malloc`,
 `calloc`, `realloc` and `aligned_alloc` of the sources of the module are redirected to it by
 `include/aic_mem_redirect.h`, and `free()` of the whole image is wrapped (`--wrap=free`) so that a
 pointer of the pool goes back to the pool. A request the pool cannot serve fails; it does not take

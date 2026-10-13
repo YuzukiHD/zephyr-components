@@ -39,7 +39,7 @@ if AIC8800
 
 config AIC8800_MEM_POOL_KB
 	int "Memory pool of the driver (KiB)"
-	default 1024
+	default 640
 	range 256 8192
 	help
 	  The driver, the supplicant and the packet buffers allocate from a block of this size

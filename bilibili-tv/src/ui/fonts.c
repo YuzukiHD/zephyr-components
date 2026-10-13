@@ -15,8 +15,15 @@
 
 #include "ui/ui_priv.h"
 
-/* glyphs kept per font size: the bitmaps of a screen full of titles */
-#define GLYPH_CACHE	384
+/*
+ * Glyphs kept per font size. The cache is counted in glyphs, not in bytes, and a full one is
+ * 300..800 bytes per glyph: with 384 for each size the LVGL heap filled up while titles and
+ * comments brought new characters (about 15 KiB more after every video). The titles of a screen
+ * need about 150 distinct glyphs of the middle size, the other sizes only a few.
+ */
+#define GLYPH_CACHE_S	64
+#define GLYPH_CACHE_M	256
+#define GLYPH_CACHE_L	64
 
 static const uint8_t ttf[] = {
 #include "font.inc"
@@ -24,10 +31,10 @@ static const uint8_t ttf[] = {
 
 const lv_font_t *ui_font_s, *ui_font_m, *ui_font_l;
 
-static const lv_font_t *make(int px)
+static const lv_font_t *make(int px, int cache)
 {
 	lv_font_t *f = lv_tiny_ttf_create_data_ex(ttf, sizeof(ttf), px, LV_FONT_KERNING_NONE,
-						  GLYPH_CACHE);
+						  cache);
 
 	if (f == NULL) {
 		printk("ui: the font %d px could not be made\n", px);
@@ -41,8 +48,8 @@ static const lv_font_t *make(int px)
 
 void ui_fonts_init(void)
 {
-	ui_font_s = make(18);
-	ui_font_m = make(22);
-	ui_font_l = make(28);
+	ui_font_s = make(18, GLYPH_CACHE_S);
+	ui_font_m = make(22, GLYPH_CACHE_M);
+	ui_font_l = make(28, GLYPH_CACHE_L);
 	printk("ui: font of %u KiB\n", (unsigned int)(sizeof(ttf) >> 10));
 }

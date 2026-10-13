@@ -105,3 +105,12 @@ panel itself was not tried with a finger.
 
 - Streaming: the video plays while the file downloads (`src/net/download.c` thread, `player_open_growing` in the local player copy `src/player`); the bar shows the downloaded part; HTTP 5xx is retried 6 times; failures say why.
 - Memory first: LVGL and the UI run from the flash window (`BILI_UI_RAM` is off by default), the card grid only keeps the widgets near the screen.
+
+## A freeze that prints nothing
+
+`src/debug/crumbs.c` (`BILI_CRUMBS`, on by default) keeps the last 256 context switches and interrupt entries in
+memory and arms a watchdog that resets the CPU core only (memory stays). After a freeze the board is in FEL
+within 8 s; do not power cycle. On the host: `xfel ddr f101-s3`, then `xfel read <address of bili_crumbs> 4112 file`
+(`nm` of the ELF), entries of 16 bytes: sequence, cycle counter (24 MHz), mark (S switched in, I interrupt, X
+interrupt left) and thread name; the highest sequence is the last one. `BILI_CRUMBS_TEST_S=40` stops the system
+after 40 s to try the chain.

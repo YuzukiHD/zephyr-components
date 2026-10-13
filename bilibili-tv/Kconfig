@@ -131,7 +131,7 @@ source "Kconfig.zephyr"
 
 config BILI_CPU_MHZ
 	int "CPU clock in MHz, 0 keeps what the boot stub set up (600)"
-	default 960
+	default 600
 	help
 	  The CPU PLL is raised in steps of 72 MHz and the memory is checked after each step. The
 	  voltage is not changed.
@@ -147,3 +147,8 @@ config BILI_CRUMBS_TIMEOUT_MS
 	int "Watchdog time out in ms"
 	depends on BILI_CRUMBS
 	default 8000
+
+config BILI_CRUMBS_TEST_S
+	int "Stop the system after this many seconds (0: never), to try the recorder"
+	depends on BILI_CRUMBS
+	default 0

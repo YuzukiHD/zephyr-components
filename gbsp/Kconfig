@@ -35,6 +35,14 @@ config GBSP_RAM_CACHE_KB
 	depends on GBSP_DYNAREC
 	default 256
 
+config GBSP_RVV
+	bool "Vector version of the tile renderer (needs the V extension)"
+	default y if SUN252I_F101_RVV
+	help
+	  The rows of 4 bit tiles that are drawn as colour indices are expanded on the vector unit.
+	  The application must switch CONFIG_SUN252I_F101_RVV on (vector registers are saved on a
+	  context switch).
+
 config GBSP_OPT_LEVEL
 	string "Optimisation level of the core (-O3, -O2, -Os)"
 	default "-O3"

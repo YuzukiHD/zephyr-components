@@ -38,6 +38,14 @@ endif()
 
 zephyr_library_include_directories(${C} ${GEN})
 zephyr_library_compile_definitions(OVERCLOCK_60FPS)
+if(CONFIG_GBSP_RVV)
+  zephyr_library_compile_definitions(HAVE_RVV_TILES)
+endif()
+if(CONFIG_GBSP_RVV)
+  set(GBSP_ISA rv32imafdcv)
+else()
+  set(GBSP_ISA rv32imafdc)
+endif()
 zephyr_library_compile_options(
   ${CONFIG_GBSP_OPT_LEVEL} -fno-strict-aliasing -fomit-frame-pointer -w -msmall-data-limit=0
-  -march=rv32imafdc_zicsr_zifencei_xtheadcmo_xtheadba_xtheadbb_xtheadbs_xtheadcondmov_xtheadmemidx_xtheadmempair)
+  -march=${GBSP_ISA}_zicsr_zifencei_xtheadcmo_xtheadba_xtheadbb_xtheadbs_xtheadcondmov_xtheadmemidx_xtheadmempair)

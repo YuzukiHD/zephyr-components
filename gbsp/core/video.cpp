@@ -220,6 +220,43 @@ static inline void rend_part_tile_Nbpp(u32 bg_comb, u32 px_comb,
   }
 }
 
+#if defined(__riscv_v) && defined(HAVE_RVV_TILES)
+#include <riscv_vector.h>
+
+// One row of a 4 bit tile (8 pixels) drawn as colour indices: pixel i is
+// (tilepix >> 4 * i) & 15 (mirrored for hflip), a non-zero one is stored as
+// pxflg | value; in the base layer a zero is stored as bg instead, elsewhere it
+// is left alone. Same result as the scalar loop, on the vector unit.
+template<typename dtype, bool hflip, bool isbase>
+static inline void rvv_tile_row4_indexed(dtype *dest, u32 tilepix, u32 pxflg, u32 bg)
+{
+  size_t vl = __riscv_vsetvl_e32m2(8);
+  vuint32m2_t sh = __riscv_vsll_vx_u32m2(__riscv_vid_v_u32m2(vl), 2, vl);
+  if (hflip)
+    sh = __riscv_vrsub_vx_u32m2(sh, 28, vl);
+  vuint32m2_t p = __riscv_vand_vx_u32m2(
+      __riscv_vsrl_vv_u32m2(__riscv_vmv_v_x_u32m2(tilepix, vl), sh, vl), 0xF, vl);
+  vbool16_t nz = __riscv_vmsne_vx_u32m2_b16(p, 0, vl);
+  vuint32m2_t val = __riscv_vor_vx_u32m2(p, pxflg, vl);
+
+  if (isbase)
+    val = __riscv_vmerge_vvm_u32m2(__riscv_vmv_v_x_u32m2(bg, vl), val, nz, vl);
+
+  if (sizeof(dtype) == 4) {
+    if (isbase)
+      __riscv_vse32_v_u32m2((unsigned long *)dest, val, vl);
+    else
+      __riscv_vse32_v_u32m2_m(nz, (unsigned long *)dest, val, vl);
+  } else {
+    vuint16m1_t v16 = __riscv_vncvt_x_x_w_u16m1(val, vl);
+    if (isbase)
+      __riscv_vse16_v_u16m1((uint16_t *)dest, v16, vl);
+    else
+      __riscv_vse16_v_u16m1_m(nz, (uint16_t *)dest, v16, vl);
+  }
+}
+#endif
+
 // Same as above, but optimized for full tiles. Skip comments here.
 template<typename dtype, rendtype rdtype, bool is8bpp, bool isbase, bool hflip>
 static inline void render_tile_Nbpp(
@@ -262,6 +299,12 @@ static inline void render_tile_Nbpp(
       u16 tilepal = (tile >> 12) << 4;
       u16 pxflg = px_comb | tilepal;
       const u16 *subpal = &paltbl[tilepal];
+#if defined(__riscv_v) && defined(HAVE_RVV_TILES)
+      if (rdtype == INDXCOLOR) {
+        rvv_tile_row4_indexed<dtype, hflip, isbase>(dest_ptr, tilepix, pxflg, bg_comb);
+        return;
+      }
+#endif
       for (u32 i = 0; i < 8; i++, dest_ptr++) {
         u8 pval = (hflip ? (tilepix >> ((7-i)*4)) : (tilepix >> (i*4))) & 0xF;
         if (pval) {

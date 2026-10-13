@@ -71,6 +71,10 @@ translated code calls 7%, the rest is timers, sound and the frame loop.
 
 - `-O3` instead of `-O2`: 1.6% faster, same checksums.
 - `v` in `-march` costs nothing on its own (no change in speed).
+- Vector version of the 4 bit tile rows drawn as colour indices (`GBSP_RVV`, `rvv_tile_row4_indexed()` in
+  `video.cpp`: unpack the nibbles, OR the flags, masked store; no table lookup, so no gather): same
+  pictures, 5630 -> 5578 us per frame on Zelda, about 1%. Palette lookups (the 16 bit colour tiles,
+  the blend and brightness passes) need gathers, which are slow on this core, so they stay scalar.
 - A vector version of the blend and brightness merge passes (palette lookups as indexed loads, the
   packed colour arithmetic one pixel per lane) gave the same pictures and was 11% slower: indexed
   loads are slow on the C907. It was dropped; the 8 pixel tile rows of the text renderer are too

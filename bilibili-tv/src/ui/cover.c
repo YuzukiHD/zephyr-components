@@ -308,6 +308,7 @@ struct sw {
 	const uint8_t *data;
 	size_t len, pos;
 	uint16_t *out;
+	int w, h, stride;	/* of the picture, in pixels; the row distance in pixels */
 };
 
 static size_t sw_in(JDEC *jd, uint8_t *buf, size_t n)
@@ -330,9 +331,9 @@ static int sw_out(JDEC *jd, void *bitmap, JRECT *rect)
 
 	for (int y = rect->top; y <= rect->bottom; y++) {
 		for (int x = rect->left; x <= rect->right; x++, p += 3) {
-			if (x < COVER_W && y < COVER_H) {
+			if (x < s->w && y < s->h) {
 				/* the decoder of LVGL delivers the bytes of a pixel as blue, green, red */
-				s->out[y * (COVER_STRIDE / 2) + x] = ((p[2] & 0xf8) << 8) | ((p[1] & 0xfc) << 3) | (p[0] >> 3);
+				s->out[y * s->stride + x] = ((p[2] & 0xf8) << 8) | ((p[1] & 0xfc) << 3) | (p[0] >> 3);
 			}
 		}
 	}
@@ -340,16 +341,16 @@ static int sw_out(JDEC *jd, void *bitmap, JRECT *rect)
 	return 1;
 }
 
-static uint16_t *decode_soft(const uint8_t *jpeg, size_t n)
+static uint16_t *decode_sized(const uint8_t *jpeg, size_t n, int w, int h, int stride_bytes)
 {
 	enum { POOL = 24 * 1024 };
 	JDEC *jd = malloc(sizeof(*jd));
 	void *pool = malloc(POOL);
-	uint16_t *px = aligned_alloc(64, COVER_BYTES);
-	struct sw s = {.data = jpeg, .len = n, .out = px};
+	uint16_t *px = aligned_alloc(64, (size_t)stride_bytes * h);
+	struct sw s = {.data = jpeg, .len = n, .out = px, .w = w, .h = h, .stride = stride_bytes / 2};
 
 	if (px != NULL) {
-		memset(px, 0, COVER_BYTES);
+		memset(px, 0, (size_t)stride_bytes * h);
 	}
 	if (jd == NULL || pool == NULL || px == NULL ||
 	    jd_prepare(jd, sw_in, pool, POOL, &s) != JDR_OK || jd_decomp(jd, sw_out, 0) != JDR_OK) {
@@ -358,6 +359,34 @@ static uint16_t *decode_soft(const uint8_t *jpeg, size_t n)
 	}
 	free(jd);
 	free(pool);
+
+	return px;
+}
+
+static uint16_t *decode_soft(const uint8_t *jpeg, size_t n)
+{
+	return decode_sized(jpeg, n, COVER_W, COVER_H, COVER_STRIDE);
+}
+
+uint16_t *cover_load_square(const char *pic, int size, int stride_bytes)
+{
+	char url[256];
+	uint8_t *jpeg = malloc(JPEG_MAX);
+	uint16_t *px = NULL;
+	int n;
+
+	if (jpeg == NULL || bili_cover_url(pic, size, size, url, sizeof(url)) < 0) {
+		free(jpeg);
+		return NULL;
+	}
+	n = http_get_text(url, &(struct http_opts){.range_start = -1, .timeout_ms = 8000}, (char *)jpeg, JPEG_MAX, NULL);
+	if (n > 0) {
+		px = decode_sized(jpeg, n, size, size, stride_bytes);
+	}
+	if (px == NULL) {
+		printk("cover: the picture %s could not be loaded (%d)\n", pic, n);
+	}
+	free(jpeg);
 
 	return px;
 }

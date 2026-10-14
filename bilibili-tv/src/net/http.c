@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <zephyr/kernel.h>
 #include <zephyr/net/socket.h>
 #include <mbedtls/ssl.h>
@@ -17,7 +18,7 @@
 #include "net/http.h"
 
 #define RECV_SIZE	8192
-#define REQ_SIZE	1024
+#define REQ_SIZE	1536
 #define USER_AGENT	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
 struct url {
@@ -453,6 +454,28 @@ close:
 	conn_close(c);
 out:
 	if (res != NULL) {
+		size_t len = 0;
+		const char *l = strstr(p->hdr, "\r\n");
+
+		/* the name=value part of every Set-Cookie field */
+		res->set_cookie[0] = '\0';
+		while (l != NULL && p->state != HP_HEADER) {
+			l += 2;
+			if (strncasecmp(l, "Set-Cookie:", 11) == 0) {
+				const char *v = l + 11;
+				size_t n;
+
+				while (*v == ' ') {
+					v++;
+				}
+				n = strcspn(v, ";\r\n");
+				if (len + n + 3 < sizeof(res->set_cookie)) {
+					len += snprintf(res->set_cookie + len, sizeof(res->set_cookie) - len, "%s%.*s",
+							len ? "; " : "", (int)n, v);
+				}
+			}
+			l = strstr(l, "\r\n");
+		}
 		res->status = p->status;
 		res->content_length = p->content_length;
 		res->range_total = p->range_total;

@@ -22,7 +22,9 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
+#include "api/account.h"
 #include "core/app.h"
+#include "core/settings.h"
 #include "ui/cover.h"
 #include "api/bili_api.h"
 #include "net/download.h"
@@ -58,6 +60,17 @@ static atomic_t stop_req;
 static K_MUTEX_DEFINE(lists_lock);
 static struct vlist lists[LIST_COUNT];
 
+/* the login code and the networks found: written by the worker, read by the UI thread */
+static struct qr_info qr;
+static uint16_t *avatar_px;
+static uint32_t avatar_gen;
+static bool avatar_ok;
+static char qr_key[64];
+#define WIFI_MAX 16
+static struct wifi_ap aps[WIFI_MAX];
+static int ap_count;
+static bool scanning;
+
 static FATFS fat_fs;
 static struct fs_mount_t mp = {
 	.type = FS_FATFS,
@@ -84,7 +97,7 @@ void app_cmd(enum app_cmd_type type, int arg)
 
 void app_cmd_wifi(const char *ssid, const char *psk)
 {
-	struct cmd c = {.type = CMD_WIFI};
+	struct cmd c = {.type = CMD_WIFI, .arg = 1};
 
 	snprintf(c.ssid, sizeof(c.ssid), "%s", ssid);
 	snprintf(c.psk, sizeof(c.psk), "%s", psk);
@@ -117,6 +130,48 @@ void app_cmd_search(const char *keyword)
 	if (k_msgq_put(&cmd_q, &c, K_NO_WAIT) != 0) {
 		printk("app: command queue full\n");
 	}
+}
+
+void app_qr_info(struct qr_info *info)
+{
+	k_mutex_lock(&lists_lock, K_FOREVER);
+	*info = qr;
+	k_mutex_unlock(&lists_lock);
+}
+
+bool app_account(char *name, size_t size)
+{
+	if (name != NULL && size > 0) {
+		account_name(name, size);
+	}
+
+	return account_logged_in();
+}
+
+bool app_avatar(const uint16_t **px, uint32_t *gen)
+{
+	bool ok;
+
+	k_mutex_lock(&lists_lock, K_FOREVER);
+	*px = avatar_px;
+	*gen = avatar_gen;
+	ok = avatar_ok;
+	k_mutex_unlock(&lists_lock);
+
+	return ok;
+}
+
+int app_wifi_results(struct wifi_ap *out, int max, bool *scanning_now)
+{
+	int n;
+
+	k_mutex_lock(&lists_lock, K_FOREVER);
+	n = MIN(ap_count, max);
+	memcpy(out, aps, n * sizeof(aps[0]));
+	*scanning_now = scanning;
+	k_mutex_unlock(&lists_lock);
+
+	return n;
 }
 
 void app_list_info(enum list_id list, struct list_info *info)
@@ -225,7 +280,8 @@ static void list_store(enum list_id list, int page, const struct bili_video *v, 
 
 static const char *list_name(enum list_id list)
 {
-	return list == LIST_RECOMMEND ? "recommend" : (list == LIST_POPULAR ? "popular" : "search");
+	return list == LIST_RECOMMEND ? "recommend" :
+	       (list == LIST_POPULAR ? "popular" : (list == LIST_FOLLOW ? "follow" : "search"));
 }
 
 /* fetches a page of a list; page 1 starts it again */
@@ -256,6 +312,13 @@ static void load(enum list_id list, int page)
 	case LIST_POPULAR:
 		n = bili_api_popular(page, v, PAGE_SIZE);
 		break;
+	case LIST_FOLLOW: {
+		bool more = false;
+
+		n = bili_api_follow(page, v, PAGE_SIZE, &more);
+		pages = n > 0 && !more ? page : 0;	/* the last page ends the list */
+		break;
+	}
 	default:
 		n = bili_api_search(kw, page, v, PAGE_SIZE, &pages);
 		break;
@@ -494,7 +557,24 @@ leave:
 	ui_set_playing(NULL, 0);
 }
 
-static void wifi_connect(const char *ssid, const char *psk)
+static void wifi_cfg_write(const char *ssid, const char *psk)
+{
+	struct fs_file_t f;
+	char buf[110];
+	int n = snprintf(buf, sizeof(buf), "%s\n%s\n", ssid, psk);
+
+	fs_file_t_init(&f);
+	if (fs_open(&f, "/SD:/wifi.cfg", FS_O_CREATE | FS_O_WRITE | FS_O_TRUNC) != 0) {
+		printk("wifi: /SD:/wifi.cfg cannot be written\n");
+		return;
+	}
+	if (fs_write(&f, buf, n) != n) {
+		printk("wifi: write of wifi.cfg failed\n");
+	}
+	fs_close(&f);
+}
+
+static void wifi_connect(const char *ssid, const char *psk, bool remember)
 {
 	int ret;
 
@@ -506,6 +586,9 @@ static void wifi_connect(const char *ssid, const char *psk)
 		return;
 	}
 	ui_set_status("Wi-Fi connected");
+	if (remember) {
+		wifi_cfg_write(ssid, psk);
+	}
 	load(LIST_RECOMMEND, 1);
 }
 
@@ -543,6 +626,152 @@ static void wifi_cfg_read(char *ssid, size_t ssid_size, char *psk, size_t psk_si
 void bili_selftest_start(void);
 static void card_wait(void);
 
+/* ---- the login ----------------------------------------------------------------------------- */
+
+static void qr_set(enum qr_state st)
+{
+	k_mutex_lock(&lists_lock, K_FOREVER);
+	qr.state = st;
+	k_mutex_unlock(&lists_lock);
+}
+
+static void qr_start(void)
+{
+	char url[sizeof(qr.url)];
+	int ret = bili_api_qr_new(url, sizeof(url), qr_key, sizeof(qr_key));
+
+	k_mutex_lock(&lists_lock, K_FOREVER);
+	if (ret == 0) {
+		memcpy(qr.url, url, sizeof(qr.url));
+		qr.gen++;
+		qr.state = QR_WAIT;
+	} else {
+		qr.state = QR_ERROR;
+	}
+	k_mutex_unlock(&lists_lock);
+	printk("login: new code %s (%d)\n", ret == 0 ? "ready" : "failed", ret);
+}
+
+/* the picture of the user: the buffer is made once, so the interface can keep drawing from it */
+static void avatar_fetch(const char *face)
+{
+	uint16_t *px;
+
+	if (face[0] == '\0') {
+		return;
+	}
+	px = cover_load_square(face, AVATAR_SIZE, AVATAR_STRIDE);
+	if (px == NULL) {
+		return;
+	}
+	k_mutex_lock(&lists_lock, K_FOREVER);
+	if (avatar_px == NULL) {
+		avatar_px = px;
+		px = NULL;
+	} else {
+		memcpy(avatar_px, px, (size_t)AVATAR_STRIDE * AVATAR_SIZE);
+	}
+	avatar_ok = true;
+	avatar_gen++;
+	k_mutex_unlock(&lists_lock);
+	free(px);
+}
+
+/* the name and the picture of the user, and the lists that depend on the login */
+static void login_ready(void)
+{
+	char name[64], face[200];
+
+	face[0] = '\0';
+	if (bili_api_user(name, sizeof(name), face, sizeof(face)) == 0) {
+		account_set_name(name);
+		printk("login: %s\n", name);
+		avatar_fetch(face);
+	}
+	load(LIST_RECOMMEND, 1);
+	load(LIST_FOLLOW, 1);
+}
+
+static void qr_poll(void)
+{
+	int state = -1, ret;
+
+	if (qr.state != QR_WAIT && qr.state != QR_SCANNED) {
+		return;
+	}
+	ret = bili_api_qr_poll(qr_key, &state);
+	if (ret != 0) {
+		/* the answer of a confirmed login that has no cookies cannot be asked for again */
+		qr_set(state == -1 ? QR_ERROR : qr.state);
+		return;
+	}
+	switch (state) {
+	case 86101:
+		qr_set(QR_WAIT);
+		break;
+	case 86090:
+		qr_set(QR_SCANNED);
+		break;
+	case 0:
+		qr_set(QR_DONE);
+		login_ready();
+		break;
+	case 86038:
+		qr_set(QR_EXPIRED);
+		break;
+	default:
+		printk("login: unknown state %d\n", state);
+		qr_set(QR_ERROR);
+		break;
+	}
+}
+
+/* a saved login that the server does not accept any more is dropped */
+static void login_check(void)
+{
+	char name[64], face[200];
+	int ret;
+
+	if (!account_logged_in()) {
+		return;
+	}
+	face[0] = '\0';
+	ret = bili_api_user(name, sizeof(name), face, sizeof(face));
+	if (ret == -EACCES) {
+		printk("login: the saved login is no longer valid\n");
+		account_clear();
+		load(LIST_RECOMMEND, 1);
+	} else if (ret == 0) {
+		account_set_name(name);
+		avatar_fetch(face);
+		load(LIST_RECOMMEND, 1);
+		load(LIST_FOLLOW, 1);
+	}
+}
+
+static void wifi_scan_now(void)
+{
+	struct wifi_ap *found = malloc(sizeof(*found) * WIFI_MAX);
+	int n;
+
+	if (found == NULL) {
+		return;
+	}
+	k_mutex_lock(&lists_lock, K_FOREVER);
+	scanning = true;
+	k_mutex_unlock(&lists_lock);
+	n = wifi_scan(found, WIFI_MAX);
+	k_mutex_lock(&lists_lock, K_FOREVER);
+	ap_count = n > 0 ? n : 0;
+	if (n > 0) {
+		memcpy(aps, found, n * sizeof(aps[0]));
+	}
+	scanning = false;
+	k_mutex_unlock(&lists_lock);
+	free(found);
+	printk("wifi: %d networks found (%d)\n", ap_count, n);
+}
+
 static void worker_main(void *a, void *b, void *c)
 {
 	struct cmd cmd;
@@ -553,8 +782,11 @@ static void worker_main(void *a, void *b, void *c)
 	if (ssid[0] == '\0') {
 		wifi_cfg_read(ssid, sizeof(ssid), psk, sizeof(psk));
 	}
+	account_load();
+	settings_load();
 	if (ssid[0] != '\0') {
-		wifi_connect(ssid, psk);
+		wifi_connect(ssid, psk, false);
+		login_check();
 	} else {
 		ui_set_status("No Wi-Fi: put /SD:/wifi.cfg on the card or type  bili wifi <ssid> <psk>");
 	}
@@ -602,8 +834,32 @@ static void worker_main(void *a, void *b, void *c)
 				wifi_cfg_read(cmd.ssid, sizeof(cmd.ssid), cmd.psk, sizeof(cmd.psk));
 			}
 			if (cmd.ssid[0] != '\0') {
-				wifi_connect(cmd.ssid, cmd.psk);
+				wifi_connect(cmd.ssid, cmd.psk, cmd.arg == 1);
 			}
+			break;
+		case CMD_QR_START:
+			qr_start();
+			break;
+		case CMD_QR_POLL:
+			qr_poll();
+			break;
+		case CMD_LOGOUT:
+			account_clear();
+			k_mutex_lock(&lists_lock, K_FOREVER);
+			lists[LIST_FOLLOW].count = 0;
+			lists[LIST_FOLLOW].gen++;
+			lists[LIST_FOLLOW].more = false;
+			qr.state = QR_NONE;
+			avatar_ok = false;
+			avatar_gen++;
+			k_mutex_unlock(&lists_lock);
+			load(LIST_RECOMMEND, 1);
+			break;
+		case CMD_WIFI_SCAN:
+			wifi_scan_now();
+			break;
+		case CMD_SAVE_SETTINGS:
+			settings_save();
 			break;
 		default:
 			break;

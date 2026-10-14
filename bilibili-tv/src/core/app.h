@@ -8,9 +8,11 @@
 #define BILI_APP_H_
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "api/bili_parse.h"
+#include "net/wifi.h"
 #include "api/danmaku.h"
 
 #define MAX_VIDEOS	100
@@ -18,6 +20,7 @@
 enum list_id {
 	LIST_RECOMMEND,
 	LIST_POPULAR,
+	LIST_FOLLOW,	/**< the videos of the followed users, only with a login */
 	LIST_SEARCH,
 	LIST_COUNT,
 };
@@ -31,10 +34,16 @@ enum app_cmd_type {
 	CMD_STOP,	/**< back from the player */
 	CMD_PAUSE,	/**< toggles */
 	CMD_WIFI,	/**< join the network in ssid / psk */
+	CMD_QR_START,	/**< ask for a new login code */
+	CMD_QR_POLL,	/**< ask how the scan of the code is going */
+	CMD_LOGOUT,	/**< forget the login */
+	CMD_WIFI_SCAN,	/**< look for networks */
+	CMD_SAVE_SETTINGS, /**< write volume and brightness to the card */
 };
 
 /** Posts a command to the worker thread; may be called from any thread */
 void app_cmd(enum app_cmd_type type, int arg);
+/** Joins a network; the name and password are kept on the card when it worked */
 void app_cmd_wifi(const char *ssid, const char *psk);
 void app_cmd_search(const char *keyword);
 
@@ -47,6 +56,38 @@ struct list_info {
 	int error;	/**< the last page request failed with this (0: it worked) */
 };
 void app_list_info(enum list_id list, struct list_info *info);
+
+/* ---- the login ------------------------------------------------------------------------------ */
+
+enum qr_state {
+	QR_NONE,	/**< no code asked for */
+	QR_WAIT,	/**< the code is shown, nobody scanned it */
+	QR_SCANNED,	/**< scanned, waiting for the confirmation on the phone */
+	QR_EXPIRED,	/**< the code is out of date */
+	QR_DONE,	/**< logged in */
+	QR_ERROR,	/**< the server could not be asked */
+};
+
+struct qr_info {
+	enum qr_state state;
+	char url[200];	/**< what the code shows */
+	uint32_t gen;	/**< changes when there is a new code */
+};
+void app_qr_info(struct qr_info *info);
+
+/** Whether a login is there; @p name gets the user name (empty until it is known) */
+bool app_account(char *name, size_t size);
+
+/**
+ * The picture of the user (AVATAR_SIZE square RGB565, rows AVATAR_STRIDE bytes apart, 64 byte aligned);
+ * false until it was fetched. The buffer stays the same, @p gen changes when its pixels do.
+ */
+#define AVATAR_SIZE	96
+#define AVATAR_STRIDE	192
+bool app_avatar(const uint16_t **px, uint32_t *gen);
+
+/** The networks of the last scan (strongest first); @p scanning is true while a scan runs */
+int app_wifi_results(struct wifi_ap *out, int max, bool *scanning);
 
 /** What malloc can still give: blocks of 64 KiB (all, in KiB) and the biggest single block (KiB) */
 void app_mem_probe(unsigned int *free_kib, unsigned int *biggest_kib);

@@ -28,6 +28,7 @@ struct http_result {
 	uint32_t connect_ms;	/**< until the connection (and the TLS handshake) is up */
 	uint32_t first_byte_ms;	/**< until the first byte of the answer, from the start */
 	uint32_t total_ms;
+	char set_cookie[640];	/**< "name=value; name=value" of the Set-Cookie fields of the answer */
 };
 
 /**

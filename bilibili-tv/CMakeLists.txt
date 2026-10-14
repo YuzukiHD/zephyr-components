@@ -26,7 +26,8 @@ zephyr_include_directories(src/gfx)
 file(GLOB PLAYER_SRC src/player/*.c)
 target_sources(app PRIVATE ${PLAYER_SRC})
 
-target_sources(app PRIVATE src/main.c src/core/cpu.c)
+file(GLOB CORE_SRC src/core/*.c)
+target_sources(app PRIVATE src/main.c ${CORE_SRC})
 # network and file transfer, the Bilibili interface, the screens
 file(GLOB NET_SRC src/net/*.c)
 file(GLOB API_SRC src/api/*.c)

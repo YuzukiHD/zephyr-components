@@ -7,7 +7,8 @@ Cuts the Chinese font of the firmware out of Noto Sans SC (SIL OFL, the copy in 
   tools/make_font.py [--level1] [-o src/ui/fonts/NotoSansSC-subset.ttf]
 
 Characters: GB2312 (all 6763 hanzi and its symbols; --level1 keeps the 3755 common ones only), the 8105 hanzi of the
-standard list of 2013 (tools/data/tgh8105.txt, kTGH of Unihan: 1300 more than GB2312, names and everyday words), ASCII and
+standard list of 2013 (tools/data/tgh8105.txt, kTGH of Unihan: 1300 more than GB2312, names and everyday words), the single
+characters of tools/data/extra.txt, ASCII and
 Latin-1, general and CJK punctuation, full-width forms, hiragana and katakana, arrows and a few symbols
 that show up in titles. Needs fontTools (pip install --target tools-local/pylib fonttools).
 """
@@ -35,6 +36,10 @@ for hi in range(0xA1, 0xF8):
             pass
 if not a.level1:
     chars.update(open(os.path.join(HERE, "data/tgh8105.txt"), encoding="utf-8").read().strip())
+# characters that are asked for one by one (tools/data/extra.txt): names that are in no standard list
+extra = os.path.join(HERE, "data/extra.txt")
+if os.path.exists(extra):
+    chars.update(c for c in open(extra, encoding="utf-8").read() if not c.isspace())
 ranges = [(0x20, 0x7E), (0xA0, 0xFF), (0x2010, 0x2027), (0x2030, 0x203E), (0x2190, 0x2199),
           (0x2460, 0x2473), (0x25A0, 0x25CF), (0x2605, 0x2606), (0x3000, 0x303F), (0x3041, 0x3096),
           (0x30A1, 0x30FA), (0x30FB, 0x30FF), (0xFF01, 0xFF5E), (0xFFE0, 0xFFE5)]

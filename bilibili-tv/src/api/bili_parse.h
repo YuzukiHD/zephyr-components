@@ -9,6 +9,7 @@
 #ifndef BILI_PARSE_H_
 #define BILI_PARSE_H_
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -62,6 +63,29 @@ int bili_parse_hot_words(const char *json, char words[][BILI_HOT_WORD_LEN], int 
  * /x/web-interface/view also works, but it can be 150 KB for a video of a large series.
  */
 int bili_parse_view_cid(const char *json, uint64_t *cid);
+
+/**
+ * The answer of the QR login poll: the state in data.code (86101 not scanned, 86090 scanned and not
+ * confirmed, 86038 expired, 0 confirmed) and, when confirmed, the address that carries the cookies.
+ * Returns 0, or -EBADMSG for an answer that has no state.
+ */
+int bili_parse_qr_poll(const char *json, int *state, char *url, size_t size);
+
+/** A new QR login: the address to put into the code and the key to poll with */
+int bili_parse_qr_new(const char *json, char *url, size_t url_size, char *key, size_t key_size);
+
+/**
+ * The name and the picture address of the logged in user from the nav answer; -EACCES when the answer
+ * says "not logged in". @p face may be NULL.
+ */
+int bili_parse_user(const char *json, char *name, size_t size, char *face, size_t face_size);
+
+/**
+ * The videos of the feed of the followed users (/x/polymer/web-dynamic/v1/feed/all); posts that are
+ * no video are skipped. @p offset gets the position of the next page, @p more whether there is one.
+ */
+int bili_parse_dynamic(const char *json, struct bili_video *out, int max, char *offset, size_t offset_size,
+		       bool *more);
 
 /** Removes <tags> from @p s in place and decodes the common HTML entities */
 void bili_strip_html(char *s);

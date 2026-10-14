@@ -291,3 +291,113 @@ int bili_parse_playurl(const char *json, struct bili_stream *out)
 
 	return 0;
 }
+
+int bili_parse_qr_new(const char *json, char *url, size_t url_size, char *key, size_t key_size)
+{
+	if (js_str(js_path(json, "data.url"), url, url_size) <= 0 ||
+	    js_str(js_path(json, "data.qrcode_key"), key, key_size) <= 0) {
+		return -EBADMSG;
+	}
+
+	return 0;
+}
+
+int bili_parse_qr_poll(const char *json, int *state, char *url, size_t size)
+{
+	const char *c = js_path(json, "data.code");
+
+	if (c == NULL) {
+		return -EBADMSG;
+	}
+	*state = (int)js_int(c, -1);
+	if (url != NULL && size > 0) {
+		if (js_str(js_path(json, "data.url"), url, size) < 0) {
+			url[0] = '\0';
+		}
+	}
+
+	return 0;
+}
+
+int bili_parse_user(const char *json, char *name, size_t size, char *face, size_t face_size)
+{
+	const char *login = js_path(json, "data.isLogin");
+
+	if (login == NULL || strncmp(login, "true", 4) != 0) {
+		return -EACCES;
+	}
+
+	if (face != NULL && js_str(js_path(json, "data.face"), face, face_size) < 0) {
+		face[0] = '\0';
+	}
+
+	return js_str(js_path(json, "data.uname"), name, size) >= 0 ? 0 : -EBADMSG;
+}
+
+/* "123", "1.2万" (12000) and "3.4亿" are the counts of the dynamic feed */
+static uint32_t count_text(const char *v)
+{
+	char t[24];
+	uint32_t whole = 0, tenth = 0, mul = 1;
+	const char *p = t;
+
+	if (js_str(v, t, sizeof(t)) <= 0) {
+		return (uint32_t)js_int(v, 0);
+	}
+	while (*p >= '0' && *p <= '9') {
+		whole = whole * 10 + (*p++ - '0');
+	}
+	if (*p == '.' && p[1] >= '0' && p[1] <= '9') {
+		tenth = p[1] - '0';
+		p += 2;
+		while (*p >= '0' && *p <= '9') {
+			p++;
+		}
+	}
+	if (strncmp(p, "\xe4\xb8\x87", 3) == 0) {
+		mul = 10000;
+	} else if (strncmp(p, "\xe4\xba\xbf", 3) == 0) {
+		mul = 100000000;
+	}
+
+	return whole * mul + tenth * (mul / 10);
+}
+
+int bili_parse_dynamic(const char *json, struct bili_video *out, int max, char *offset, size_t offset_size,
+		       bool *more)
+{
+	int n = 0;
+	const char *flag = js_path(json, "data.has_more");
+
+	if (offset != NULL && offset_size > 0 && js_str(js_path(json, "data.offset"), offset, offset_size) < 0) {
+		offset[0] = '\0';
+	}
+	if (more != NULL) {
+		*more = flag != NULL && strncmp(flag, "true", 4) == 0;
+	}
+	for (const char *it = js_first(js_path(json, "data.items")); it != NULL && n < max; it = js_next(it)) {
+		const char *a = js_path(it, "modules.module_dynamic.major.archive");
+		struct bili_video *v = &out[n];
+		char dur[16];
+
+		if (a == NULL || js_str(js_get(a, "bvid"), v->bvid, sizeof(v->bvid)) <= 0 ||
+		    js_str(js_get(a, "title"), v->title, sizeof(v->title)) < 0) {
+			continue;
+		}
+		bili_fold_width(v->title);
+		if (js_str(js_path(it, "modules.module_author.name"), v->author, sizeof(v->author)) < 0) {
+			v->author[0] = '\0';
+		}
+		bili_fold_width(v->author);
+		if (js_str(js_get(a, "cover"), v->cover, sizeof(v->cover)) < 0) {
+			v->cover[0] = '\0';
+		}
+		v->cid = 0;	/* looked up when the video is played */
+		v->duration = js_str(js_get(a, "duration_text"), dur, sizeof(dur)) > 0 ? bili_parse_clock(dur) : 0;
+		v->views = count_text(js_path(a, "stat.play"));
+		v->danmaku = count_text(js_path(a, "stat.danmaku"));
+		n++;
+	}
+
+	return n;
+}

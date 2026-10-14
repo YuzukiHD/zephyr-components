@@ -74,6 +74,7 @@ enum page {
 	PAGE_HOME,
 	PAGE_SEARCH,
 	PAGE_PLAY,
+	PAGE_COUNT,
 };
 
 void ui_nav(enum page page);
@@ -89,6 +90,16 @@ void ui_search_show(void);
 void ui_search_inject(const char *keys, int pick, bool submit_now);
 void ui_search_hot_words(char words[][BILI_HOT_WORD_LEN], int count);
 
+/* The account and settings panels fill the area below the tabs of the home page */
+lv_obj_t *ui_me_create(lv_obj_t *parent, int top, int height);
+void ui_me_run(bool visible);
+void ui_me_show(void);
+
+/** @p overlay is the full screen parent for the keyboard and the password box */
+lv_obj_t *ui_settings_create(lv_obj_t *parent, lv_obj_t *overlay, int top, int height);
+void ui_settings_run(bool visible);
+void ui_settings_show(void);
+
 lv_obj_t *ui_danmaku_create(lv_obj_t *parent);
 void ui_danmaku_set(struct dm_set *set);	/* takes the set over and frees the one before; NULL clears */
 void ui_danmaku_run(uint32_t round_us);
@@ -101,6 +112,11 @@ void ui_play_set(const char *title, uint32_t duration_ms);
 void ui_play_status(const char *text);
 void ui_play_position(uint32_t pos_ms, bool paused);
 void ui_play_buffered(int permille);
+
+/** A rounded panel of the surface colour; returns it */
+lv_obj_t *ui_card_panel(lv_obj_t *parent, int x, int y, int w, int h);
+/** A label with a font and a colour at a position */
+lv_obj_t *ui_text(lv_obj_t *parent, const lv_font_t *font, lv_color_t color, int x, int y);
 
 /** A round button with a label; returns the button */
 lv_obj_t *ui_button(lv_obj_t *parent, const char *text, lv_event_cb_t cb, void *user);

@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* The home page: title, search field, refresh, the tabs "recommend" and "popular" and a card grid each. */
+/*
+ * The home page: title, search field, refresh, the tabs "recommend", "popular" and (with a login) "following" with a card
+ * grid each, and the buttons of the account and of the settings at the right end of the tab row.
+ */
 
 #include <zephyr/sys/printk.h>
 
@@ -15,27 +18,37 @@
 #define STATUS_H 30
 
 static lv_obj_t *page;
-static lv_obj_t *tab_btn[2];
-static struct ui_grid grids[2];	/* recommend, popular */
-static int tab;
-static bool popular_asked;
+#define LIST_TABS	3	/* recommend, popular, following: a card grid each */
+#define TAB_ME		3	/* at the right end of the row, with the settings */
+#define TAB_SETTINGS	4
+#define TABS		5
 
+static lv_obj_t *tab_btn[TABS];
+static lv_obj_t *panel[TABS];		/* the account and settings panels, NULL for the list tabs */
+static struct ui_grid grids[LIST_TABS];
+static int tab;
+static bool popular_asked, follow_asked, logged;
+
+/* the grid of the list tab that is shown (the recommend grid while a panel is) */
 static struct ui_grid *active(void)
 {
-	return &grids[tab];
+	return &grids[tab < LIST_TABS ? tab : 0];
 }
 
 static void show_tab(int t)
 {
 	tab = t;
-	for (int i = 0; i < 2; i++) {
+	for (int i = 0; i < TABS; i++) {
 		bool on = i == t;
+		lv_obj_t *content = i < LIST_TABS ? grids[i].obj : panel[i];
 
 		if (on) {
-			lv_obj_remove_flag(grids[i].obj, LV_OBJ_FLAG_HIDDEN);
+			lv_obj_remove_flag(content, LV_OBJ_FLAG_HIDDEN);
 		} else {
-			lv_obj_add_flag(grids[i].obj, LV_OBJ_FLAG_HIDDEN);
-			ui_grid_drop_covers(&grids[i]);
+			lv_obj_add_flag(content, LV_OBJ_FLAG_HIDDEN);
+			if (i < LIST_TABS) {
+				ui_grid_drop_covers(&grids[i]);
+			}
 		}
 		lv_obj_set_style_text_color(lv_obj_get_child(tab_btn[i], 0), on ? C_ACCENT : C_DIM, 0);
 		lv_obj_set_style_border_width(tab_btn[i], on ? 3 : 0, 0);
@@ -43,6 +56,15 @@ static void show_tab(int t)
 	if (t == 1 && !popular_asked) {
 		popular_asked = true;
 		app_cmd(CMD_REFRESH, LIST_POPULAR);
+	}
+	if (t == 2 && !follow_asked) {
+		follow_asked = true;
+		app_cmd(CMD_REFRESH, LIST_FOLLOW);
+	}
+	if (t == TAB_ME) {
+		ui_me_show();
+	} else if (t == TAB_SETTINGS) {
+		ui_settings_show();
 	}
 	active()->covers_dirty = true;
 }
@@ -59,7 +81,9 @@ static void search_clicked(lv_event_t *e)
 
 static void refresh_clicked(lv_event_t *e)
 {
-	app_cmd(CMD_REFRESH, active()->list);
+	if (tab < LIST_TABS) {
+		app_cmd(CMD_REFRESH, active()->list);
+	}
 }
 
 static lv_obj_t *label(lv_obj_t *parent, const lv_font_t *font, lv_color_t color, const char *text)
@@ -102,10 +126,40 @@ lv_obj_t *ui_button(lv_obj_t *parent, const char *text, lv_event_cb_t cb, void *
 	return b;
 }
 
+lv_obj_t *ui_text(lv_obj_t *parent, const lv_font_t *font, lv_color_t color, int x, int y)
+{
+	lv_obj_t *l = lv_label_create(parent);
+
+	lv_obj_set_style_text_font(l, font, 0);
+	lv_obj_set_style_text_color(l, color, 0);
+	lv_obj_set_pos(l, x, y);
+
+	return l;
+}
+
+lv_obj_t *ui_card_panel(lv_obj_t *parent, int x, int y, int w, int h)
+{
+	lv_obj_t *c = lv_obj_create(parent);
+
+	lv_obj_set_pos(c, x, y);
+	lv_obj_set_size(c, w, h);
+	lv_obj_set_style_bg_color(c, C_CARD, 0);
+	lv_obj_set_style_bg_opa(c, LV_OPA_COVER, 0);
+	lv_obj_set_style_border_width(c, 0, 0);
+	lv_obj_set_style_radius(c, 16, 0);
+	lv_obj_set_style_pad_all(c, 0, 0);
+	lv_obj_set_style_shadow_width(c, 0, 0);
+	lv_obj_remove_flag(c, LV_OBJ_FLAG_SCROLLABLE);
+
+	return c;
+}
+
 lv_obj_t *ui_home_create(lv_obj_t *parent)
 {
 	lv_obj_t *bar, *l, *b;
-	static const char *const tabs[] = {"\xe6\x8e\xa8\xe8\x8d\x90", "\xe7\x83\xad\xe9\x97\xa8"};	/* recommend, popular */
+	static const char *const tabs[TABS] = {"\xe6\x8e\xa8\xe8\x8d\x90", "\xe7\x83\xad\xe9\x97\xa8",
+					       "\xe5\x85\xb3\xe6\xb3\xa8", "\xe6\x88\x91\xe7\x9a\x84",
+					       "\xe8\xae\xbe\xe7\xbd\xae"};	/* recommend, popular, following, mine, settings */
 
 	page = lv_obj_create(parent);
 	lv_obj_set_size(page, SCREEN_W, SCREEN_H);
@@ -139,12 +193,14 @@ lv_obj_t *ui_home_create(lv_obj_t *parent)
 	ui_button_size(b, 120, 48);
 	lv_obj_align(b, LV_ALIGN_RIGHT_MID, -MARGIN, 0);
 
-	for (int i = 0; i < 2; i++) {
+	for (int i = 0; i < TABS; i++) {
 		lv_obj_t *t = lv_button_create(page);
+		int w = i < LIST_TABS ? 160 : 120;
+		int x = i < LIST_TABS ? MARGIN + i * 168 : SCREEN_W - MARGIN - (TABS - i) * 128 + 8;
 
 		tab_btn[i] = t;
-		lv_obj_set_size(t, 160, TABS_H);
-		lv_obj_set_pos(t, MARGIN + i * 168, BAR_H);
+		lv_obj_set_size(t, w, TABS_H);
+		lv_obj_set_pos(t, x, BAR_H);
 		lv_obj_set_style_bg_opa(t, LV_OPA_TRANSP, 0);
 		lv_obj_set_style_shadow_width(t, 0, 0);
 		lv_obj_set_style_border_side(t, LV_BORDER_SIDE_BOTTOM, 0);
@@ -154,10 +210,14 @@ lv_obj_t *ui_home_create(lv_obj_t *parent)
 		lv_obj_center(l);
 		lv_obj_add_event_cb(t, tab_clicked, LV_EVENT_CLICKED, (void *)(intptr_t)i);
 	}
-	for (int i = 0; i < 2; i++) {
-		ui_grid_create(&grids[i], page, i == 0 ? LIST_RECOMMEND : LIST_POPULAR, BAR_H + TABS_H,
-			       SCREEN_H - BAR_H - TABS_H - STATUS_H);
+	for (int i = 0; i < LIST_TABS; i++) {
+		static const enum list_id ids[LIST_TABS] = {LIST_RECOMMEND, LIST_POPULAR, LIST_FOLLOW};
+
+		ui_grid_create(&grids[i], page, ids[i], BAR_H + TABS_H, SCREEN_H - BAR_H - TABS_H - STATUS_H);
 	}
+	panel[TAB_ME] = ui_me_create(page, BAR_H + TABS_H, SCREEN_H - BAR_H - TABS_H - STATUS_H);
+	panel[TAB_SETTINGS] = ui_settings_create(page, page, BAR_H + TABS_H, SCREEN_H - BAR_H - TABS_H - STATUS_H);
+	lv_obj_add_flag(tab_btn[2], LV_OBJ_FLAG_HIDDEN);	/* until there is a login */
 	show_tab(0);
 
 	return page;
@@ -170,12 +230,29 @@ void ui_home_show(void)
 
 void ui_home_run(bool visible)
 {
-	struct ui_grid *g = active();
+	struct ui_grid *g;
+	bool now = app_account(NULL, 0);
 
-	if (!visible) {
-		for (int i = 0; i < 2; i++) {
+	/* the tab of the followed users exists while there is a login */
+	if (now != logged) {
+		logged = now;
+		follow_asked = false;
+		if (logged) {
+			lv_obj_remove_flag(tab_btn[2], LV_OBJ_FLAG_HIDDEN);
+		} else {
+			lv_obj_add_flag(tab_btn[2], LV_OBJ_FLAG_HIDDEN);
+			if (tab == 2) {
+				show_tab(0);
+			}
+		}
+	}
+	g = active();
+	if (!visible || tab >= LIST_TABS) {
+		for (int i = 0; i < LIST_TABS; i++) {
 			ui_grid_covers(&grids[i], false);
 		}
+		ui_me_run(visible && tab == TAB_ME);
+		ui_settings_run(visible && tab == TAB_SETTINGS);
 		return;
 	}
 	if (ui_grid_sync(g) || g->covers_dirty || g->cover_seen != cover_version()) {

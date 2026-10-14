@@ -51,6 +51,12 @@ int cover_in_use(void);
 /** Throws out every cover without a reference and forgets the queued requests */
 void cover_flush(void);
 
+/**
+ * Fetches a picture (a face) as a @p size square, decoded in software to RGB565 with the row distance
+ * @p stride_bytes (a multiple of 64). Blocks; for one thread at a time. A new buffer, or NULL.
+ */
+uint16_t *cover_load_square(const char *pic, int size, int stride_bytes);
+
 /** The pixels of the n-th ready cover, no reference taken: for tests only */
 const uint16_t *cover_peek(int n);
 

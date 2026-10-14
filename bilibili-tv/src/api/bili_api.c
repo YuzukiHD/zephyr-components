@@ -11,6 +11,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
+#include "api/account.h"
 #include "api/bili_api.h"
 #include "net/http.h"
 #include "net/inflate.h"
@@ -26,8 +27,23 @@
 #define CODE_SIGN_2	(-352)
 
 static char wbi_key[33];
-/* "Cookie: buvid3=...; buvid4=...\r\n" once the server has asked for a browser identity */
-static char cookie_hdr[256];
+/* "buvid3=...; buvid4=..." once the server has asked for a browser identity */
+static char buvid[200];
+/* the whole Cookie header of a request: the browser identity and, when logged in, the login */
+static char cookie_hdr[760];
+
+static const char *headers(void)
+{
+	char acc[460];
+
+	account_cookie(acc, sizeof(acc));
+	if (buvid[0] == '\0' && acc[0] == '\0') {
+		return NULL;
+	}
+	snprintf(cookie_hdr, sizeof(cookie_hdr), "Cookie: %s%s%s\r\n", buvid, buvid[0] && acc[0] ? "; " : "", acc);
+
+	return cookie_hdr;
+}
 
 /*
  * The server does not check the time stamp of a signed request, so the clock of the board, which
@@ -38,13 +54,13 @@ static int64_t stamp(void)
 	return 1700000000 + k_uptime_get() / 1000;
 }
 
-/* one request: the whole answer in a new buffer, NULL when the transfer failed */
-static char *fetch(const char *url)
+/* one request: the whole answer in a new buffer, NULL when the transfer failed; @p res gets the cookies set */
+static char *fetch_res(const char *url, struct http_result *res)
 {
 	struct http_opts o = {
 		.range_start = -1,
 		.tls_verify = IS_ENABLED(CONFIG_BILI_TLS_VERIFY),
-		.headers = cookie_hdr[0] != '\0' ? cookie_hdr : NULL,
+		.headers = headers(),
 	};
 	char *buf = malloc(ANSWER_MAX);
 	int n;
@@ -52,7 +68,7 @@ static char *fetch(const char *url)
 	if (buf == NULL) {
 		return NULL;
 	}
-	n = http_get_text(url, &o, buf, ANSWER_MAX, NULL);
+	n = http_get_text(url, &o, buf, ANSWER_MAX, res);
 	if (n < 0) {
 		printk("api: %s failed (%d)\n", url + sizeof(API) - 1, n);
 		free(buf);
@@ -60,6 +76,11 @@ static char *fetch(const char *url)
 	}
 
 	return buf;
+}
+
+static char *fetch(const char *url)
+{
+	return fetch_res(url, NULL);
 }
 
 /* the signing key comes with the nav answer, which needs no login (the answer is code -101) */
@@ -92,7 +113,7 @@ static int load_cookie(void)
 	}
 	if (js_str(js_path(a, "data.b_3"), b3, sizeof(b3)) > 0 &&
 	    js_str(js_path(a, "data.b_4"), b4, sizeof(b4)) > 0) {
-		snprintf(cookie_hdr, sizeof(cookie_hdr), "Cookie: buvid3=%s; buvid4=%s\r\n", b3, b4);
+		snprintf(buvid, sizeof(buvid), "buvid3=%s; buvid4=%s", b3, b4);
 		ret = 0;
 	}
 	free(a);
@@ -309,7 +330,7 @@ int bili_api_danmaku(uint64_t cid, struct dm_set *set)
 	struct dm_sink sink = {0};
 	struct http_result r;
 	struct http_opts o = {.range_start = -1, .tls_verify = IS_ENABLED(CONFIG_BILI_TLS_VERIFY), .timeout_ms = 15000,
-			      .headers = cookie_hdr[0] != '\0' ? cookie_hdr : NULL};
+			      .headers = headers()};
 	int ret;
 
 	snprintf(url, sizeof(url), API "/x/v1/dm/list.so?oid=%llu", (unsigned long long)cid);
@@ -334,4 +355,105 @@ out:
 	inflate_free(sink.inf);
 
 	return set->count > 0 || ret == 0 ? (int)set->count : ret;
+}
+
+/* ---- the login ----------------------------------------------------------------------------- */
+
+#define PASSPORT	"https://passport.bilibili.com"
+
+int bili_api_qr_new(char *url, size_t url_size, char *key, size_t key_size)
+{
+	char *a = fetch(PASSPORT "/x/passport-login/web/qrcode/generate");
+	int ret;
+
+	if (a == NULL) {
+		return -EIO;
+	}
+	ret = bili_parse_code(a) == 0 ? bili_parse_qr_new(a, url, url_size, key, key_size) : -EACCES;
+	free(a);
+
+	return ret;
+}
+
+int bili_api_qr_poll(const char *key, int *state)
+{
+	char path[160], *a;
+	int ret;
+
+	snprintf(path, sizeof(path), PASSPORT "/x/passport-login/web/qrcode/poll?qrcode_key=%s", key);
+	struct http_result *r = malloc(sizeof(*r));
+
+	if (r == NULL) {
+		return -ENOMEM;
+	}
+	a = fetch_res(path, r);
+	if (a == NULL) {
+		free(r);
+		return -EIO;
+	}
+	ret = bili_parse_qr_poll(a, state, NULL, 0);
+	if (ret == 0 && *state == 0) {
+		/* the cookies are in the address of the answer, or set by the server; the code is used up by this answer */
+		ret = account_set_from_text(a);
+		if (ret != 0 && r->set_cookie[0] != '\0') {
+			ret = account_set_from_text(r->set_cookie);
+		}
+		if (ret != 0) {
+			*state = -1;
+		}
+	}
+	free(a);
+	free(r);
+
+	return ret;
+}
+
+int bili_api_user(char *name, size_t size, char *face, size_t face_size)
+{
+	char *a = fetch(API "/x/web-interface/nav");
+	int ret;
+
+	if (a == NULL) {
+		return -EIO;
+	}
+	ret = bili_parse_user(a, name, size, face, face_size);
+	free(a);
+
+	return ret;
+}
+
+/* ---- the followed users -------------------------------------------------------------------- */
+
+static char follow_offset[40];
+
+int bili_api_follow(int page, struct bili_video *out, int max, bool *more)
+{
+	char url[220], *a;
+	int n;
+	bool has_more = false;
+
+	if (!account_logged_in()) {
+		return -EACCES;
+	}
+	if (page == 1) {
+		follow_offset[0] = '\0';
+	}
+	snprintf(url, sizeof(url), API "/x/polymer/web-dynamic/v1/feed/all?type=video&timezone_offset=-480&offset=%s",
+		 follow_offset);
+	a = fetch(url);
+	if (a == NULL) {
+		return -EIO;
+	}
+	if (bili_parse_code(a) != 0) {
+		printk("api: follow feed answered code %d\n", bili_parse_code(a));
+		free(a);
+		return -EACCES;
+	}
+	n = bili_parse_dynamic(a, out, max, follow_offset, sizeof(follow_offset), &has_more);
+	free(a);
+	if (more != NULL) {
+		*more = has_more;
+	}
+
+	return n;
 }

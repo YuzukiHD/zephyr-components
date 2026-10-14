@@ -33,7 +33,7 @@ static struct {
 	bool paused;
 } pend;
 
-static lv_obj_t *scr, *status_label, *pages[3];
+static lv_obj_t *scr, *status_label, *pages[PAGE_COUNT];
 
 static struct dm_set *pend_dm;
 static bool pend_dm_dirty;
@@ -135,7 +135,7 @@ void ui_nav(enum page page)
 	}
 	/* the picture of the video is worth more than the redraws of the comments over it */
 	k_thread_priority_set(k_current_get(), page == PAGE_PLAY ? 8 : 6);
-	for (int i = 0; i < 3; i++) {
+	for (int i = 0; i < PAGE_COUNT; i++) {
 		if (i == page) {
 			lv_obj_remove_flag(pages[i], LV_OBJ_FLAG_HIDDEN);
 		} else {

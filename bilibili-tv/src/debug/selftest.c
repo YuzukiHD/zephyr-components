@@ -26,6 +26,7 @@
 #include <zephyr/sys/printk.h>
 
 #include "core/app.h"
+#include "core/settings.h"
 #include "lvgl_mem.h"
 #include "ui/cover.h"
 #include "player/player.h"
@@ -36,10 +37,10 @@
 #define MEM_TOLERANCE	256U	/* KiB */
 
 enum phase {
-	P_LIST, P_SCROLL, P_TAB, P_SEARCH, P_PLAY, P_DONE,
+	P_LIST, P_SCROLL, P_TAB, P_SEARCH, P_PAGES, P_PLAY, P_DONE,
 };
 
-static const char *const names[] = {"list", "scroll", "popular", "search", "play", "done"};
+static const char *const names[] = {"list", "scroll", "popular", "search", "pages", "play", "done"};
 static const char *const words[] = {
 	"\xe5\x85\x83\xe8\xba\xab",					/* a common word */
 	"\xe9\xbe\x98",							/* a rare character */
@@ -222,6 +223,48 @@ static void tab_phase(void)
 	}
 }
 
+/* the account page gets a login code, the settings page finds networks and changes volume and brightness */
+static void pages_phase(void)
+{
+	struct qr_info qi;
+	struct wifi_ap found[16];
+	bool scanning;
+	int n;
+
+	if (step == 0) {
+		ui_home_tab(3);	/* the account tab */
+		step = 1;
+		since = k_uptime_get();
+	} else if (step == 1) {
+		app_qr_info(&qi);
+		if (qi.state == QR_WAIT && qi.url[0] != '\0') {
+			printk("selftest: login code %s\n", qi.url);
+			check(true, "the account page got a login code");
+			ui_home_tab(4);	/* the settings tab */
+			step = 2;
+			since = k_uptime_get();
+		} else if (k_uptime_get() - since > 20000) {
+			check(false, "the account page got a login code");
+			ui_home_tab(4);
+			step = 2;
+			since = k_uptime_get();
+		}
+	} else if (step == 2) {
+		n = app_wifi_results(found, ARRAY_SIZE(found), &scanning);
+		if (!scanning && (n > 0 || k_uptime_get() - since > 15000)) {
+			printk("selftest: %d networks, the strongest %s\n", n, n > 0 ? found[0].ssid : "-");
+			check(n > 0, "the settings page found networks");
+			settings_set_volume(55);
+			settings_set_brightness(120);
+			check(settings_volume() == 55 && settings_brightness() == 120, "volume and brightness are set");
+			app_cmd(CMD_SAVE_SETTINGS, 0);
+			settings_set_brightness(200);
+			ui_home_tab(0);
+			to(P_PLAY);
+		}
+	}
+}
+
 static void search_phase(void)
 {
 	struct list_info info;
@@ -230,7 +273,7 @@ static void search_phase(void)
 
 	if (step >= ARRAY_SIZE(words)) {
 		memory_at("after the searches", false, false);
-		to(P_PLAY);
+		to(P_PAGES);
 		return;
 	}
 	if (!asked) {
@@ -327,6 +370,9 @@ static void tick(lv_timer_t *t)
 		break;
 	case P_SEARCH:
 		search_phase();
+		break;
+	case P_PAGES:
+		pages_phase();
 		break;
 	case P_PLAY:
 		play_phase();

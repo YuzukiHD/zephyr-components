@@ -1760,7 +1760,15 @@ struct sdio_buf_node_s *sdio_buf_alloc(uint16_t buf_len)
         if (buf_len > SDIO_RX_BUF_SIZE) {
             uint8_t *buf_raw = rtos_malloc(buf_len + SYS_CACHE_LINE_SIZE);
             if (buf_raw == NULL) {
-                AIC_LOG_PRINTF("sdio buf alloc fail(len=%d)!!!\n", buf_len);
+                /* one message a second: the frame stays in the chip and is asked for again at once, the
+                 * console (polled, 115200 baud) took more time than the retries */
+                static int64_t last_msg;
+                int64_t now = k_uptime_get();
+
+                if (now - last_msg >= 1000) {
+                    last_msg = now;
+                    AIC_LOG_PRINTF("sdio buf alloc fail(len=%d)!!!\n", buf_len);
+                }
                 node->buf = NULL;
                 node->buf_len = 0;
                 node->pad_len = 0;
@@ -1785,7 +1793,7 @@ void sdio_buf_free(struct sdio_buf_node_s *node)
 {
     rtos_mutex_lock(sdio_rx_buf_list.mutex, -1);
     if (node->buf_len == 0) {
-        AIC_LOG_PRINTF("null sdio buf free, buf=%p\n", node->buf);
+        /* a node whose buffer could not be had: nothing to give back */
     } else if (node->buf_len > SDIO_RX_BUF_SIZE) {
         uint8_t *buf_raw = node->buf - node->pad_len;
         rtos_free(buf_raw);
@@ -1925,6 +1933,8 @@ void sdio_rx_task(void *argv)
                                 sdio_buf_free(node);
                                 node = NULL;
                             }
+                            /* the memory comes back when the packets in the queues are used; do not spin */
+                            k_msleep(20);
                             break;
                         }
                         buf_rx = node->buf;

@@ -6,7 +6,7 @@
 
 /*
  * The cover pictures of the lists. A thread fetches the small JPEG of the image server, decodes it
- * with the video engine and keeps the RGB565 result in a cache. The user interface asks for a
+ * with the video engine and keeps the XRGB8888 result in a cache. The user interface asks for a
  * cover by its address, uses the pixels while it holds a reference and gives it back; only covers
  * without a reference are thrown out when the cache is full.
  */
@@ -21,10 +21,10 @@
 #define COVER_H	133
 
 /*
- * The pixels of a cover are RGB565 with this many bytes from one row to the next, and the memory is
+ * The pixels of a cover are XRGB8888 with this many bytes from one row to the next, and the memory is
  * aligned to 64 bytes: the image drawing of LVGL needs both (a row of 472 bytes gave noise).
  */
-#define COVER_STRIDE	512
+#define COVER_STRIDE	960
 #define COVER_BYTES	(COVER_STRIDE * COVER_H)
 
 void cover_init(void);
@@ -33,10 +33,10 @@ void cover_init(void);
 void cover_request(const char *pic);
 
 /**
- * The pixels (COVER_H rows of COVER_STRIDE bytes, RGB565) when the cover is ready, with a reference taken, else NULL.
+ * The pixels (COVER_H rows of COVER_STRIDE bytes, XRGB8888) when the cover is ready, with a reference taken, else NULL.
  * Every non NULL result has to be given back with cover_release().
  */
-const uint16_t *cover_acquire(const char *pic);
+const uint32_t *cover_acquire(const char *pic);
 void cover_release(const char *pic);
 
 /** Increases whenever a cover became ready or failed: the user interface looks again */
@@ -58,7 +58,7 @@ void cover_flush(void);
 uint16_t *cover_load_square(const char *pic, int size, int stride_bytes);
 
 /** The pixels of the n-th ready cover, no reference taken: for tests only */
-const uint16_t *cover_peek(int n);
+const uint32_t *cover_peek(int n);
 
 /** Covers that are asked for and not there yet */
 int cover_pending(void);

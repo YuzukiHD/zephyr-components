@@ -17,8 +17,13 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
 
+#include "core/lv_refr_private.h"
+#include "display/lv_display_private.h"
+#include "misc/lv_area_private.h"
+#include "gfx/shift.h"
 #include "ui/ui_priv.h"
 
 int ui_card_height(void)
@@ -210,11 +215,188 @@ static void window_rows(struct ui_grid *g, int *first, int *last)
 	*last = MIN(rows - 1, (top + vh + row_h) / row_h);
 }
 
+/*
+ * Scrolling by moving the picture: LVGL has moved the cards and is about to draw the whole area
+ * again. Instead the picture is moved by the accelerator (shift.c) and only the rows that come in
+ * are drawn, in the next round of the interface (ui_grids_scroll_flush()). The drawing of the whole
+ * area is left out by switching the invalidation of LVGL off until then.
+ */
+#define GRIDS 4
+static struct ui_grid *registry[GRIDS];
+static bool inv_off, hooked;
+
+static void refresh_soon(lv_display_t *d)
+{
+	lv_timer_resume(d->refr_timer);
+	lv_timer_ready(d->refr_timer);
+}
+
+static lv_area_t first_pending;
+static uint32_t first_pending_count;
+static struct {
+	uint32_t at, refreshes;
+	uint32_t n;
+	int16_t y1, y2;
+} trace[6];
+static int ntrace;
+static uint32_t refresh_count;
+
+static void note_refresh(lv_event_t *e)
+{
+	refresh_count++;
+}
+
+static bool region_has_pending(const lv_display_t *d, const lv_area_t *r)
+{
+	for (uint32_t i = 0; i < d->inv_p; i++) {
+		lv_area_t x;
+
+		if (!d->inv_area_joined[i] && lv_area_intersect(&x, &d->inv_areas[i], r)) {
+			first_pending = d->inv_areas[i];
+			first_pending_count = d->inv_p;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/* how the scroll events were handled, for the self test */
+static struct {
+	uint32_t shifted, jump, hidden, big, pending, not_ready, failed;
+	int last_error;
+} stat;
+
+void ui_scroll_stats(char *buf, size_t size)
+{
+	snprintf(buf, size, "moved %u, jump %u, hidden %u, too far %u, other drawing waiting %u (%u areas, the first %d,%d..%d,%d), no accelerator %u, failed %u (%d)",
+		 stat.shifted, stat.jump, stat.hidden, stat.big, stat.pending, (unsigned)first_pending_count,
+		 (int)first_pending.x1, (int)first_pending.y1, (int)first_pending.x2, (int)first_pending.y2,
+		 stat.not_ready, stat.failed, stat.last_error);
+	for (int i = 0; i < ntrace; i++) {
+		size_t n = strlen(buf);
+
+		snprintf(buf + n, size - n, " | t%u r%u n%u %d..%d", trace[i].at % 100000, trace[i].refreshes,
+			 trace[i].n, trace[i].y1, trace[i].y2);
+	}
+	ntrace = 0;
+	memset(&stat, 0, sizeof(stat));
+}
+
 static void scrolled(lv_event_t *e)
 {
 	struct ui_grid *g = lv_event_get_user_data(e);
+	lv_display_t *d = lv_display_get_default();
+	lv_area_t r;
+	int y = lv_obj_get_scroll_y(g->obj), dy = y - g->last_scroll, h;
 
+	g->last_scroll = y;
 	g->covers_dirty = true;
+	if (!IS_ENABLED(CONFIG_BILI_SCROLL_SHIFT) || dy == 0) {
+		return;
+	}
+	lv_obj_get_coords(g->obj, &r);
+	h = lv_area_get_height(&r);
+	if (ntrace < 6) {
+		trace[ntrace].at = k_uptime_get_32();
+		trace[ntrace].refreshes = refresh_count;
+		trace[ntrace].n = d->inv_p;
+		trace[ntrace].y1 = d->inv_p ? d->inv_areas[0].y1 : -1;
+		trace[ntrace].y2 = d->inv_p ? d->inv_areas[0].y2 : -1;
+		ntrace++;
+	}
+	if (g->no_shift) {
+		stat.jump++;
+	} else if (lv_obj_has_flag(g->obj, LV_OBJ_FLAG_HIDDEN) ||
+		   lv_obj_has_flag(lv_obj_get_parent(g->obj), LV_OBJ_FLAG_HIDDEN)) {
+		stat.hidden++;
+	} else if (dy >= h || -dy >= h) {
+		stat.big++;
+	} else if (region_has_pending(d, &r)) {
+		stat.pending++;
+	} else if (!shift_ready()) {
+		stat.not_ready++;
+	} else if ((stat.last_error = shift_rows(r.y1, h, dy)) != 0) {
+		stat.failed++;
+	} else {
+		stat.shifted++;
+		goto moved;
+	}
+	{
+		/* draw everything: what is waiting for the flush is covered by that */
+		if (inv_off) {
+			lv_display_enable_invalidation(d, true);
+			inv_off = false;
+		}
+		g->pend_top = g->pend_bottom = 0;
+		return;
+	}
+moved:
+	if (dy > 0) {
+		g->pend_bottom = MIN(h, g->pend_bottom + dy);
+		g->pend_top = MAX(0, g->pend_top - dy);
+	} else {
+		g->pend_top = MIN(h, g->pend_top - dy);
+		g->pend_bottom = MAX(0, g->pend_bottom + dy);
+	}
+	if (!inv_off) {
+		lv_display_enable_invalidation(d, false);
+		inv_off = true;
+	}
+	refresh_soon(d);
+}
+
+/* the rows that came in are drawn: they join the areas that wait, in the refresh that is starting */
+static void add_strips(lv_event_t *e)
+{
+	lv_display_t *d = lv_display_get_default();
+
+	if (inv_off) {
+		lv_display_enable_invalidation(d, true);
+		inv_off = false;
+	}
+	for (int i = 0; i < GRIDS; i++) {
+		struct ui_grid *g = registry[i];
+		lv_area_t r, a;
+
+		if (g == NULL || (g->pend_top == 0 && g->pend_bottom == 0)) {
+			continue;
+		}
+		lv_obj_get_coords(g->obj, &r);
+		if (g->pend_top > 0) {
+			a = r;
+			a.y2 = r.y1 + g->pend_top - 1;
+			lv_inv_area(d, &a);
+		}
+		if (g->pend_bottom > 0) {
+			a = r;
+			a.y1 = r.y2 - g->pend_bottom + 1;
+			lv_inv_area(d, &a);
+		}
+		g->pend_top = g->pend_bottom = 0;
+	}
+}
+
+/*
+ * At the start of a round of the interface: what changes in the interface itself (a cover that
+ * arrived) has to be drawn, so the invalidation is on again; the rows of a scroll wait for the
+ * refresh, which has to run.
+ */
+void ui_grids_scroll_flush(void)
+{
+	lv_display_t *d = lv_display_get_default();
+	bool waiting = false;
+
+	if (inv_off) {
+		lv_display_enable_invalidation(d, true);
+		inv_off = false;
+	}
+	for (int i = 0; i < GRIDS; i++) {
+		waiting |= registry[i] != NULL && (registry[i]->pend_top != 0 || registry[i]->pend_bottom != 0);
+	}
+	if (waiting) {
+		refresh_soon(d);
+	}
 }
 
 void ui_grid_create(struct ui_grid *g, lv_obj_t *parent, enum list_id list, int top, int height)
@@ -234,7 +416,19 @@ void ui_grid_create(struct ui_grid *g, lv_obj_t *parent, enum list_id list, int 
 	lv_obj_set_style_pad_row(g->obj, MARGIN, 0);
 	lv_obj_set_style_pad_column(g->obj, MARGIN, 0);
 	lv_obj_set_scroll_dir(g->obj, LV_DIR_VER);
+	lv_obj_set_scrollbar_mode(g->obj, LV_SCROLLBAR_MODE_OFF);	/* it would move with the picture */
 	lv_obj_add_event_cb(g->obj, scrolled, LV_EVENT_SCROLL, g);
+	for (int i = 0; i < GRIDS; i++) {
+		if (registry[i] == NULL) {
+			registry[i] = g;
+			break;
+		}
+	}
+	if (!hooked) {
+		hooked = true;
+		lv_display_add_event_cb(lv_display_get_default(), add_strips, LV_EVENT_REFR_START, NULL);
+		lv_display_add_event_cb(lv_display_get_default(), note_refresh, LV_EVENT_REFR_READY, NULL);
+	}
 
 	g->footer = lv_label_create(g->obj);
 	lv_obj_set_size(g->footer, lv_pct(100), 40);
@@ -260,7 +454,9 @@ bool ui_grid_sync(struct ui_grid *g)
 		g->built = 0;
 		g->gen = info.gen;
 		g->asked_at = -1;
+		g->no_shift = true;
 		lv_obj_scroll_to_y(g->obj, 0, LV_ANIM_OFF);
+		g->no_shift = false;
 		changed = true;
 	}
 	count = MIN(info.count, MAX_VIDEOS);
@@ -325,7 +521,7 @@ void ui_grid_covers(struct ui_grid *g, bool visible)
 		y2 = y1 + ui_card_height();
 		near = y2 >= top - margin && y1 <= top + vh + margin;
 		if (near && !c->has_cover) {
-			const uint16_t *px;
+			const uint32_t *px;
 
 			cover_request(c->pic);
 			px = cover_acquire(c->pic);
@@ -333,7 +529,7 @@ void ui_grid_covers(struct ui_grid *g, bool visible)
 				c->dsc = (lv_image_dsc_t){
 					.header = {
 						.magic = LV_IMAGE_HEADER_MAGIC,
-						.cf = LV_COLOR_FORMAT_RGB565,
+						.cf = LV_COLOR_FORMAT_XRGB8888,
 						.w = COVER_W,
 						.h = COVER_H,
 						.stride = COVER_STRIDE,
@@ -368,5 +564,7 @@ void ui_grid_more(struct ui_grid *g)
 
 void ui_grid_scroll_top(struct ui_grid *g)
 {
+	g->no_shift = true;
 	lv_obj_scroll_to_y(g->obj, 0, LV_ANIM_OFF);
+	g->no_shift = false;
 }

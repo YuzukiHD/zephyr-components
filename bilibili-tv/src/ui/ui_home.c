@@ -10,7 +10,9 @@
  */
 
 #include <zephyr/sys/printk.h>
+#include <zephyr/sys/util.h>
 
+#include "core/lv_obj_scroll_private.h"
 #include "ui/ui_priv.h"
 
 #define BAR_H	72
@@ -295,15 +297,20 @@ void ui_home_tab(int t)
 	show_tab(t);
 }
 
-/* scrolls the list by dy pixels (the self test); false when it cannot go any further that way */
+/*
+ * Scrolls the list by dy pixels (the self test), the way a finger does: without the start and end
+ * of a scroll, which mark the whole list as changed. False when it cannot go any further that way.
+ */
 bool ui_home_scroll(int dy)
 {
 	struct ui_grid *g = active();
-	bool can = dy > 0 ? lv_obj_get_scroll_bottom(g->obj) > 0 : lv_obj_get_scroll_top(g->obj) > 0;
+	int avail = dy > 0 ? lv_obj_get_scroll_bottom(g->obj) : lv_obj_get_scroll_top(g->obj);
+	int step = MIN(dy > 0 ? dy : -dy, avail);
 
-	if (can) {
-		lv_obj_scroll_by(g->obj, 0, -dy, LV_ANIM_OFF);
+	if (avail <= 0 || step <= 0) {
+		return false;
 	}
+	lv_obj_scroll_by_raw(g->obj, 0, dy > 0 ? -step : step);
 
-	return can;
+	return true;
 }

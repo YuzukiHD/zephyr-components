@@ -22,6 +22,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/arch/exception.h>
+#include <zephyr/cache.h>
+#include <zephyr/drivers/display/display_sunxi.h>
+#include <zephyr/device.h>
+#include <stdlib.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
@@ -154,6 +158,8 @@ static void render_event(lv_event_t *e)
  * down and up in small steps, one for every round of the interface, and the time of the frames, the
  * share of every thread and the hot spots of the interface thread are printed.
  */
+static uint8_t *saved;
+
 static void bench_phase(void)
 {
 	static int moves;
@@ -177,13 +183,77 @@ static void bench_phase(void)
 			prof_report("scrolling the first page down and up");
 			printk("selftest: scrolling: %u frames, mean %u us, worst %u us, %d moves\n", render_n,
 			       render_n ? render_sum / render_n : 0, render_max, moves);
+			{
+				char st[600];
+
+				ui_scroll_stats(st, sizeof(st));
+				printk("selftest: scroll events: %s\n", st);
+			}
 			render_n = render_sum = render_max = 0;
 			ui_home_scroll(-100000);
+			step = 2;
+			since = k_uptime_get();
+			return;
+		}
+		moves++;
+	} else if (step == 2 && k_uptime_get() - since > 2500 && (cover_pending() == 0 || k_uptime_get() - since > 40000)) {
+		/* what is on the screen after all the moves; then everything is drawn again and compared */
+		const struct device *disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+		uint32_t stride;
+		uint8_t *fb = display_sunxi_framebuffer(disp, &stride);
+
+		saved = malloc((size_t)614 * stride);
+		if (saved == NULL) {
 			round_no = 0;
 			to(P_SCROLL);
 			return;
 		}
-		moves++;
+		sys_cache_data_invd_range(fb + 124 * stride, (size_t)614 * stride);
+		memcpy(saved, fb + 124 * stride, (size_t)614 * stride);
+		lv_obj_invalidate(lv_screen_active());
+		step = 3;
+		since = k_uptime_get();
+	} else if (step == 3 && k_uptime_get() - since > 3000 && cover_pending() == 0) {
+		const struct device *disp = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+		uint32_t stride, diff = 0, total = 1024 * 614, band[39] = {0}, cols[8] = {0};
+		uint8_t *fb = display_sunxi_framebuffer(disp, &stride);
+		int first_y = -1, first_x = -1;
+
+		sys_cache_data_invd_range(fb + 124 * stride, (size_t)614 * stride);
+		for (int y = 0; y < 614; y++) {
+			const uint32_t *a = (const uint32_t *)(saved + (size_t)y * stride);
+			const uint32_t *b = (const uint32_t *)(fb + (size_t)(124 + y) * stride);
+
+			for (int x = 0; x < 1024; x++) {
+				/* a pixel that is not seen has no colour that matters */
+				if (a[x] != b[x] && !((a[x] >> 24) == 0 && (b[x] >> 24) == 0)) {
+					diff++;
+					band[y / 16]++;
+					cols[x / 128]++;
+					if (first_y < 0) {
+						first_y = y;
+						first_x = x;
+						printk("selftest: first difference at %d,%d: %08x against %08x\n", x, 124 + y,
+						       (unsigned)a[x], (unsigned)b[x]);
+					}
+				}
+			}
+		}
+		free(saved);
+		saved = NULL;
+		printk("selftest: differing pixels per 16 rows from the top:");
+		for (int i = 0; i < 39; i++) {
+			printk(" %u", band[i]);
+		}
+		printk("\nselftest: per 128 columns:");
+		for (int i = 0; i < 8; i++) {
+			printk(" %u", cols[i]);
+		}
+		printk("\n");
+		printk("selftest: after the moves %u of %u pixels differ from a full redraw\n", diff, total);
+		check(diff == 0, "scrolling by moving the picture leaves what a full redraw gives");
+		round_no = 0;
+		to(P_SCROLL);
 	}
 }
 

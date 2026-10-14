@@ -55,6 +55,9 @@ struct ui_grid {
 	uint32_t cover_seen;		/**< cover_version() at the last cover pass */
 	bool covers_dirty;
 	int asked_at;			/**< the list length when the next page was asked for */
+	int last_scroll;		/**< scroll position at the last scroll event */
+	int pend_top, pend_bottom;	/**< rows that came in at the top / bottom and are not drawn yet */
+	bool no_shift;			/**< the next scroll is a jump: draw everything */
 };
 
 void ui_grid_create(struct ui_grid *g, lv_obj_t *parent, enum list_id list, int top, int height);
@@ -67,6 +70,10 @@ void ui_grid_more(struct ui_grid *g);
 int ui_card_height(void);
 void ui_grid_drop_covers(struct ui_grid *g);
 void ui_grid_scroll_top(struct ui_grid *g);
+/** Draws the rows that a scroll by moving the picture left open; call before the timers of LVGL run */
+void ui_grids_scroll_flush(void);
+/** How the last scroll events were handled, as text (for the self test); starts counting again */
+void ui_scroll_stats(char *buf, size_t size);
 
 /* ---- the pages ---------------------------------------------------------------------------- */
 

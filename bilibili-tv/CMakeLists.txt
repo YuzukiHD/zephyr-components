@@ -59,14 +59,15 @@ endif()
 target_sources_ifdef(CONFIG_BILI_CRUMBS app PRIVATE src/debug/crumbs.c)
 
 if(CONFIG_BILI_GFX_RVV)
-  target_sources(app PRIVATE src/gfx/lv_rvv.c src/gfx/yuv_rvv.c)
+  target_sources(app PRIVATE src/gfx/lv_rvv.c)
   # only these files use vector instructions; the rest of the image is built as usual
-  set_source_files_properties(src/gfx/lv_rvv.c src/gfx/yuv_rvv.c PROPERTIES COMPILE_OPTIONS
+  set_source_files_properties(src/gfx/lv_rvv.c PROPERTIES COMPILE_OPTIONS
     "-march=rv32imafdcv_zicsr_zifencei_xtheadcmo_xtheadba_xtheadbb_xtheadbs_xtheadcondmov_xtheadmemidx_xtheadmempair")
   if(CONFIG_BILI_HOT_RAM)
-    zephyr_code_relocate(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/gfx/lv_rvv.c
-      ${CMAKE_CURRENT_SOURCE_DIR}/src/gfx/yuv_rvv.c LOCATION RAM_TEXT)
+    zephyr_code_relocate(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/gfx/lv_rvv.c LOCATION RAM_TEXT)
   endif()
 endif()
 
 target_sources_ifdef(CONFIG_BILI_G2D_BENCH app PRIVATE src/debug/g2dbench.c)
+
+target_sources_ifdef(CONFIG_BILI_SCROLL_SHIFT app PRIVATE src/gfx/shift.c)

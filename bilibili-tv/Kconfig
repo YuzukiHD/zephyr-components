@@ -153,25 +153,33 @@ config BILI_CRUMBS_TEST_S
 	depends on BILI_CRUMBS
 	default 0
 
-config BILI_COVER_CHECK
-	bool "Decode every cover in software too and report the ones where the engine's colours differ"
-	default n
-
 config BILI_SELFTEST_PLAY_ONLY
 	bool "Self test: load the list and play videos one after another, nothing else"
 	depends on BILI_SELFTEST
 	default n
 
 config BILI_GFX_RVV
-	bool "Vector code for the blends of LVGL and the colour conversion of the covers"
+	bool "Vector code for the blends of LVGL"
 	default y
 	select SUN252I_F101_RVV
 	help
 	  The blends are compared with the C code of LVGL at start and the vector code is switched off
-	  when they differ; the same for the conversion of the covers.
+	  when they differ.
 
 config BILI_G2D_BENCH
 	bool "Measure the 2D accelerator against the processor at start"
 	select G2D
 	select G2D_SUNXI
 	default n
+
+config BILI_SCROLL_SHIFT
+	bool "Scroll a list by moving the picture with the 2D accelerator and drawing only the new rows"
+	select G2D
+	select G2D_SUNXI
+	default y
+
+config BILI_COVER_G2D
+	bool "Convert the pictures of the covers with the 2D accelerator"
+	select G2D
+	select G2D_SUNXI
+	default y

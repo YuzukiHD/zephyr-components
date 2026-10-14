@@ -49,11 +49,14 @@ static void pattern(uint32_t *fb)
 
 static int wrong_lines(const uint32_t *fb, int first, int last, int from)
 {
-	int bad = 0;
+	int bad = 0, shown = 0;
 
 	sys_cache_data_invd_range((void *)fb, W * H * 4);
 	for (int y = first; y < last; y++) {
 		if (fb[y * W] != (uint32_t)(y + from) * 0x01010101U + 7 || fb[y * W + W - 1] != fb[y * W]) {
+			if (shown++ < 6) {
+				printk("g2d bench:   line %d holds %08x\n", y, fb[y * W]);
+			}
 			bad++;
 		}
 	}
@@ -101,6 +104,35 @@ static void bench(void *a, void *b, void *c)
 	}
 	bad = wrong_lines(fb, SHIFT, H, -SHIFT);
 	printk("g2d bench: shift down: accelerator %u us (%d lines wrong)\n", t_g, bad);
+
+	/* chunks of as many lines as the shift: nothing overlaps inside one operation */
+	for (int n = 48; n >= 8; n -= 40) {
+		int moved = H - n;
+
+		pattern(fb);
+		{
+			struct g2d_surface s = surf(fb, G2D_PIXFMT_ARGB8888, W, H);
+			int ops = 0;
+
+			t0 = k_cycle_get_32();
+			/* down: the bottom chunk first */
+			for (int y = moved - n; y >= -(n - 1) && moved > 0; y -= n) {
+				int top = MAX(y, 0), h = MIN(n, moved - top);
+				struct g2d_rect src = {0, top, W, h}, dst = {0, top + n, W, h};
+
+				if (h <= 0) {
+					continue;
+				}
+				g2d_blit(g2d, &s, &src, &s, &dst, G2D_ROTATE_0, G2D_FLAG_NO_CACHE_OPS);
+				ops++;
+			}
+			t_g = us_since(t0);
+			printk("g2d bench: shift down by %d in %d operations: %u us\n", n, ops, t_g);
+		}
+		sys_cache_data_invd_range(fb, W * H * 4);
+		bad = wrong_lines(fb, n, H, -n);
+		printk("g2d bench:   %d lines wrong\n", bad);
+	}
 
 	/* the processor: memmove of the same lines, then the cache lines out (the display reads memory) */
 	pattern(fb);

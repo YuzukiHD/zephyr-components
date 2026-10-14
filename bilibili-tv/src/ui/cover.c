@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <zephyr/device.h>
+#include <zephyr/drivers/g2d.h>
 #include <zephyr/drivers/vdec.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
@@ -17,9 +18,6 @@
 #include "ui/cover.h"
 #include "net/http.h"
 #include "libs/tjpgd/tjpgd.h"
-#ifdef CONFIG_BILI_GFX_RVV
-#include "gfx/yuv_rvv.h"
-#endif
 
 #define SLOTS		CONFIG_BILI_COVER_CACHE
 #define JPEG_MAX	(48 * 1024)
@@ -38,7 +36,7 @@ enum slot_state {
 struct slot {
 	enum slot_state state;
 	char pic[URL_LEN];
-	uint16_t *px;
+	uint32_t *px;
 	int refs;
 	uint8_t tries;		/* fetches that failed on the network */
 	uint32_t used;		/* tick of the last use, for the choice of what to throw out */
@@ -115,9 +113,9 @@ void cover_request(const char *pic)
 	k_mutex_unlock(&lock);
 }
 
-const uint16_t *cover_acquire(const char *pic)
+const uint32_t *cover_acquire(const char *pic)
 {
-	const uint16_t *px = NULL;
+	const uint32_t *px = NULL;
 	struct slot *s;
 
 	k_mutex_lock(&lock, K_FOREVER);
@@ -185,9 +183,9 @@ void cover_flush(void)
 	version++;
 }
 
-const uint16_t *cover_peek(int n)
+const uint32_t *cover_peek(int n)
 {
-	const uint16_t *px = NULL;
+	const uint32_t *px = NULL;
 
 	k_mutex_lock(&lock, K_FOREVER);
 	for (int i = 0; i < SLOTS; i++) {
@@ -236,8 +234,8 @@ static inline uint8_t clamp8(int v)
 	return v < 0 ? 0 : (v > 255 ? 255 : v);
 }
 
-/* NV12 (full range, BT.601) to RGB565 at the cover size, nearest neighbour when the sizes differ */
-static void to_rgb565_c(const struct vdec_frame *f, uint16_t *out)
+/* NV12 (full range, BT.601) to XRGB8888 at the cover size, nearest neighbour when the sizes differ */
+static void to_xrgb_c(const struct vdec_frame *f, uint32_t *out)
 {
 	for (int y = 0; y < COVER_H; y++) {
 		int sy = y * f->height / COVER_H;
@@ -251,55 +249,42 @@ static void to_rgb565_c(const struct vdec_frame *f, uint16_t *out)
 			uint8_t g = clamp8(Y - ((88 * U + 183 * V) >> 8));
 			uint8_t b = clamp8(Y + ((454 * U) >> 8));
 
-			out[y * (COVER_STRIDE / 2) + x] = ((r & 0xf8) << 8) | ((g & 0xfc) << 3) | (b >> 3);
+			out[y * (COVER_STRIDE / 4) + x] = 0xff000000U | (uint32_t)r << 16 | (uint32_t)g << 8 | b;
 		}
 	}
 }
 
-#ifdef CONFIG_BILI_GFX_RVV
-static bool yuv_vector_ok;
+/*
+ * The picture of the video engine is NV12; the interface draws XRGB8888. The 2D accelerator reads
+ * the YCbCr picture, converts it and scales it to the size of the cover, which keeps the processor
+ * out of it (and the interface from converting RGB565 to its own format at every redraw).
+ */
+static uint32_t g2d_done, g2d_failed;
 
-/* the vector conversion has to give the same pixels as the scalar one, checked once on noise */
-static void yuv_vector_check(void)
+static void to_xrgb(const struct vdec_frame *f, uint32_t *out)
 {
-	enum { W = COVER_W, H = COVER_H };
-	uint8_t *y = malloc(W * H * 3 / 2);
-	uint16_t *a = aligned_alloc(64, COVER_BYTES), *b = aligned_alloc(64, COVER_BYTES);
-	uint32_t seed = 12345;
-	bool same = false;
+#ifdef CONFIG_BILI_COVER_G2D
+	static const struct device *const g2d = DEVICE_DT_GET(DT_NODELABEL(g2d));
 
-	if (y != NULL && a != NULL && b != NULL) {
-		struct vdec_frame f = {.width = W, .height = H, .plane = {y, y + W * H}, .stride = {W, W}};
+	if (device_is_ready(g2d)) {
+		struct g2d_surface src = {
+			.format = G2D_PIXFMT_NV12, .width = f->width, .height = f->height,
+			.plane = {(void *)f->plane[0], (void *)f->plane[1]}, .pitch = {f->stride[0], f->stride[1]},
+		};
+		struct g2d_surface dst = {
+			.format = G2D_PIXFMT_XRGB8888, .width = COVER_STRIDE / 4, .height = COVER_H, .plane = {out},
+			.pitch = {COVER_STRIDE},
+		};
+		struct g2d_rect sr = {0, 0, f->width, f->height}, dr = {0, 0, COVER_W, COVER_H};
 
-		for (int i = 0; i < W * H * 3 / 2; i++) {
-			seed = seed * 1664525U + 1013904223U;
-			y[i] = seed >> 24;
+		if (g2d_blit(g2d, &src, &sr, &dst, &dr, G2D_ROTATE_0, G2D_FLAG_YUV_FULL_RANGE) == 0) {
+			g2d_done++;
+			return;
 		}
-		to_rgb565_c(&f, a);
-		yuv_nv12_to_rgb565_rvv(y, W, y + W * H, W, b, COVER_STRIDE / 2, W, H);
-		same = true;
-		for (int r = 0; r < H && same; r++) {
-			same = memcmp(a + r * (COVER_STRIDE / 2), b + r * (COVER_STRIDE / 2), W * 2) == 0;
-		}
-	}
-	free(y);
-	free(a);
-	free(b);
-	yuv_vector_ok = same;
-	printk("cover: vector colour conversion %s\n", same ? "matches the scalar one" : "DIFFERS, not used");
-}
-#endif
-
-static void to_rgb565(const struct vdec_frame *f, uint16_t *out)
-{
-#ifdef CONFIG_BILI_GFX_RVV
-	if (yuv_vector_ok && f->width == COVER_W && f->height == COVER_H) {
-		yuv_nv12_to_rgb565_rvv(f->plane[0], f->stride[0], f->plane[1], f->stride[1], out, COVER_STRIDE / 2,
-				       COVER_W, COVER_H);
-		return;
+		g2d_failed++;
 	}
 #endif
-	to_rgb565_c(f, out);
+	to_xrgb_c(f, out);
 }
 
 /* ---- software decoding for what the video engine refuses (4:4:4, gray, ...) ------------------ */
@@ -307,7 +292,8 @@ static void to_rgb565(const struct vdec_frame *f, uint16_t *out)
 struct sw {
 	const uint8_t *data;
 	size_t len, pos;
-	uint16_t *out;
+	void *out;
+	bool xrgb;		/* 32 bit pixels, else RGB565 */
 	int w, h, stride;	/* of the picture, in pixels; the row distance in pixels */
 };
 
@@ -333,7 +319,13 @@ static int sw_out(JDEC *jd, void *bitmap, JRECT *rect)
 		for (int x = rect->left; x <= rect->right; x++, p += 3) {
 			if (x < s->w && y < s->h) {
 				/* the decoder of LVGL delivers the bytes of a pixel as blue, green, red */
-				s->out[y * s->stride + x] = ((p[2] & 0xf8) << 8) | ((p[1] & 0xfc) << 3) | (p[0] >> 3);
+				if (s->xrgb) {
+					((uint32_t *)s->out)[y * s->stride + x] =
+						0xff000000U | (uint32_t)p[2] << 16 | (uint32_t)p[1] << 8 | p[0];
+				} else {
+					((uint16_t *)s->out)[y * s->stride + x] =
+						((p[2] & 0xf8) << 8) | ((p[1] & 0xfc) << 3) | (p[0] >> 3);
+				}
 			}
 		}
 	}
@@ -341,13 +333,14 @@ static int sw_out(JDEC *jd, void *bitmap, JRECT *rect)
 	return 1;
 }
 
-static uint16_t *decode_sized(const uint8_t *jpeg, size_t n, int w, int h, int stride_bytes)
+static void *decode_sized(const uint8_t *jpeg, size_t n, int w, int h, int stride_bytes, bool xrgb)
 {
 	enum { POOL = 24 * 1024 };
 	JDEC *jd = malloc(sizeof(*jd));
 	void *pool = malloc(POOL);
-	uint16_t *px = aligned_alloc(64, (size_t)stride_bytes * h);
-	struct sw s = {.data = jpeg, .len = n, .out = px, .w = w, .h = h, .stride = stride_bytes / 2};
+	void *px = aligned_alloc(64, (size_t)stride_bytes * h);
+	struct sw s = {.data = jpeg, .len = n, .out = px, .xrgb = xrgb, .w = w, .h = h,
+		       .stride = stride_bytes / (xrgb ? 4 : 2)};
 
 	if (px != NULL) {
 		memset(px, 0, (size_t)stride_bytes * h);
@@ -363,9 +356,9 @@ static uint16_t *decode_sized(const uint8_t *jpeg, size_t n, int w, int h, int s
 	return px;
 }
 
-static uint16_t *decode_soft(const uint8_t *jpeg, size_t n)
+static uint32_t *decode_soft(const uint8_t *jpeg, size_t n)
 {
-	return decode_sized(jpeg, n, COVER_W, COVER_H, COVER_STRIDE);
+	return decode_sized(jpeg, n, COVER_W, COVER_H, COVER_STRIDE, true);
 }
 
 uint16_t *cover_load_square(const char *pic, int size, int stride_bytes)
@@ -381,7 +374,7 @@ uint16_t *cover_load_square(const char *pic, int size, int stride_bytes)
 	}
 	n = http_get_text(url, &(struct http_opts){.range_start = -1, .timeout_ms = 8000}, (char *)jpeg, JPEG_MAX, NULL);
 	if (n > 0) {
-		px = decode_sized(jpeg, n, size, size, stride_bytes);
+		px = decode_sized(jpeg, n, size, size, stride_bytes, false);
 	}
 	if (px == NULL) {
 		printk("cover: the picture %s could not be loaded (%d)\n", pic, n);
@@ -422,18 +415,13 @@ static bool jpeg_for_engine(const uint8_t *d, size_t n)
 }
 
 /* fetches and decodes one cover; the pixels or NULL */
-static uint16_t *load(const char *pic, uint8_t *jpeg, uint32_t *fetch_t, uint32_t *decode_t)
+static uint32_t *load(const char *pic, uint8_t *jpeg, uint32_t *fetch_t, uint32_t *decode_t)
 {
 	char url[256];
 	struct vdec_frame f;
-	uint16_t *px = NULL;
+	uint32_t *px = NULL;
 	uint32_t t0 = k_uptime_get_32(), t1;
 	int n, ret;
-#ifdef CONFIG_BILI_COVER_CHECK
-	static const int sample_x[6] = {30, 120, 200, 60, 150, 220}, sample_y[6] = {20, 60, 100, 110, 30, 120};
-	uint8_t samp[6][3] = {0};
-	int fw = 0, fh = 0, fs0 = 0;
-#endif
 
 	if (bili_cover_url(pic, COVER_W, COVER_H, url, sizeof(url)) < 0) {
 		return NULL;
@@ -451,21 +439,8 @@ static uint16_t *load(const char *pic, uint8_t *jpeg, uint32_t *fetch_t, uint32_
 	if (ret == 0) {
 		px = aligned_alloc(64, COVER_BYTES);
 		if (px != NULL) {
-			to_rgb565(&f, px);
+			to_xrgb(&f, px);
 		}
-#ifdef CONFIG_BILI_COVER_CHECK
-		for (int k = 0; k < 6; k++) {
-			int sx = sample_x[k], sy = sample_y[k];
-			const uint8_t *uvp = f.plane[1] + (sy / 2) * f.stride[1] + (sx & ~1);
-
-			samp[k][0] = f.plane[0][sy * f.stride[0] + sx];
-			samp[k][1] = uvp[0];
-			samp[k][2] = uvp[1];
-		}
-		fw = f.width;
-		fh = f.height;
-		fs0 = f.stride[0];
-#endif
 		vdec_frame_release(vdec, &f);
 	} else if (ret == -ENOTSUP) {
 		/* the engine takes only baseline 4:2:0; the image server sends other kinds now and then */
@@ -476,40 +451,6 @@ static uint16_t *load(const char *pic, uint8_t *jpeg, uint32_t *fetch_t, uint32_
 			k_mutex_unlock(&lock);
 		}
 	}
-#ifdef CONFIG_BILI_COVER_CHECK
-	if (px != NULL && ret == 0) {
-		/* the same picture decoded in software: a large difference means the engine's colours are wrong */
-		uint16_t *ref = decode_soft(jpeg, n);
-
-		if (ref != NULL) {
-			uint32_t diff = 0, uvhw = 0;
-			int rs = 0, bs = 0;
-
-			for (int y = 0; y < COVER_H; y += 4) {
-				for (int x = 0; x < COVER_W; x += 4) {
-					uint16_t a = px[y * (COVER_STRIDE / 2) + x], b = ref[y * (COVER_STRIDE / 2) + x];
-					int dr = (int)(a >> 11) - (int)(b >> 11), db = (int)(a & 31) - (int)(b & 31);
-
-					diff += abs(dr) + abs(db);
-					rs += dr;
-					bs += db;
-					uvhw++;
-				}
-			}
-			if (diff / uvhw > 3) {
-				printk("cover: %s engine and software differ: mean %u, red %d blue %d (sum), %d bytes, frame %dx%d stride %d\n",
-				       pic, (unsigned)(diff / uvhw), rs, bs, n, fw, fh, fs0);
-				for (int k = 0; k < 6; k++) {
-					uint16_t b = ref[sample_y[k] * (COVER_STRIDE / 2) + sample_x[k]];
-
-					printk("cover:   (%d,%d) engine Y %u Cb/Cr bytes %u %u; software rgb565 %04x\n", sample_x[k],
-					       sample_y[k], samp[k][0], samp[k][1], samp[k][2], b);
-				}
-			}
-			free(ref);
-		}
-	}
-#endif
 	if (px == NULL) {
 		printk("cover: %s decode failed (%d, %d bytes)\n", pic, ret, n);
 	}
@@ -550,7 +491,7 @@ static void cover_main(void *a, void *b, void *c)
 	}
 	for (;;) {
 		struct slot *job;
-		uint16_t *px;
+		uint32_t *px;
 		char pic[URL_LEN];
 		uint32_t ft = 0, dt = 0;
 		bool retry = false;
@@ -593,9 +534,6 @@ static void cover_main(void *a, void *b, void *c)
 
 void cover_init(void)
 {
-#ifdef CONFIG_BILI_GFX_RVV
-	yuv_vector_check();
-#endif
 	for (int i = 0; i < THREADS; i++) {
 		k_thread_create(&threads[i], stacks[i], K_THREAD_STACK_SIZEOF(stacks[i]), cover_main, NULL, NULL,
 				NULL, 9, 0, K_NO_WAIT);

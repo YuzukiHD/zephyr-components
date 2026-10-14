@@ -199,6 +199,7 @@ uint32_t ui_run(void)
 	struct dm_set *new_dm = NULL;
 	uint32_t dur = 0, pos = 0;
 
+	ui_grids_scroll_flush();
 	k_mutex_lock(&lock, K_FOREVER);
 	status_dirty = pend.status_dirty;
 	hot_dirty = pend.hot_dirty;

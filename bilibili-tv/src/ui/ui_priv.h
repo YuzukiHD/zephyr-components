@@ -113,6 +113,8 @@ void ui_play_status(const char *text);
 void ui_play_position(uint32_t pos_ms, bool paused);
 void ui_play_buffered(int permille);
 
+/** The colours and shape of the keys of an on-screen keyboard, for every state */
+void ui_keyboard_style(lv_obj_t *kb);
 /** A rounded panel of the surface colour; returns it */
 lv_obj_t *ui_card_panel(lv_obj_t *parent, int x, int y, int w, int h);
 /** A label with a font and a colour at a position */

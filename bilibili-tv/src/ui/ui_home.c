@@ -137,6 +137,34 @@ lv_obj_t *ui_text(lv_obj_t *parent, const lv_font_t *font, lv_color_t color, int
 	return l;
 }
 
+void ui_keyboard_style(lv_obj_t *kb)
+{
+	/* the keys of every state: the theme of LVGL has its own light colours for pressed and checked ones */
+	lv_obj_set_style_bg_color(kb, C_BAR, 0);
+	lv_obj_set_style_bg_opa(kb, LV_OPA_COVER, 0);
+	lv_obj_set_style_border_width(kb, 0, 0);
+	lv_obj_set_style_radius(kb, 0, 0);
+	lv_obj_set_style_pad_all(kb, 8, 0);
+	lv_obj_set_style_pad_gap(kb, 8, 0);
+	lv_obj_set_style_text_font(kb, &lv_font_montserrat_28, LV_PART_ITEMS);
+	lv_obj_set_style_bg_opa(kb, LV_OPA_COVER, LV_PART_ITEMS);
+	lv_obj_set_style_bg_color(kb, lv_color_hex(0x26303c), LV_PART_ITEMS);
+	lv_obj_set_style_text_color(kb, C_TEXT, LV_PART_ITEMS);
+	lv_obj_set_style_radius(kb, 10, LV_PART_ITEMS);
+	lv_obj_set_style_border_width(kb, 0, LV_PART_ITEMS);
+	lv_obj_set_style_shadow_width(kb, 0, LV_PART_ITEMS);
+	lv_obj_set_style_bg_color(kb, C_ACCENT, LV_PART_ITEMS | LV_STATE_PRESSED);
+	lv_obj_set_style_text_color(kb, lv_color_white(), LV_PART_ITEMS | LV_STATE_PRESSED);
+	/* the keys that change the mode or end the input */
+	lv_obj_set_style_bg_color(kb, lv_color_hex(0x3a4856), LV_PART_ITEMS | LV_STATE_CHECKED);
+	lv_obj_set_style_text_color(kb, lv_color_white(), LV_PART_ITEMS | LV_STATE_CHECKED);
+	lv_obj_set_style_bg_color(kb, C_ACCENT, LV_PART_ITEMS | LV_STATE_CHECKED | LV_STATE_PRESSED);
+	lv_obj_set_style_bg_color(kb, lv_color_hex(0x1c232c), LV_PART_ITEMS | LV_STATE_DISABLED);
+	lv_obj_set_style_text_color(kb, C_DIM, LV_PART_ITEMS | LV_STATE_DISABLED);
+	lv_obj_set_style_outline_width(kb, 0, LV_PART_ITEMS | LV_STATE_FOCUS_KEY);
+	lv_obj_set_style_outline_width(kb, 0, LV_PART_ITEMS | LV_STATE_FOCUSED);
+}
+
 lv_obj_t *ui_card_panel(lv_obj_t *parent, int x, int y, int w, int h)
 {
 	lv_obj_t *c = lv_obj_create(parent);

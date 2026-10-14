@@ -199,10 +199,7 @@ lv_obj_t *ui_settings_create(lv_obj_t *parent, lv_obj_t *overlay, int top, int h
 	kb = lv_keyboard_create(overlay);
 	lv_obj_set_size(kb, SCREEN_W, KB_H);
 	lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
-	lv_obj_set_style_text_font(kb, &lv_font_montserrat_28, LV_PART_ITEMS);
-	lv_obj_set_style_bg_color(kb, C_BAR, 0);
-	lv_obj_set_style_bg_color(kb, C_CARD, LV_PART_ITEMS);
-	lv_obj_set_style_text_color(kb, C_TEXT, LV_PART_ITEMS);
+	ui_keyboard_style(kb);
 	lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
 
 	return area;

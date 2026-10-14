@@ -16,6 +16,7 @@
 
 #include <zephyr/kernel.h>
 
+#include "player/player.h"
 #include "ui/ui_priv.h"
 
 #define TOP_H		96
@@ -35,6 +36,9 @@ static uint32_t duration;
 static bool paused, bars_visible = true;
 static int64_t last_touch;
 static int buffered;
+static lv_obj_t *seek_area;
+static bool dragging;
+static int drag_v;		/* the position under the finger, in thousandths */
 
 static void touched(void)
 {
@@ -68,6 +72,53 @@ static void pause_clicked(lv_event_t *e)
 {
 	touched();
 	app_cmd(CMD_PAUSE, 0);
+}
+
+/* The progress bar is also the place to seek: the finger sets the position, letting go jumps there. */
+#define SEEK_MARGIN	8	/* thousandths kept back from the end of the downloaded part */
+
+static void seek_move(void)
+{
+	lv_point_t p;
+	lv_area_t a;
+	uintptr_t geo = (uintptr_t)lv_obj_get_user_data(knob);
+	int bar_x = (int)(geo & 0xffff), bar_w = (int)(geo >> 16), v, lim = buffered >= 1000 ? 1000 : buffered - SEEK_MARGIN;
+	uint32_t ms;
+	char s[16];
+
+	lv_indev_get_point(lv_indev_active(), &p);
+	lv_obj_get_coords(bottom_bar, &a);
+	v = (p.x - a.x1 - bar_x) * 1000 / bar_w;
+	v = CLAMP(v, 0, MAX(lim, 0));
+	drag_v = v;
+	ms = (uint32_t)((uint64_t)duration * v / 1000);
+	snprintf(s, sizeof(s), "%u:%02u", ms / 60000, ms / 1000 % 60);
+	lv_label_set_text(time_label, s);
+	lv_bar_set_value(play_bar, v, LV_ANIM_OFF);
+	lv_obj_set_x(knob, bar_x + bar_w * v / 1000 - 10);
+}
+
+static void seek_event(lv_event_t *e)
+{
+	lv_event_code_t code = lv_event_get_code(e);
+
+	if (duration == 0) {
+		return;
+	}
+	touched();
+	if (code == LV_EVENT_PRESSED) {
+		dragging = true;
+		seek_move();
+	} else if (code == LV_EVENT_PRESSING) {
+		if (dragging) {
+			seek_move();
+		}
+	} else if ((code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) && dragging) {
+		/* a finger that slides off the strip still sets the position */
+		dragging = false;
+		printk("play: seek to %u ms\n", (unsigned)((uint64_t)duration * drag_v / 1000));
+		player_seek((uint32_t)((uint64_t)duration * drag_v / 1000));
+	}
 }
 
 static void dm_set_look(void)
@@ -264,6 +315,19 @@ lv_obj_t *ui_play_create(lv_obj_t *parent)
 	lv_obj_align(knob, LV_ALIGN_LEFT_MID, bar_x - 10, 0);
 	lv_obj_set_user_data(knob, (void *)(intptr_t)(bar_x | bar_w << 16));
 
+	/* a tall invisible strip over the bar, a finger is wider than 8 pixels */
+	seek_area = lv_obj_create(bottom_bar);
+	lv_obj_set_size(seek_area, bar_w + 40, 64);
+	lv_obj_align(seek_area, LV_ALIGN_LEFT_MID, bar_x - 20, 0);
+	lv_obj_set_style_bg_opa(seek_area, LV_OPA_TRANSP, 0);
+	lv_obj_set_style_border_width(seek_area, 0, 0);
+	lv_obj_set_style_pad_all(seek_area, 0, 0);
+	lv_obj_remove_flag(seek_area, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_add_event_cb(seek_area, seek_event, LV_EVENT_PRESSED, NULL);
+	lv_obj_add_event_cb(seek_area, seek_event, LV_EVENT_PRESSING, NULL);
+	lv_obj_add_event_cb(seek_area, seek_event, LV_EVENT_RELEASED, NULL);
+	lv_obj_add_event_cb(seek_area, seek_event, LV_EVENT_PRESS_LOST, NULL);
+
 	total_label = plain_label(bottom_bar, ui_font_s);
 	lv_obj_set_width(total_label, 72);
 	lv_obj_align(total_label, LV_ALIGN_LEFT_MID, bar_x + bar_w + 14, 0);
@@ -341,6 +405,10 @@ void ui_play_position(uint32_t pos_ms, bool is_paused)
 	char s[16];
 	int v = duration ? (int)((uint64_t)pos_ms * 1000 / duration) : 0;
 	uintptr_t geo = (uintptr_t)lv_obj_get_user_data(knob);
+
+	if (dragging) {
+		return;
+	}
 
 	if (is_paused != paused) {
 		paused = is_paused;

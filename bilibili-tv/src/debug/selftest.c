@@ -26,6 +26,7 @@
 #include <zephyr/sys/printk.h>
 
 #include "core/app.h"
+#include "debug/profile.h"
 #include "core/settings.h"
 #include "lvgl_mem.h"
 #include "ui/cover.h"
@@ -37,10 +38,10 @@
 #define MEM_TOLERANCE	256U	/* KiB */
 
 enum phase {
-	P_LIST, P_SCROLL, P_TAB, P_SEARCH, P_PAGES, P_PLAY, P_DONE,
+	P_LIST, P_BENCH, P_SCROLL, P_TAB, P_SEARCH, P_PAGES, P_PLAY, P_DONE,
 };
 
-static const char *const names[] = {"list", "scroll", "popular", "search", "pages", "play", "done"};
+static const char *const names[] = {"list", "bench", "scroll", "popular", "search", "pages", "play", "done"};
 static const char *const words[] = {
 	"\xe5\x85\x83\xe8\xba\xab",					/* a common word */
 	"\xe9\xbe\x98",							/* a rare character */
@@ -122,7 +123,7 @@ static void list_phase(void)
 		round_no = 0;
 		lv_display_add_event_cb(lv_display_get_default(), render_event, LV_EVENT_RENDER_START, NULL);
 		lv_display_add_event_cb(lv_display_get_default(), render_event, LV_EVENT_RENDER_READY, NULL);
-		to(IS_ENABLED(CONFIG_BILI_SELFTEST_PLAY_ONLY) ? P_PLAY : P_SCROLL);
+		to(IS_ENABLED(CONFIG_BILI_SELFTEST_PLAY_ONLY) ? P_PLAY : P_BENCH);
 	} else if (k_uptime_get() - since > 120000) {
 		check(false, "the recommended list loaded");
 		to(P_SEARCH);
@@ -145,6 +146,44 @@ static void render_event(lv_event_t *e)
 		render_sum += us;
 		render_max = MAX(render_max, us);
 		render_t0 = 0;
+	}
+}
+
+/*
+ * The time of the scrolling alone: once the covers of the first page are there the list is moved
+ * down and up in small steps, one for every round of the interface, and the time of the frames, the
+ * share of every thread and the hot spots of the interface thread are printed.
+ */
+static void bench_phase(void)
+{
+	static int moves;
+	static bool down;
+
+	if (step == 0) {
+		if (cover_pending() == 0 && k_uptime_get() - since > 4000) {
+			render_n = render_sum = render_max = 0;
+			moves = 0;
+			down = true;
+			prof_start();
+			step = 1;
+		}
+		return;
+	}
+	if (step == 1) {
+		/* 48 pixels a round; down as far as the loaded page goes, then back */
+		if (down) {
+			down = ui_home_scroll(48);
+		} else if (!ui_home_scroll(-48)) {
+			prof_report("scrolling the first page down and up");
+			printk("selftest: scrolling: %u frames, mean %u us, worst %u us, %d moves\n", render_n,
+			       render_n ? render_sum / render_n : 0, render_max, moves);
+			render_n = render_sum = render_max = 0;
+			ui_home_scroll(-100000);
+			round_no = 0;
+			to(P_SCROLL);
+			return;
+		}
+		moves++;
 	}
 }
 
@@ -237,7 +276,14 @@ static void pages_phase(void)
 		since = k_uptime_get();
 	} else if (step == 1) {
 		app_qr_info(&qi);
-		if (qi.state == QR_WAIT && qi.url[0] != '\0') {
+		if (app_account(NULL, 0)) {
+			/* a login saved on the card: there is no code to ask for */
+			printk("selftest: already logged in\n");
+			check(true, "the account page got a login code");
+			ui_home_tab(4);	/* the settings tab */
+			step = 2;
+			since = k_uptime_get();
+		} else if (qi.state == QR_WAIT && qi.url[0] != '\0') {
 			printk("selftest: login code %s\n", qi.url);
 			check(true, "the account page got a login code");
 			ui_home_tab(4);	/* the settings tab */
@@ -361,6 +407,9 @@ static void tick(lv_timer_t *t)
 	switch (phase) {
 	case P_LIST:
 		list_phase();
+		break;
+	case P_BENCH:
+		bench_phase();
 		break;
 	case P_SCROLL:
 		scroll_phase();

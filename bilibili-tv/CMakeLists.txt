@@ -33,7 +33,7 @@ file(GLOB NET_SRC src/net/*.c)
 file(GLOB API_SRC src/api/*.c)
 file(GLOB UI_SRC src/ui/*.c)
 target_sources(app PRIVATE ${NET_SRC} ${API_SRC} ${UI_SRC})
-target_sources_ifdef(CONFIG_BILI_SELFTEST app PRIVATE src/debug/selftest.c)
+target_sources_ifdef(CONFIG_BILI_SELFTEST app PRIVATE src/debug/selftest.c src/debug/profile.c)
 
 # the Chinese font (tools/make_font.py) is part of the image
 generate_inc_file_for_target(app src/ui/fonts/NotoSansSC-subset.ttf ${CMAKE_CURRENT_BINARY_DIR}/font.inc)

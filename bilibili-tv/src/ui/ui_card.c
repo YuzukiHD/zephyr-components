@@ -14,6 +14,7 @@
  * calculated, the footer below the last row gives the container its height).
  */
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/sys/util.h>
@@ -56,6 +57,40 @@ static lv_obj_t *text(lv_obj_t *parent, const lv_font_t *font, lv_color_t color,
 	return l;
 }
 
+/*
+ * The cover is a square picture on a card with round corners. Clipping the card to its corners makes
+ * LVGL draw it through a layer, which cost every frame about a tenth of its time; two small masks
+ * in the colour of the page, laid over the upper corners of the cover, look the same.
+ */
+#define CORNER		10
+#define CORNER_STRIDE	16
+static uint8_t corner_px[2][CORNER_STRIDE * CORNER] __aligned(4);
+static lv_image_dsc_t corner_dsc[2];
+static bool corner_ready;
+
+static void corners_init(void)
+{
+	for (int y = 0; y < CORNER; y++) {
+		for (int x = 0; x < CORNER; x++) {
+			float dx = x + 0.5f - CORNER, dy = y + 0.5f - CORNER;
+			float a = sqrtf(dx * dx + dy * dy) - CORNER + 0.5f;	/* 0 inside the circle, 1 outside */
+			uint8_t v = a <= 0.0f ? 0 : (a >= 1.0f ? 255 : (uint8_t)(a * 255.0f));
+
+			corner_px[0][y * CORNER_STRIDE + x] = v;
+			corner_px[1][y * CORNER_STRIDE + CORNER - 1 - x] = v;
+		}
+	}
+	for (int k = 0; k < 2; k++) {
+		corner_dsc[k] = (lv_image_dsc_t){
+			.header = {.magic = LV_IMAGE_HEADER_MAGIC, .cf = LV_COLOR_FORMAT_A8, .w = CORNER, .h = CORNER,
+				   .stride = CORNER_STRIDE},
+			.data_size = sizeof(corner_px[k]),
+			.data = corner_px[k],
+		};
+	}
+	corner_ready = true;
+}
+
 static void card_build(struct ui_grid *g, int idx, const struct bili_video *v)
 {
 	struct ui_card *c = &g->cards[idx];
@@ -74,7 +109,7 @@ static void card_build(struct ui_grid *g, int idx, const struct bili_video *v)
 	lv_obj_set_style_border_width(o, 0, 0);
 	lv_obj_set_style_radius(o, 10, 0);
 	lv_obj_set_style_pad_all(o, 0, 0);
-	lv_obj_set_style_clip_corner(o, true, 0);
+	lv_obj_set_style_clip_corner(o, false, 0);
 	lv_obj_set_style_shadow_width(o, 0, 0);
 	lv_obj_remove_flag(o, LV_OBJ_FLAG_SCROLLABLE);
 	lv_obj_add_event_cb(o, card_click, LV_EVENT_CLICKED, (void *)(intptr_t)(g->list << 16 | idx));
@@ -86,6 +121,18 @@ static void card_build(struct ui_grid *g, int idx, const struct bili_video *v)
 	lv_obj_set_pos(c->img, 0, 0);
 	lv_obj_set_style_bg_color(c->img, lv_color_hex(0x232c37), 0);
 	lv_obj_set_style_bg_opa(c->img, LV_OPA_COVER, 0);
+	if (!corner_ready) {
+		corners_init();
+	}
+	for (int k = 0; k < 2; k++) {
+		lv_obj_t *m = lv_image_create(o);
+
+		lv_obj_remove_flag(m, LV_OBJ_FLAG_CLICKABLE);
+		lv_image_set_src(m, &corner_dsc[k]);
+		lv_obj_set_pos(m, k ? CARD_W - CORNER : 0, 0);
+		lv_obj_set_style_image_recolor(m, C_BG, 0);
+		lv_obj_set_style_image_recolor_opa(m, LV_OPA_COVER, 0);
+	}
 
 	if (v->duration > 0) {
 		if (v->duration >= 3600) {

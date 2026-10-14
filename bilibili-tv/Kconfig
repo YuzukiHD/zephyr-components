@@ -72,7 +72,7 @@ config BILI_UI_RAM
 	bool "Run LVGL and the interface code from RAM"
 	depends on XIP
 	select CODE_DATA_RELOCATION
-	default n
+	default y
 
 config BILI_DM_FETCH
 	bool "Fetch the comments of a video before it plays"

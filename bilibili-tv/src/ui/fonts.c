@@ -21,8 +21,8 @@
  * comments brought new characters (about 15 KiB more after every video). The titles of a screen
  * need about 150 distinct glyphs of the middle size, the other sizes only a few.
  */
-#define GLYPH_CACHE_S	64
-#define GLYPH_CACHE_M	256
+#define GLYPH_CACHE_S	160
+#define GLYPH_CACHE_M	320
 #define GLYPH_CACHE_L	64
 
 static const uint8_t ttf[] = {

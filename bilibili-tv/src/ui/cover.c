@@ -331,7 +331,8 @@ static int sw_out(JDEC *jd, void *bitmap, JRECT *rect)
 	for (int y = rect->top; y <= rect->bottom; y++) {
 		for (int x = rect->left; x <= rect->right; x++, p += 3) {
 			if (x < COVER_W && y < COVER_H) {
-				s->out[y * (COVER_STRIDE / 2) + x] = ((p[0] & 0xf8) << 8) | ((p[1] & 0xfc) << 3) | (p[2] >> 3);
+				/* the decoder of LVGL delivers the bytes of a pixel as blue, green, red */
+				s->out[y * (COVER_STRIDE / 2) + x] = ((p[2] & 0xf8) << 8) | ((p[1] & 0xfc) << 3) | (p[0] >> 3);
 			}
 		}
 	}
@@ -399,6 +400,11 @@ static uint16_t *load(const char *pic, uint8_t *jpeg, uint32_t *fetch_t, uint32_
 	uint16_t *px = NULL;
 	uint32_t t0 = k_uptime_get_32(), t1;
 	int n, ret;
+#ifdef CONFIG_BILI_COVER_CHECK
+	static const int sample_x[6] = {30, 120, 200, 60, 150, 220}, sample_y[6] = {20, 60, 100, 110, 30, 120};
+	uint8_t samp[6][3] = {0};
+	int fw = 0, fh = 0, fs0 = 0;
+#endif
 
 	if (bili_cover_url(pic, COVER_W, COVER_H, url, sizeof(url)) < 0) {
 		return NULL;
@@ -418,6 +424,19 @@ static uint16_t *load(const char *pic, uint8_t *jpeg, uint32_t *fetch_t, uint32_
 		if (px != NULL) {
 			to_rgb565(&f, px);
 		}
+#ifdef CONFIG_BILI_COVER_CHECK
+		for (int k = 0; k < 6; k++) {
+			int sx = sample_x[k], sy = sample_y[k];
+			const uint8_t *uvp = f.plane[1] + (sy / 2) * f.stride[1] + (sx & ~1);
+
+			samp[k][0] = f.plane[0][sy * f.stride[0] + sx];
+			samp[k][1] = uvp[0];
+			samp[k][2] = uvp[1];
+		}
+		fw = f.width;
+		fh = f.height;
+		fs0 = f.stride[0];
+#endif
 		vdec_frame_release(vdec, &f);
 	} else if (ret == -ENOTSUP) {
 		/* the engine takes only baseline 4:2:0; the image server sends other kinds now and then */
@@ -449,8 +468,14 @@ static uint16_t *load(const char *pic, uint8_t *jpeg, uint32_t *fetch_t, uint32_
 				}
 			}
 			if (diff / uvhw > 3) {
-				printk("cover: %s engine and software differ: mean %u, red %d blue %d (sum), %d bytes\n",
-				       pic, (unsigned)(diff / uvhw), rs, bs, n);
+				printk("cover: %s engine and software differ: mean %u, red %d blue %d (sum), %d bytes, frame %dx%d stride %d\n",
+				       pic, (unsigned)(diff / uvhw), rs, bs, n, fw, fh, fs0);
+				for (int k = 0; k < 6; k++) {
+					uint16_t b = ref[sample_y[k] * (COVER_STRIDE / 2) + sample_x[k]];
+
+					printk("cover:   (%d,%d) engine Y %u Cb/Cr bytes %u %u; software rgb565 %04x\n", sample_x[k],
+					       sample_y[k], samp[k][0], samp[k][1], samp[k][2], b);
+				}
 			}
 			free(ref);
 		}

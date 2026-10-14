@@ -17,6 +17,7 @@ import sys
 
 SECTOR = 4096
 STUB_COPIES = (0x0,)
+PARAMS_OFFSET = 0x20000
 
 
 def main():
@@ -32,8 +33,8 @@ def main():
     app = open(a.app, "rb").read()
     if boot[4:12] != b"eGON.BT0":
         sys.exit("the boot stub is not a SPL image for the flash (xip-boot_spi.bin)")
-    if len(boot) > STUB_COPIES[1] - STUB_COPIES[0]:
-        sys.exit("the boot stub does not fit before its next copy")
+    if len(boot) > PARAMS_OFFSET - STUB_COPIES[0]:
+        sys.exit("the boot stub does not fit in front of the parameter area")
     size = a.offset + (len(app) + SECTOR - 1) // SECTOR * SECTOR
     img = bytearray(b"\xff" * size)
     # the copies of the stub that fit in front of the application (the first one is the one the

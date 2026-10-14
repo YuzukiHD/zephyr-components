@@ -68,3 +68,5 @@ if(CONFIG_BILI_GFX_RVV)
       ${CMAKE_CURRENT_SOURCE_DIR}/src/gfx/yuv_rvv.c LOCATION RAM_TEXT)
   endif()
 endif()
+
+target_sources_ifdef(CONFIG_BILI_G2D_BENCH app PRIVATE src/debug/g2dbench.c)

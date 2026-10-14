@@ -169,3 +169,9 @@ config BILI_GFX_RVV
 	help
 	  The blends are compared with the C code of LVGL at start and the vector code is switched off
 	  when they differ; the same for the conversion of the covers.
+
+config BILI_G2D_BENCH
+	bool "Measure the 2D accelerator against the processor at start"
+	select G2D
+	select G2D_SUNXI
+	default n

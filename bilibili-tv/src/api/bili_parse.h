@@ -80,6 +80,20 @@ int bili_parse_qr_new(const char *json, char *url, size_t url_size, char *key, s
  */
 int bili_parse_user(const char *json, char *name, size_t size, char *face, size_t face_size);
 
+/** The numbers of the account page; coins are in tenths */
+struct bili_user_stats {
+	uint32_t coins_x10;
+	uint32_t dynamics;
+	uint32_t following;
+	uint32_t followers;
+};
+
+/** The coins of the nav answer (data.money) in tenths, 0 when there are none */
+uint32_t bili_parse_coins(const char *nav_json);
+
+/** The counts of the nav/stat answer; -EBADMSG when the answer is not one */
+int bili_parse_stat(const char *json, struct bili_user_stats *out);
+
 /**
  * The videos of the feed of the followed users (/x/polymer/web-dynamic/v1/feed/all); posts that are
  * no video are skipped. @p offset gets the position of the next page, @p more whether there is one.

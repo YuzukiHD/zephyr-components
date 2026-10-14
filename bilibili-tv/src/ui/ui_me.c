@@ -20,6 +20,9 @@
 
 static lv_obj_t *area, *avatar, *avatar_img, *avatar_letter, *name_label, *sub_label, *hint_label, *action_btn, *action_label;
 static lv_obj_t *qr_holder, *qr_obj, *state_label;
+#define STAT_COUNT	4
+static lv_obj_t *stat_tile[STAT_COUNT], *stat_value[STAT_COUNT];
+static uint32_t stats_seen;
 static uint32_t qr_gen, avatar_seen;
 static lv_image_dsc_t avatar_dsc;
 static int64_t last_poll;
@@ -115,7 +118,76 @@ lv_obj_t *ui_me_create(lv_obj_t *parent, int top, int height)
 	lv_obj_set_width(state_label, 442);
 	lv_obj_set_style_text_align(state_label, LV_TEXT_ALIGN_CENTER, 0);
 
+	/* the numbers of the account, in the place of the code once somebody is logged in */
+	{
+		static const char *const names[STAT_COUNT] = {
+			"\xe7\xa1\xac\xe5\xb8\x81",	/* coins */
+			"\xe5\x8a\xa8\xe6\x80\x81",	/* dynamics */
+			"\xe5\x85\xb3\xe6\xb3\xa8",	/* following */
+			"\xe7\xb2\x89\xe4\xb8\x9d",	/* followers */
+		};
+		int tw = (482 - 60) / 2, th = (height - 24 - 60) / 2;
+
+		for (int i = 0; i < STAT_COUNT; i++) {
+			lv_obj_t *l;
+
+			stat_tile[i] = ui_card_panel(right, 20 + (i % 2) * (tw + 20), 20 + (i / 2) * (th + 20), tw, th);
+			lv_obj_set_style_bg_color(stat_tile[i], C_BAR, 0);
+			l = ui_text(stat_tile[i], ui_font_m, C_DIM, 0, 0);
+			lv_label_set_text(l, names[i]);
+			lv_obj_align(l, LV_ALIGN_TOP_MID, 0, th / 2 - 52);
+			stat_value[i] = ui_text(stat_tile[i], ui_font_l, C_TEXT, 0, 0);
+			lv_label_set_text(stat_value[i], "-");
+			lv_obj_align(stat_value[i], LV_ALIGN_TOP_MID, 0, th / 2 - 8);
+			lv_obj_add_flag(stat_tile[i], LV_OBJ_FLAG_HIDDEN);
+		}
+	}
+
 	return area;
+}
+
+/* 12345 -> "1.2万", 100000000 -> "1.0亿" */
+static void count_text(char *buf, size_t size, uint32_t n)
+{
+	if (n >= 100000000U) {
+		snprintf(buf, size, "%u.%u\xe4\xba\xbf", n / 100000000U, n / 10000000U % 10);
+	} else if (n >= 10000) {
+		snprintf(buf, size, "%u.%u\xe4\xb8\x87", n / 10000, n / 1000 % 10);
+	} else {
+		snprintf(buf, size, "%u", n);
+	}
+}
+
+static void stats_show(bool logged)
+{
+	struct bili_user_stats st;
+	uint32_t gen;
+	bool have = logged && app_user_stats(&st, &gen);
+	char t[24];
+
+	for (int i = 0; i < STAT_COUNT; i++) {
+		if (logged) {
+			lv_obj_remove_flag(stat_tile[i], LV_OBJ_FLAG_HIDDEN);
+		} else {
+			lv_obj_add_flag(stat_tile[i], LV_OBJ_FLAG_HIDDEN);
+		}
+	}
+	if (!have) {
+		stats_seen = 0;
+		return;
+	}
+	if (gen == stats_seen) {
+		return;
+	}
+	stats_seen = gen;
+	snprintf(t, sizeof(t), "%u.%u", st.coins_x10 / 10, st.coins_x10 % 10);
+	lv_label_set_text(stat_value[0], t);
+	count_text(t, sizeof(t), st.dynamics);
+	lv_label_set_text(stat_value[1], t);
+	count_text(t, sizeof(t), st.following);
+	lv_label_set_text(stat_value[2], t);
+	count_text(t, sizeof(t), st.followers);
+	lv_label_set_text(stat_value[3], t);
 }
 
 void ui_me_show(void)
@@ -123,6 +195,8 @@ void ui_me_show(void)
 	shown_valid = false;
 	if (!app_account(NULL, 0)) {
 		app_cmd(CMD_QR_START, 0);
+	} else {
+		app_cmd(CMD_USER_STATS, 0);
 	}
 	last_poll = k_uptime_get();
 }
@@ -180,6 +254,7 @@ void ui_me_run(bool visible)
 			}
 		}
 	}
+	stats_show(logged);
 	if (logged) {
 		if (!shown_valid || !shown_logged || strcmp(shown_name, name) != 0) {
 			const char *n = name[0] != '\0' ? name : "bilibili";

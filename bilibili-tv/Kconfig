@@ -172,6 +172,13 @@ config BILI_G2D_BENCH
 	select G2D_SUNXI
 	default n
 
+config BILI_SCROLL_LOG
+	bool "Print the refreshes that take longer than 40 ms"
+	select THREAD_MONITOR
+	select THREAD_NAME
+	select THREAD_RUNTIME_STATS
+	default n
+
 config BILI_SCROLL_SHIFT
 	bool "Scroll a list by moving the picture with the 2D accelerator and drawing only the new rows"
 	select G2D

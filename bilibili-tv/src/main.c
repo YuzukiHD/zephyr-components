@@ -65,6 +65,9 @@ static struct qr_info qr;
 static uint16_t *avatar_px;
 static uint32_t avatar_gen;
 static bool avatar_ok;
+static struct bili_user_stats user_stats;
+static bool stats_ok;
+static uint32_t stats_gen;
 static char qr_key[64];
 #define WIFI_MAX 16
 static struct wifi_ap aps[WIFI_MAX];
@@ -156,6 +159,19 @@ bool app_avatar(const uint16_t **px, uint32_t *gen)
 	*px = avatar_px;
 	*gen = avatar_gen;
 	ok = avatar_ok;
+	k_mutex_unlock(&lists_lock);
+
+	return ok;
+}
+
+bool app_user_stats(struct bili_user_stats *out, uint32_t *gen)
+{
+	bool ok;
+
+	k_mutex_lock(&lists_lock, K_FOREVER);
+	*out = user_stats;
+	*gen = stats_gen;
+	ok = stats_ok;
 	k_mutex_unlock(&lists_lock);
 
 	return ok;
@@ -677,6 +693,22 @@ static void avatar_fetch(const char *face)
 	free(px);
 }
 
+static void stats_fetch(void)
+{
+	struct bili_user_stats st;
+	int ret = bili_api_user_stats(&st);
+
+	k_mutex_lock(&lists_lock, K_FOREVER);
+	if (ret == 0) {
+		user_stats = st;
+		stats_ok = true;
+		stats_gen++;
+	}
+	k_mutex_unlock(&lists_lock);
+	printk("login: coins %u.%u dynamics %u following %u followers %u (%d)\n", st.coins_x10 / 10,
+	       st.coins_x10 % 10, st.dynamics, st.following, st.followers, ret);
+}
+
 /* the name and the picture of the user, and the lists that depend on the login */
 static void login_ready(void)
 {
@@ -687,6 +719,7 @@ static void login_ready(void)
 		account_set_name(name);
 		printk("login: %s\n", name);
 		avatar_fetch(face);
+		stats_fetch();
 	}
 	load(LIST_RECOMMEND, 1);
 	load(LIST_FOLLOW, 1);
@@ -744,6 +777,7 @@ static void login_check(void)
 	} else if (ret == 0) {
 		account_set_name(name);
 		avatar_fetch(face);
+		stats_fetch();
 		load(LIST_RECOMMEND, 1);
 		load(LIST_FOLLOW, 1);
 	}
@@ -852,8 +886,15 @@ static void worker_main(void *a, void *b, void *c)
 			qr.state = QR_NONE;
 			avatar_ok = false;
 			avatar_gen++;
+			stats_ok = false;
+			stats_gen++;
 			k_mutex_unlock(&lists_lock);
 			load(LIST_RECOMMEND, 1);
+			break;
+		case CMD_USER_STATS:
+			if (account_logged_in()) {
+				stats_fetch();
+			}
 			break;
 		case CMD_WIFI_SCAN:
 			wifi_scan_now();

@@ -334,6 +334,38 @@ int bili_parse_user(const char *json, char *name, size_t size, char *face, size_
 	return js_str(js_path(json, "data.uname"), name, size) >= 0 ? 0 : -EBADMSG;
 }
 
+uint32_t bili_parse_coins(const char *nav_json)
+{
+	const char *p = js_path(nav_json, "data.money");
+	uint32_t whole = 0, tenth = 0;
+
+	if (p == NULL) {
+		return 0;
+	}
+	while (*p >= '0' && *p <= '9') {
+		whole = whole * 10 + (*p++ - '0');
+	}
+	if (*p == '.' && p[1] >= '0' && p[1] <= '9') {
+		tenth = p[1] - '0';
+	}
+
+	return whole * 10 + tenth;
+}
+
+int bili_parse_stat(const char *json, struct bili_user_stats *out)
+{
+	const char *f = js_path(json, "data.following");
+
+	if (f == NULL) {
+		return -EBADMSG;
+	}
+	out->following = (uint32_t)js_int(f, 0);
+	out->followers = (uint32_t)js_int(js_path(json, "data.follower"), 0);
+	out->dynamics = (uint32_t)js_int(js_path(json, "data.dynamic_count"), 0);
+
+	return 0;
+}
+
 /* "123", "1.2万" (12000) and "3.4亿" are the counts of the dynamic feed */
 static uint32_t count_text(const char *v)
 {

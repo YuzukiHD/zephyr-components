@@ -60,4 +60,7 @@ int bili_api_qr_poll(const char *key, int *state);
 /** The name and the picture address of the logged in user, -EACCES when the login is not valid (any more) */
 int bili_api_user(char *name, size_t size, char *face, size_t face_size);
 
+/** The coins, dynamics, followed users and followers of the logged in user */
+int bili_api_user_stats(struct bili_user_stats *out);
+
 #endif /* BILI_API_H_ */

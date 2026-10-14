@@ -422,6 +422,29 @@ int bili_api_user(char *name, size_t size, char *face, size_t face_size)
 	return ret;
 }
 
+int bili_api_user_stats(struct bili_user_stats *out)
+{
+	char *a = fetch(API "/x/web-interface/nav/stat");
+	int ret;
+
+	memset(out, 0, sizeof(*out));
+	if (a == NULL) {
+		return -EIO;
+	}
+	ret = bili_parse_stat(a, out);
+	free(a);
+	if (ret != 0) {
+		return ret;
+	}
+	a = fetch(API "/x/web-interface/nav");
+	if (a != NULL) {
+		out->coins_x10 = bili_parse_coins(a);
+		free(a);
+	}
+
+	return 0;
+}
+
 /* ---- the followed users -------------------------------------------------------------------- */
 
 static char follow_offset[40];

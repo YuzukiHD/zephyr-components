@@ -23,6 +23,7 @@
 #include "core/lv_refr_private.h"
 #include "display/lv_display_private.h"
 #include "misc/lv_area_private.h"
+#include "debug/profile.h"
 #include "gfx/shift.h"
 #include "ui/ui_priv.h"
 
@@ -241,24 +242,36 @@ static struct {
 static int ntrace;
 static uint32_t refresh_count;
 
-static void note_refresh(lv_event_t *e)
-{
-	refresh_count++;
-}
-
-static bool region_has_pending(const lv_display_t *d, const lv_area_t *r)
+/*
+ * Drawing that waits inside the list (a cover that arrived) moves with the picture: its area is
+ * moved by the step. False when one of the areas reaches out of the list, then everything is drawn.
+ */
+static bool move_pending(lv_display_t *d, const lv_area_t *r, int dy)
 {
 	for (uint32_t i = 0; i < d->inv_p; i++) {
 		lv_area_t x;
 
-		if (!d->inv_area_joined[i] && lv_area_intersect(&x, &d->inv_areas[i], r)) {
+		if (!d->inv_area_joined[i] && lv_area_intersect(&x, &d->inv_areas[i], r) &&
+		    !lv_area_is_in(&d->inv_areas[i], r, 0)) {
 			first_pending = d->inv_areas[i];
 			first_pending_count = d->inv_p;
-			return true;
+			return false;
+		}
+	}
+	for (uint32_t i = 0; i < d->inv_p; i++) {
+		lv_area_t *a = &d->inv_areas[i], x;
+
+		if (d->inv_area_joined[i] || !lv_area_intersect(&x, a, r)) {
+			continue;
+		}
+		a->y1 -= dy;
+		a->y2 -= dy;
+		if (!lv_area_intersect(a, a, r)) {
+			d->inv_area_joined[i] = 1;
 		}
 	}
 
-	return false;
+	return true;
 }
 
 /* how the scroll events were handled, for the self test */
@@ -266,6 +279,32 @@ static struct {
 	uint32_t shifted, jump, hidden, big, pending, not_ready, failed;
 	int last_error;
 } stat;
+
+static uint32_t refr_start_ms, shift_ms, shift_steps, dirty_areas, dirty_px;
+
+static void note_refresh(lv_event_t *e)
+{
+	refresh_count++;
+	if (IS_ENABLED(CONFIG_BILI_SCROLL_LOG)) {
+		uint32_t total = k_uptime_get_32() - refr_start_ms;
+
+		static uint32_t slow;
+
+		if (total > 40) {
+			if (slow == 0) {
+				prof_start();
+			}
+			if (++slow == 60) {
+				prof_report("scroll");
+				slow = 0;
+			}
+			printk("scroll: dirty %u areas %u px, refresh %u ms (shift %u ms for %u rows) moved %u jump %u hidden %u far %u pending %u failed %u\n",
+			       dirty_areas, dirty_px, total, shift_ms, shift_steps, stat.shifted, stat.jump, stat.hidden, stat.big,
+			       stat.pending, stat.failed);
+		}
+		shift_ms = shift_steps = 0;
+	}
+}
 
 void ui_scroll_stats(char *buf, size_t size)
 {
@@ -281,6 +320,21 @@ void ui_scroll_stats(char *buf, size_t size)
 	}
 	ntrace = 0;
 	memset(&stat, 0, sizeof(stat));
+}
+
+/*
+ * The scrolling state that LVGL sets on the list at the start and the end of a scroll refreshes its
+ * style, and that draws the whole list again (a refresh of 100 ms and more at the end of a fling).
+ * The list has no style of that state: the invalidation is off while the state changes.
+ */
+static void state_guard_on(lv_event_t *e)
+{
+	lv_display_enable_invalidation(lv_display_get_default(), false);
+}
+
+static void state_guard_off(lv_event_t *e)
+{
+	lv_display_enable_invalidation(lv_display_get_default(), true);
 }
 
 static void scrolled(lv_event_t *e)
@@ -304,7 +358,7 @@ static void scrolled(lv_event_t *e)
 		stat.hidden++;
 	} else if (g->shift_dy + dy >= h || -(g->shift_dy + dy) >= h) {
 		stat.big++;
-	} else if (region_has_pending(d, &r)) {
+	} else if (!move_pending(d, &r, dy)) {
 		stat.pending++;
 	} else if (!shift_ready()) {
 		stat.not_ready++;
@@ -344,6 +398,8 @@ static void add_strips(lv_event_t *e)
 {
 	lv_display_t *d = lv_display_get_default();
 
+	refr_start_ms = k_uptime_get_32();
+
 	if (inv_off) {
 		lv_display_enable_invalidation(d, true);
 		inv_off = false;
@@ -356,7 +412,12 @@ static void add_strips(lv_event_t *e)
 			continue;
 		}
 		lv_obj_get_coords(g->obj, &r);
-		if (g->shift_dy != 0 && shift_rows(r.y1, lv_area_get_height(&r), g->shift_dy) != 0) {
+		uint32_t t0 = k_uptime_get_32();
+		int sret = g->shift_dy != 0 ? shift_rows(r.y1, lv_area_get_height(&r), g->shift_dy) : 0;
+
+		shift_ms += k_uptime_get_32() - t0;
+		shift_steps += g->shift_dy < 0 ? -g->shift_dy : g->shift_dy;
+		if (sret != 0) {
 			/* the picture could not be moved: all of it is drawn */
 			stat.failed++;
 			lv_inv_area(d, &r);
@@ -374,6 +435,15 @@ static void add_strips(lv_event_t *e)
 		}
 		g->pend_top = g->pend_bottom = 0;
 		g->shift_dy = 0;
+	}
+	if (IS_ENABLED(CONFIG_BILI_SCROLL_LOG)) {
+		dirty_areas = dirty_px = 0;
+		for (uint32_t k = 0; k < d->inv_p; k++) {
+			if (!d->inv_area_joined[k]) {
+				dirty_areas++;
+				dirty_px += lv_area_get_width(&d->inv_areas[k]) * lv_area_get_height(&d->inv_areas[k]);
+			}
+		}
 	}
 }
 
@@ -417,7 +487,23 @@ void ui_grid_create(struct ui_grid *g, lv_obj_t *parent, enum list_id list, int 
 	lv_obj_set_style_pad_column(g->obj, MARGIN, 0);
 	lv_obj_set_scroll_dir(g->obj, LV_DIR_VER);
 	lv_obj_set_scrollbar_mode(g->obj, LV_SCROLLBAR_MODE_OFF);	/* it would move with the picture */
+	/*
+	 * The theme fades the (hidden) scroll bar in and out with a style transition, and every step of
+	 * that draws the whole list again: the scroll bar looks the same in every state.
+	 */
+	for (int st = 0; st < 2; st++) {
+		lv_style_selector_t sel = LV_PART_SCROLLBAR | (st ? LV_STATE_SCROLLED : 0);
+
+		lv_obj_set_style_bg_opa(g->obj, LV_OPA_TRANSP, sel);
+		lv_obj_set_style_transition(g->obj, NULL, sel);
+	}
 	lv_obj_add_event_cb(g->obj, scrolled, LV_EVENT_SCROLL, g);
+	if (IS_ENABLED(CONFIG_BILI_SCROLL_SHIFT)) {
+		lv_obj_add_event_cb(g->obj, state_guard_on, LV_EVENT_SCROLL_BEGIN | LV_EVENT_PREPROCESS, NULL);
+		lv_obj_add_event_cb(g->obj, state_guard_on, LV_EVENT_SCROLL_END | LV_EVENT_PREPROCESS, NULL);
+		lv_obj_add_event_cb(g->obj, state_guard_off, LV_EVENT_SCROLL_BEGIN, NULL);
+		lv_obj_add_event_cb(g->obj, state_guard_off, LV_EVENT_SCROLL_END, NULL);
+	}
 	for (int i = 0; i < GRIDS; i++) {
 		if (registry[i] == NULL) {
 			registry[i] = g;

@@ -39,6 +39,7 @@ enum app_cmd_type {
 	CMD_LOGOUT,	/**< forget the login */
 	CMD_WIFI_SCAN,	/**< look for networks */
 	CMD_SAVE_SETTINGS, /**< write volume and brightness to the card */
+	CMD_USER_STATS,	/**< ask for the numbers of the account page */
 };
 
 /** Posts a command to the worker thread; may be called from any thread */
@@ -85,6 +86,9 @@ bool app_account(char *name, size_t size);
 #define AVATAR_SIZE	96
 #define AVATAR_STRIDE	192
 bool app_avatar(const uint16_t **px, uint32_t *gen);
+
+/** The numbers of the account; false until they were fetched, @p gen changes with them */
+bool app_user_stats(struct bili_user_stats *out, uint32_t *gen);
 
 /** The networks of the last scan (strongest first); @p scanning is true while a scan runs */
 int app_wifi_results(struct wifi_ap *out, int max, bool *scanning);

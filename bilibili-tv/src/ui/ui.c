@@ -19,6 +19,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
+#include "gfx/shift.h"
 #include "ui/ui_priv.h"
 
 static K_MUTEX_DEFINE(lock);
@@ -244,6 +245,9 @@ uint32_t ui_run(void)
 			}
 			ui_play_set(title, dur);
 			cover_pause(true);
+			if (IS_ENABLED(CONFIG_BILI_SCROLL_SHIFT)) {
+				shift_release();
+			}
 			ui_nav(PAGE_PLAY);
 		} else {
 			printk("ui: leaving the player\n");

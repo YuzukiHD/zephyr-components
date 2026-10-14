@@ -297,38 +297,31 @@ static void scrolled(lv_event_t *e)
 	}
 	lv_obj_get_coords(g->obj, &r);
 	h = lv_area_get_height(&r);
-	if (ntrace < 6) {
-		trace[ntrace].at = k_uptime_get_32();
-		trace[ntrace].refreshes = refresh_count;
-		trace[ntrace].n = d->inv_p;
-		trace[ntrace].y1 = d->inv_p ? d->inv_areas[0].y1 : -1;
-		trace[ntrace].y2 = d->inv_p ? d->inv_areas[0].y2 : -1;
-		ntrace++;
-	}
 	if (g->no_shift) {
 		stat.jump++;
 	} else if (lv_obj_has_flag(g->obj, LV_OBJ_FLAG_HIDDEN) ||
 		   lv_obj_has_flag(lv_obj_get_parent(g->obj), LV_OBJ_FLAG_HIDDEN)) {
 		stat.hidden++;
-	} else if (dy >= h || -dy >= h) {
+	} else if (g->shift_dy + dy >= h || -(g->shift_dy + dy) >= h) {
 		stat.big++;
 	} else if (region_has_pending(d, &r)) {
 		stat.pending++;
 	} else if (!shift_ready()) {
 		stat.not_ready++;
-	} else if ((stat.last_error = shift_rows(r.y1, h, dy)) != 0) {
-		stat.failed++;
 	} else {
+		/* the picture is moved once for the steps of a frame, at the refresh (add_strips()) */
 		stat.shifted++;
+		g->shift_dy += dy;
 		goto moved;
 	}
 	{
-		/* draw everything: what is waiting for the flush is covered by that */
+		/* draw everything: what is waiting for the refresh is covered by that */
 		if (inv_off) {
 			lv_display_enable_invalidation(d, true);
 			inv_off = false;
 		}
 		g->pend_top = g->pend_bottom = 0;
+		g->shift_dy = 0;
 		return;
 	}
 moved:
@@ -359,21 +352,28 @@ static void add_strips(lv_event_t *e)
 		struct ui_grid *g = registry[i];
 		lv_area_t r, a;
 
-		if (g == NULL || (g->pend_top == 0 && g->pend_bottom == 0)) {
+		if (g == NULL || (g->pend_top == 0 && g->pend_bottom == 0 && g->shift_dy == 0)) {
 			continue;
 		}
 		lv_obj_get_coords(g->obj, &r);
-		if (g->pend_top > 0) {
-			a = r;
-			a.y2 = r.y1 + g->pend_top - 1;
-			lv_inv_area(d, &a);
-		}
-		if (g->pend_bottom > 0) {
-			a = r;
-			a.y1 = r.y2 - g->pend_bottom + 1;
-			lv_inv_area(d, &a);
+		if (g->shift_dy != 0 && shift_rows(r.y1, lv_area_get_height(&r), g->shift_dy) != 0) {
+			/* the picture could not be moved: all of it is drawn */
+			stat.failed++;
+			lv_inv_area(d, &r);
+		} else {
+			if (g->pend_top > 0) {
+				a = r;
+				a.y2 = r.y1 + g->pend_top - 1;
+				lv_inv_area(d, &a);
+			}
+			if (g->pend_bottom > 0) {
+				a = r;
+				a.y1 = r.y2 - g->pend_bottom + 1;
+				lv_inv_area(d, &a);
+			}
 		}
 		g->pend_top = g->pend_bottom = 0;
+		g->shift_dy = 0;
 	}
 }
 
@@ -392,7 +392,7 @@ void ui_grids_scroll_flush(void)
 		inv_off = false;
 	}
 	for (int i = 0; i < GRIDS; i++) {
-		waiting |= registry[i] != NULL && (registry[i]->pend_top != 0 || registry[i]->pend_bottom != 0);
+		waiting |= registry[i] != NULL && (registry[i]->pend_top != 0 || registry[i]->pend_bottom != 0 || registry[i]->shift_dy != 0);
 	}
 	if (waiting) {
 		refresh_soon(d);

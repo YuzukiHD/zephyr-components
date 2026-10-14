@@ -57,6 +57,7 @@ struct ui_grid {
 	int asked_at;			/**< the list length when the next page was asked for */
 	int last_scroll;		/**< scroll position at the last scroll event */
 	int pend_top, pend_bottom;	/**< rows that came in at the top / bottom and are not drawn yet */
+	int shift_dy;			/**< scroll steps whose move of the picture waits for the refresh */
 	bool no_shift;			/**< the next scroll is a jump: draw everything */
 };
 

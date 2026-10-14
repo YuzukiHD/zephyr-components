@@ -163,10 +163,13 @@ lv_obj_t *ui_search_create(lv_obj_t *parent)
 
 	hot_box = lv_obj_create(page);
 	lv_obj_set_pos(hot_box, 0, BAR_H + 56);
-	lv_obj_set_size(hot_box, SCREEN_W, 200);
+	/* as high as the rows of words need: a fixed height cut the last row in half */
+	lv_obj_set_width(hot_box, SCREEN_W);
+	lv_obj_set_height(hot_box, LV_SIZE_CONTENT);
 	lv_obj_set_style_bg_opa(hot_box, LV_OPA_TRANSP, 0);
 	lv_obj_set_style_border_width(hot_box, 0, 0);
 	lv_obj_set_style_pad_hor(hot_box, MARGIN, 0);
+	lv_obj_set_style_pad_ver(hot_box, 4, 0);
 	lv_obj_set_style_pad_gap(hot_box, 12, 0);
 	lv_obj_set_flex_flow(hot_box, LV_FLEX_FLOW_ROW_WRAP);
 	lv_obj_remove_flag(hot_box, LV_OBJ_FLAG_SCROLLABLE);

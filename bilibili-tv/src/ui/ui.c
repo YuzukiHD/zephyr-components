@@ -280,12 +280,41 @@ uint32_t ui_run(void)
 		uint32_t t0 = k_cycle_get_32(), next = lv_timer_handler();
 
 		round_us = k_cyc_to_us_floor32(k_cycle_get_32() - t0);
+		if (IS_ENABLED(CONFIG_BILI_DM_LOG) && cur == PAGE_PLAY) {
+			static uint32_t n, sum, worst, over, since_ms;
+			uint32_t now_ms = k_uptime_get_32();
+
+			n++;
+			sum += round_us;
+			worst = MAX(worst, round_us);
+			over += round_us > 33000;
+			if (now_ms - since_ms >= 5000) {
+				uint32_t moved, full;
+
+				ui_danmaku_moves(&moved, &full);
+				printk("dm: %u rounds in %u ms, mean %u us, worst %u us, %u over 33 ms, comments %u, lanes moved %u full %u\n",
+				       n, now_ms - since_ms, n ? sum / n : 0, worst, over, ui_danmaku_count(), moved, full);
+				n = sum = worst = over = 0;
+				since_ms = now_ms;
+			}
+		}
 		if (blanked) {
 			display_blanking_off(DEVICE_DT_GET(DT_CHOSEN(zephyr_display)));
 			blanked = false;
 		}
 
-		/* the comments move with the pictures of the video: 30 times a second is enough */
-		return cur == PAGE_PLAY && ui_danmaku_active() ? 40U : MIN(next, 20U);
+		if (cur == PAGE_PLAY && ui_danmaku_active()) {
+			/* a fixed beat of 33 ms, not 40 ms after the work: even steps look smooth */
+			static uint32_t beat;
+			uint32_t now = k_uptime_get_32();
+
+			beat += 33U;
+			if ((int32_t)(now - beat) > 66) {
+				beat = now;
+			}
+			return MAX((int32_t)(beat - now), 4);
+		}
+
+		return MIN(next, 20U);
 	}
 }

@@ -427,7 +427,21 @@ static void play_phase(void)
 		return;
 	}
 	if (step == 0) {
-		app_cmd(CMD_PLAY, LIST_RECOMMEND << 16 | (index % 20));
+		enum list_id list = IS_ENABLED(CONFIG_BILI_SELFTEST_PLAY_POPULAR) ? LIST_POPULAR : LIST_RECOMMEND;
+		struct list_info li;
+
+		app_list_info(list, &li);
+		if (li.count == 0) {
+			/* the list of the tab is only loaded when it is looked at */
+			static bool asked;
+
+			if (!asked) {
+				asked = true;
+				app_cmd(CMD_REFRESH, list);
+			}
+			return;
+		}
+		app_cmd(CMD_PLAY, list << 16 | (index % MIN(li.count, 20)));
 		printk("selftest: playing video %d\n", index);
 		step = 1;
 		since = now;
@@ -445,11 +459,11 @@ static void play_phase(void)
 			since = now;
 		}
 	} else if (step == 2) {
-		if (now - t0 >= 12000) {
+		if (now - t0 >= CONFIG_BILI_SELFTEST_PLAY_SECONDS * 1000) {
 			uint32_t moved = player_position_ms() - pos0;
 
-			snprintf(what, sizeof(what), "video %d plays on (%u ms in 12 s)", index, moved);
-			check(player_state() == PLAYER_PLAYING && moved > 9000, what);
+			snprintf(what, sizeof(what), "video %d plays on (%u ms in %d s)", index, moved, CONFIG_BILI_SELFTEST_PLAY_SECONDS);
+			check(player_state() == PLAYER_PLAYING && moved > CONFIG_BILI_SELFTEST_PLAY_SECONDS * 750, what);
 			app_cmd(CMD_STOP, 0);
 			step = 3;
 			since = now;

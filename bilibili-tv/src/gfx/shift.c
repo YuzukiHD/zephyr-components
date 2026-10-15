@@ -133,3 +133,90 @@ int shift_rows(int y, int h, int dy)
 
 	return ret;
 }
+
+/*
+ * A copy to the left inside one buffer reads and writes the same rows. Whether the accelerator
+ * reads far enough ahead of what it writes is checked once, on a small buffer against memmove().
+ */
+static int cols_state;		/* 0 not checked, 1 right, -1 wrong */
+
+static bool cols_check(void)
+{
+	enum { W = 128, H = 16, STEP = 7 };
+	uint32_t *buf = aligned_alloc(64, W * H * 4), *ref = malloc(W * H * 4);
+	bool good = false;
+
+	if (buf != NULL && ref != NULL) {
+		struct g2d_surface s = {.format = G2D_PIXFMT_ARGB8888, .width = W, .height = H, .plane = {buf},
+					.pitch = {W * 4}};
+		struct g2d_rect src = {STEP, 0, W - STEP, H}, dst = {0, 0, W - STEP, H};
+
+		for (int i = 0; i < W * H; i++) {
+			buf[i] = ref[i] = 0xff000000U | (uint32_t)i * 2654435761U >> 8;
+		}
+		for (int y = 0; y < H; y++) {
+			memmove(&ref[y * W], &ref[y * W + STEP], (W - STEP) * 4);
+		}
+		sys_cache_data_flush_and_invd_range(buf, W * H * 4);
+		if (g2d_blit(g2d, &s, &src, &s, &dst, G2D_ROTATE_0, G2D_FLAG_NO_CACHE_OPS) == 0) {
+			sys_cache_data_invd_range(buf, W * H * 4);
+			good = true;
+			for (int y = 0; y < H && good; y++) {
+				good = memcmp(&buf[y * W], &ref[y * W], (W - STEP) * 4) == 0;
+			}
+		}
+	}
+	free(buf);
+	free(ref);
+	printk("shift: a copy to the left inside the buffer is %s\n", good ? "right" : "WRONG");
+
+	return good;
+}
+
+static uint32_t cols_n, cols_wait_us, cols_total_us;
+
+void shift_cols_times(uint32_t *n, uint32_t *wait_us, uint32_t *total_us)
+{
+	*n = cols_n;
+	*wait_us = cols_wait_us;
+	*total_us = cols_total_us;
+	cols_n = cols_wait_us = cols_total_us = 0;
+}
+
+int shift_cols(int x, int y, int w, int h, int dx, bool sync)
+{
+	uint32_t t0 = k_cycle_get_32(), t1;
+
+	struct g2d_surface f, b;
+	struct g2d_rect src, dst, strip;
+	int ret;
+
+	if (!shift_ready() || dx <= 0 || dx >= w || x < 0 || y < 0 || x + w > (int)fb_w || y + h > (int)fb_h) {
+		return -EINVAL;
+	}
+	if (cols_state == 0) {
+		cols_state = cols_check() ? 1 : -1;
+	}
+	if (cols_state < 0) {
+		return -ENOTSUP;
+	}
+	surfaces(&f, &b);
+	sys_cache_data_flush_range(fb + (size_t)y * stride, (size_t)h * stride);
+	if (sync) {
+		t1 = k_cycle_get_32();
+		display_sunxi_wait_vsync(disp, 40);
+		cols_wait_us += k_cyc_to_us_floor32(k_cycle_get_32() - t1);
+	}
+	src = (struct g2d_rect){x + dx, y, w - dx, h};
+	dst = (struct g2d_rect){x, y, w - dx, h};
+	ret = g2d_blit(g2d, &f, &src, &f, &dst, G2D_ROTATE_0, G2D_FLAG_NO_CACHE_OPS);
+	if (ret == 0) {
+		strip = (struct g2d_rect){x + w - dx, y, dx, h};
+		g2d_fill(g2d, &f, &strip, 0);
+	}
+	sys_cache_data_invd_range(fb + (size_t)y * stride, (size_t)h * stride);
+	cols_n++;
+	cols_total_us += k_cyc_to_us_floor32(k_cycle_get_32() - t0);
+
+	return ret;
+}

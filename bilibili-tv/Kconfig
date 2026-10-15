@@ -78,6 +78,22 @@ config BILI_DM_FETCH
 	bool "Fetch the comments of a video before it plays"
 	default y
 
+config BILI_DM_SHIFT
+	bool "Move the picture of the scrolling comments with the 2D accelerator"
+	default y
+	help
+	  The scrolling comments all move with the same speed. The picture of their lanes is moved to
+	  the left by the accelerator and only the columns that come in at the right are drawn, instead of
+	  drawing every label again at its new place.
+
+config BILI_DM_VSYNC
+	bool "Wait for the vertical blank before the scrolling comments are moved"
+	depends on BILI_DM_SHIFT
+	default n
+	help
+	  Without the wait the interface does not stand still for about 11 ms per round; the move of a
+	  few pixels may show a seam for one frame.
+
 config BILI_DM_DEFAULT
 	bool "Show the comments when a video starts"
 	default y
@@ -152,6 +168,20 @@ config BILI_CRUMBS_TEST_S
 	int "Stop the system after this many seconds (0: never), to try the recorder"
 	depends on BILI_CRUMBS
 	default 0
+
+config BILI_SELFTEST_PLAY_POPULAR
+	bool "Play the videos of the popular list (default: the recommended ones)"
+	depends on BILI_SELFTEST
+
+config BILI_SELFTEST_PLAY_SECONDS
+	int "Seconds each video is played"
+	depends on BILI_SELFTEST
+	default 12
+	range 12 600
+
+config BILI_DM_LOG
+	bool "Print how long the interface rounds take while comments are shown"
+	default n
 
 config BILI_SELFTEST_PLAY_ONLY
 	bool "Self test: load the list and play videos one after another, nothing else"

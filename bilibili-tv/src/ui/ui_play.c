@@ -391,6 +391,11 @@ void ui_play_status(const char *text)
 	}
 }
 
+bool ui_play_msg_visible(void)
+{
+	return !lv_obj_has_flag(msg, LV_OBJ_FLAG_HIDDEN);
+}
+
 void ui_play_buffered(int permille)
 {
 	if (permille != buffered) {

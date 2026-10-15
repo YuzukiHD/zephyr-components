@@ -114,12 +114,18 @@ void ui_danmaku_run(uint32_t round_us);
 void ui_danmaku_enable(bool on);
 bool ui_danmaku_enabled(void);
 bool ui_danmaku_active(void);
+/** Comments on the screen just now */
+uint32_t ui_danmaku_count(void);
+/** How often the lanes were moved by the accelerator and how often they were drawn completely */
+void ui_danmaku_moves(uint32_t *moved, uint32_t *full);
 
 lv_obj_t *ui_play_create(lv_obj_t *parent);
 void ui_play_set(const char *title, uint32_t duration_ms);
 void ui_play_status(const char *text);
 void ui_play_position(uint32_t pos_ms, bool paused);
 void ui_play_buffered(int permille);
+/** Whether the message pill (loading, errors) is shown over the picture */
+bool ui_play_msg_visible(void);
 
 /** The colours and shape of the keys of an on-screen keyboard, for every state */
 void ui_keyboard_style(lv_obj_t *kb);

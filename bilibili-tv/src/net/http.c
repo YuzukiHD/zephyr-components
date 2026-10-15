@@ -105,7 +105,7 @@ static int tcp_connect(const char *host, const char *port, int tls_native, int v
 
 	ret = zsock_getaddrinfo(host, port, &hints, &res);
 	if (ret != 0) {
-		printk("http: cannot resolve %s (%d)\n", host, ret);
+		printk("http: cannot resolve %s (%d, errno %d)\n", host, ret, errno);
 		return -EHOSTUNREACH;
 	}
 	sock = zsock_socket(res->ai_family, res->ai_socktype, tls_native ? IPPROTO_TLS_1_2 : IPPROTO_TCP);

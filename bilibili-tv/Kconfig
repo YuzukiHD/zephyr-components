@@ -12,7 +12,7 @@ config BILI_WIFI_PSK
 
 config BILI_PROXY
 	string "HTTP proxy (host:port) for every request, empty for a direct connection"
-	default "192.168.1.9:7897"
+	default ""
 	help
 	  With a proxy the plain requests are sent with the full address and the https ones through a
 	  CONNECT tunnel, on which the TLS handshake is done by the application (the certificate of the

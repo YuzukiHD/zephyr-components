@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "TCP connections to the servers of a video site"
+
+config PROBE_WIFI_SSID
+	string "SSID (empty: the first line of /SD:/wifi.cfg)"
+	default ""
+
+config PROBE_WIFI_PSK
+	string "WPA2 passphrase (empty: the second line of /SD:/wifi.cfg)"
+	default ""
+
+config PROBE_SHORT
+	bool "Only three connections (for a run with the network debug log on)"
+	default n
+
+source "Kconfig.zephyr"

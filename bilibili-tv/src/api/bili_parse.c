@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <zephyr/sys/util.h>
 
 #include "api/bili_parse.h"
 #include "net/json.h"
@@ -269,10 +270,14 @@ int bili_cover_url(const char *pic, int w, int h, char *out, size_t size)
 	} else {
 		return -EINVAL;
 	}
-	if (strchr(p, '@') != NULL) {
-		n = snprintf(out, size, "http://%s", p);
-	} else {
-		n = snprintf(out, size, "http://%s@%dw_%dh_1c.jpg", p, w, h);
+	{
+		const char *scheme = IS_ENABLED(CONFIG_BILI_COVER_HTTPS) ? "https" : "http";
+
+		if (strchr(p, '@') != NULL) {
+			n = snprintf(out, size, "%s://%s", scheme, p);
+		} else {
+			n = snprintf(out, size, "%s://%s@%dw_%dh_1c.jpg", scheme, p, w, h);
+		}
 	}
 
 	return n >= (int)size ? -ENOSPC : n;

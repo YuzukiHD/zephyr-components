@@ -20,6 +20,8 @@
 
 #define API		"https://api.bilibili.com"
 #define ANSWER_MAX	(128 * 1024)
+/* the feed of the followed users carries every field of a post: about 20 posts need more than 128 KiB */
+#define FEED_MAX	(512 * 1024)
 #define QN_360P		16
 
 #define CODE_RISK	(-412)	/* too many requests / no browser identity */
@@ -55,20 +57,20 @@ static int64_t stamp(void)
 }
 
 /* one request: the whole answer in a new buffer, NULL when the transfer failed; @p res gets the cookies set */
-static char *fetch_res(const char *url, struct http_result *res)
+static char *fetch_res_max(const char *url, struct http_result *res, size_t max)
 {
 	struct http_opts o = {
 		.range_start = -1,
 		.tls_verify = IS_ENABLED(CONFIG_BILI_TLS_VERIFY),
 		.headers = headers(),
 	};
-	char *buf = malloc(ANSWER_MAX);
+	char *buf = malloc(max);
 	int n;
 
 	if (buf == NULL) {
 		return NULL;
 	}
-	n = http_get_text(url, &o, buf, ANSWER_MAX, res);
+	n = http_get_text(url, &o, buf, max, res);
 	if (n < 0) {
 		printk("api: %s failed (%d)\n", url + sizeof(API) - 1, n);
 		free(buf);
@@ -76,6 +78,11 @@ static char *fetch_res(const char *url, struct http_result *res)
 	}
 
 	return buf;
+}
+
+static char *fetch_res(const char *url, struct http_result *res)
+{
+	return fetch_res_max(url, res, ANSWER_MAX);
 }
 
 static char *fetch(const char *url)
@@ -286,6 +293,11 @@ int bili_api_stream(const struct bili_video *v, struct bili_stream *out)
 	if (ret == 0 && !IS_ENABLED(CONFIG_BILI_CDN_HTTPS) && strncmp(out->url, "https://", 8) == 0) {
 		/* the video servers answer on port 80 as well, without the cost of the encryption */
 		memmove(out->url + 4, out->url + 5, strlen(out->url + 5) + 1);
+	} else if (ret == 0 && IS_ENABLED(CONFIG_BILI_CDN_HTTPS) && strncmp(out->url, "http://", 7) == 0 &&
+		   strlen(out->url) + 2 <= sizeof(out->url)) {
+		/* the address of the answer is a plain one: the same server answers on 443 */
+		memmove(out->url + 5, out->url + 4, strlen(out->url + 4) + 1);
+		out->url[4] = 's';
 	}
 
 	return ret;
@@ -463,7 +475,7 @@ int bili_api_follow(int page, struct bili_video *out, int max, bool *more)
 	}
 	snprintf(url, sizeof(url), API "/x/polymer/web-dynamic/v1/feed/all?type=video&timezone_offset=-480&offset=%s",
 		 follow_offset);
-	a = fetch(url);
+	a = fetch_res_max(url, NULL, FEED_MAX);
 	if (a == NULL) {
 		return -EIO;
 	}

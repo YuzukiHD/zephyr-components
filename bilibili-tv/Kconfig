@@ -133,9 +133,17 @@ config BILI_COVER_CACHE
 
 config BILI_CDN_HTTPS
 	bool "Fetch the video over TLS too"
+	default y
 	help
-	  The video servers also answer on plain HTTP, which costs the CPU nothing; the API always
-	  uses TLS. Switch this on if a server insists on it.
+	  Every connection to a Bilibili server is encrypted: the API always, the video with this option
+	  (an address that comes as http:// is changed to https://). The video servers also answer on
+	  plain HTTP, which costs the CPU nothing.
+
+config BILI_COVER_HTTPS
+	bool "Fetch the covers and the pictures of the users over TLS"
+	default y
+	help
+	  The picture servers also answer on plain HTTP. With TLS every picture costs a handshake.
 
 config BILI_TLS_VERIFY
 	bool "Check the certificate of the API server"
@@ -182,6 +190,10 @@ config BILI_SELFTEST_PLAY_SECONDS
 config BILI_DM_LOG
 	bool "Print how long the interface rounds take while comments are shown"
 	default n
+
+config BILI_SELFTEST_WIFI_ONLY
+	bool "Only try the connection (leave, join again, wrong password, forget and save again)"
+	depends on BILI_SELFTEST
 
 config BILI_SELFTEST_PLAY_ONLY
 	bool "Self test: load the list and play videos one after another, nothing else"

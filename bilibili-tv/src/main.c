@@ -30,6 +30,9 @@
 #include "net/download.h"
 #include "net/http.h"
 #include "player/player.h"
+#ifdef CONFIG_MBEDTLS_MEMORY_DEBUG
+#include <mbedtls/memory_buffer_alloc.h>
+#endif
 #include "net/wifi.h"
 
 struct cmd {
@@ -573,6 +576,15 @@ leave:
 	ui_set_playing(NULL, 0);
 }
 
+static char saved_ssid[33];
+
+bool app_wifi_saved(char *ssid, size_t size)
+{
+	snprintf(ssid, size, "%s", saved_ssid);
+
+	return saved_ssid[0] != '\0';
+}
+
 static void wifi_cfg_write(const char *ssid, const char *psk)
 {
 	struct fs_file_t f;
@@ -588,6 +600,19 @@ static void wifi_cfg_write(const char *ssid, const char *psk)
 		printk("wifi: write of wifi.cfg failed\n");
 	}
 	fs_close(&f);
+	snprintf(saved_ssid, sizeof(saved_ssid), "%s", ssid);
+}
+
+/* the saved network is forgotten: the file goes, the connection too */
+static void wifi_forget(void)
+{
+	wifi_disconnect();
+	if (fs_unlink("/SD:/wifi.cfg") != 0) {
+		printk("wifi: /SD:/wifi.cfg could not be deleted\n");
+	}
+	saved_ssid[0] = '\0';
+	ui_set_status("Wi-Fi forgotten");
+	printk("wifi: the saved network is forgotten\n");
 }
 
 static void wifi_connect(const char *ssid, const char *psk, bool remember)
@@ -632,6 +657,7 @@ static void wifi_cfg_read(char *ssid, size_t ssid_size, char *psk, size_t psk_si
 	}
 	buf[strcspn(buf, "\r")] = '\0';
 	snprintf(ssid, ssid_size, "%s", buf);
+	snprintf(saved_ssid, sizeof(saved_ssid), "%s", buf);
 	if (nl != NULL) {
 		nl[strcspn(nl, "\r\n")] = '\0';
 		snprintf(psk, psk_size, "%s", nl);
@@ -899,6 +925,13 @@ static void worker_main(void *a, void *b, void *c)
 		case CMD_WIFI_SCAN:
 			wifi_scan_now();
 			break;
+		case CMD_WIFI_DISCONNECT:
+			wifi_disconnect();
+			ui_set_status("Wi-Fi disconnected");
+			break;
+		case CMD_WIFI_FORGET:
+			wifi_forget();
+			break;
 		case CMD_SAVE_SETTINGS:
 			settings_save();
 			break;
@@ -974,7 +1007,19 @@ int main(void)
 
 			beat = k_uptime_get();
 			cover_stats(s, sizeof(s));
-			printk("alive %u s; %s", (unsigned int)(beat / 1000), s);
+			{
+				size_t tls_peak = 0;
+				unsigned int free_kib, biggest_kib;
+
+#ifdef CONFIG_MBEDTLS_MEMORY_DEBUG
+				size_t tls_blocks;
+
+				mbedtls_memory_buffer_alloc_max_get(&tls_peak, &tls_blocks);
+#endif
+				app_mem_probe(&free_kib, &biggest_kib);
+				printk("alive %u s; free %u KiB (biggest %u), tls heap peak %u KiB; %s",
+				       (unsigned int)(beat / 1000), free_kib, biggest_kib, (unsigned int)(tls_peak / 1024), s);
+			}
 			if (player_state() != PLAYER_IDLE) {
 				printk("; player state %d at %u ms", (int)player_state(), player_position_ms());
 			}

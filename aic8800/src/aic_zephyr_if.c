@@ -25,7 +25,7 @@ void aic_mem_stats(size_t *used, size_t *peak);
 #define CONNECT_STACK_SIZE	6144
 #define CONNECT_PRIORITY	10
 /* the join is reported once the keys are in place; a join that does not complete in this time failed */
-#define JOIN_TIMEOUT_MS		40000
+#define JOIN_TIMEOUT_MS		20000
 
 struct aicz_data {
 	struct net_if *iface;

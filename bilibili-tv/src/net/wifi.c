@@ -18,9 +18,12 @@
 static struct net_mgmt_event_callback wifi_cb, ipv4_cb;
 static K_SEM_DEFINE(connected, 0, 1);
 static K_SEM_DEFINE(got_ip, 0, 1);
+static K_SEM_DEFINE(left, 0, 1);
 static int connect_status;
 static bool registered;
 static char current[33];
+static enum wifi_state state = WIFI_DISCONNECTED;
+static int last_error;
 
 static void wifi_event(struct net_mgmt_event_callback *cb, uint64_t event, struct net_if *iface)
 {
@@ -32,6 +35,11 @@ static void wifi_event(struct net_mgmt_event_callback *cb, uint64_t event, struc
 		k_sem_give(&connected);
 	} else if (event == NET_EVENT_WIFI_DISCONNECT_RESULT) {
 		printk("wifi: disconnected\n");
+		/* the end of a join that is going on is reported by the join itself */
+		if (state == WIFI_CONNECTED) {
+			state = WIFI_DISCONNECTED;
+		}
+		k_sem_give(&left);
 	}
 }
 
@@ -40,6 +48,51 @@ static void ipv4_event(struct net_mgmt_event_callback *cb, uint64_t event, struc
 	if (event == NET_EVENT_IPV4_ADDR_ADD) {
 		k_sem_give(&got_ip);
 	}
+}
+
+static void events_register(void)
+{
+	if (registered) {
+		return;
+	}
+	net_mgmt_init_event_callback(&wifi_cb, wifi_event,
+				     NET_EVENT_WIFI_CONNECT_RESULT | NET_EVENT_WIFI_DISCONNECT_RESULT);
+	net_mgmt_add_event_callback(&wifi_cb);
+	net_mgmt_init_event_callback(&ipv4_cb, ipv4_event, NET_EVENT_IPV4_ADDR_ADD);
+	net_mgmt_add_event_callback(&ipv4_cb);
+	registered = true;
+}
+
+enum wifi_state wifi_state(void)
+{
+	return state;
+}
+
+int wifi_last_error(void)
+{
+	return last_error;
+}
+
+int wifi_disconnect(void)
+{
+	struct net_if *iface = net_if_get_first_wifi();
+	int ret;
+
+	if (iface == NULL) {
+		return -ENODEV;
+	}
+	events_register();
+	k_sem_reset(&left);
+	ret = net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
+	if (ret == 0 && state == WIFI_CONNECTED) {
+		/* the event follows the request */
+		k_sem_take(&left, K_SECONDS(5));
+	}
+	state = WIFI_DISCONNECTED;
+	current[0] = '\0';
+	last_error = 0;
+
+	return ret == 0 ? 0 : -EIO;
 }
 
 int wifi_join(const char *ssid, const char *psk, int timeout_s)
@@ -54,34 +107,55 @@ int wifi_join(const char *ssid, const char *psk, int timeout_s)
 		.channel = WIFI_CHANNEL_ANY,
 		.band = WIFI_FREQ_BAND_UNKNOWN,
 	};
+	int ret;
 
 	if (iface == NULL) {
 		return -ENODEV;
 	}
-	if (!registered) {
-		net_mgmt_init_event_callback(&wifi_cb, wifi_event,
-					     NET_EVENT_WIFI_CONNECT_RESULT |
-					     NET_EVENT_WIFI_DISCONNECT_RESULT);
-		net_mgmt_add_event_callback(&wifi_cb);
-		net_mgmt_init_event_callback(&ipv4_cb, ipv4_event, NET_EVENT_IPV4_ADDR_ADD);
-		net_mgmt_add_event_callback(&ipv4_cb);
-		registered = true;
+	events_register();
+	if (state != WIFI_DISCONNECTED) {
+		/* another network (or the same one again): leave it first */
+		wifi_disconnect();
 	}
 	k_sem_reset(&connected);
 	k_sem_reset(&got_ip);
-	if (net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &p, sizeof(p)) != 0) {
-		return -EIO;
-	}
-	if (k_sem_take(&connected, K_SECONDS(timeout_s)) != 0) {
-		return -ETIMEDOUT;
-	}
-	if (connect_status != 0) {
-		return -ECONNREFUSED;
-	}
-	if (k_sem_take(&got_ip, K_SECONDS(timeout_s)) != 0) {
-		return -ENETUNREACH;
-	}
 	snprintf(current, sizeof(current), "%s", ssid);
+	state = WIFI_CONNECTING;
+	last_error = 0;
+	connect_status = 0;
+	/*
+	 * The driver reports every join, also the ones that fail, after at most 20 s; a request
+	 * while an earlier join is still running is answered with -EBUSY, so it is asked again.
+	 */
+	ret = net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &p, sizeof(p));
+	for (int i = 0; ret == -EBUSY && i < 100; i++) {
+		k_msleep(500);
+		k_sem_reset(&connected);
+		ret = net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &p, sizeof(p));
+	}
+	if (ret != 0) {
+		ret = ret == -EBUSY ? -EBUSY : -EIO;
+	} else if (k_sem_take(&connected, K_SECONDS(timeout_s)) != 0) {
+		ret = -ETIMEDOUT;
+	} else if (connect_status != 0) {
+		ret = -ECONNREFUSED;
+	} else if (k_sem_take(&got_ip, K_SECONDS(timeout_s)) != 0) {
+		ret = -ENETUNREACH;
+	} else {
+		ret = 0;
+	}
+	if (ret != 0) {
+		/* stop the attempts: a network that does not answer must not join later */
+		net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
+		/* the driver ends its own join (the report of it is not wanted by the next one) */
+		k_msleep(300);
+		k_sem_reset(&connected);
+		state = WIFI_FAILED;
+		last_error = ret;
+
+		return ret;
+	}
+	state = WIFI_CONNECTED;
 	{
 		char a[NET_IPV4_ADDR_LEN], m[NET_IPV4_ADDR_LEN], g[NET_IPV4_ADDR_LEN];
 		struct net_if_ipv4 *v4 = iface->config.ip.ipv4;

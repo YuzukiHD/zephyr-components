@@ -24,6 +24,7 @@
 #include <zephyr/arch/exception.h>
 #include <zephyr/cache.h>
 #include <zephyr/drivers/display/display_sunxi.h>
+#include <zephyr/fs/fs.h>
 #include <zephyr/device.h>
 #include <stdlib.h>
 #include <zephyr/kernel.h>
@@ -42,10 +43,10 @@
 #define MEM_TOLERANCE	256U	/* KiB */
 
 enum phase {
-	P_LIST, P_BENCH, P_SCROLL, P_TAB, P_SEARCH, P_PAGES, P_PLAY, P_DONE,
+	P_LIST, P_BENCH, P_SCROLL, P_TAB, P_SEARCH, P_PAGES, P_PLAY, P_WIFI, P_DONE,
 };
 
-static const char *const names[] = {"list", "bench", "scroll", "popular", "search", "pages", "play", "done"};
+static const char *const names[] = {"list", "bench", "scroll", "popular", "search", "pages", "play", "wifi", "done"};
 static const char *const words[] = {
 	"\xe5\x85\x83\xe8\xba\xab",					/* a common word */
 	"\xe9\xbe\x98",							/* a rare character */
@@ -127,7 +128,8 @@ static void list_phase(void)
 		round_no = 0;
 		lv_display_add_event_cb(lv_display_get_default(), render_event, LV_EVENT_RENDER_START, NULL);
 		lv_display_add_event_cb(lv_display_get_default(), render_event, LV_EVENT_RENDER_READY, NULL);
-		to(IS_ENABLED(CONFIG_BILI_SELFTEST_PLAY_ONLY) ? P_PLAY : P_BENCH);
+		to(IS_ENABLED(CONFIG_BILI_SELFTEST_WIFI_ONLY) ? P_WIFI :
+		   IS_ENABLED(CONFIG_BILI_SELFTEST_PLAY_ONLY) ? P_PLAY : P_BENCH);
 	} else if (k_uptime_get() - since > 120000) {
 		check(false, "the recommended list loaded");
 		to(P_SEARCH);
@@ -411,6 +413,106 @@ static void search_phase(void)
 	}
 }
 
+/*
+ * The connection of the board, as the buttons of the settings do it: leave the network, join the saved
+ * one again, a wrong password (the join fails, the saved network stays), forget the saved network
+ * (the file goes) and save it again by joining with the same name and password.
+ */
+static char wifi_name[33], wifi_pass[65];
+
+static void wifi_phase(void)
+{
+	char name[33];
+	int64_t now = k_uptime_get();
+	struct fs_dirent st;
+	bool timeout = now - since > 70000;
+
+	switch (step) {
+	case 0: {
+		struct fs_file_t f;
+		char buf[110] = "";
+		char *nl;
+
+		if (wifi_state() != WIFI_CONNECTED && !timeout) {
+			break;
+		}
+		check(wifi_state() == WIFI_CONNECTED, "the board is connected at the start");
+		fs_file_t_init(&f);
+		if (fs_open(&f, "/SD:/wifi.cfg", FS_O_READ) == 0) {
+			fs_read(&f, buf, sizeof(buf) - 1);
+			fs_close(&f);
+		}
+		nl = strchr(buf, '\n');
+		if (nl != NULL) {
+			*nl++ = '\0';
+			nl[strcspn(nl, "\r\n")] = '\0';
+			snprintf(wifi_pass, sizeof(wifi_pass), "%s", nl);
+		}
+		snprintf(wifi_name, sizeof(wifi_name), "%s", buf);
+		check(wifi_name[0] != '\0' && app_wifi_saved(name, sizeof(name)), "a network is saved");
+		app_cmd(CMD_WIFI_DISCONNECT, 0);
+		step = 1;
+		since = now;
+		break;
+	}
+	case 1:
+		if (wifi_state() == WIFI_DISCONNECTED || now - since > 15000) {
+			check(wifi_state() == WIFI_DISCONNECTED && wifi_current()[0] == '\0', "disconnect leaves the network");
+			check(app_wifi_saved(name, sizeof(name)), "disconnect keeps the saved network");
+			app_cmd(CMD_WIFI, 0);
+			step = 2;
+			since = now;
+		}
+		break;
+	case 2:
+		if (wifi_state() == WIFI_CONNECTED || now - since > 60000) {
+			check(wifi_state() == WIFI_CONNECTED && strcmp(wifi_current(), wifi_name) == 0, "the saved network is joined again");
+			app_cmd_wifi(wifi_name, "not the password");
+			step = 3;
+			since = now;
+		}
+		break;
+	case 3:
+		if (wifi_state() == WIFI_FAILED || now - since > 70000) {
+			check(wifi_state() == WIFI_FAILED, "a wrong password fails");
+			check(app_wifi_saved(name, sizeof(name)) && strcmp(name, wifi_name) == 0, "the failure keeps the saved network");
+			app_cmd(CMD_WIFI, 0);
+			step = 4;
+			since = now;
+		}
+		break;
+	case 4:
+		if (wifi_state() == WIFI_CONNECTED || now - since > 60000) {
+			check(wifi_state() == WIFI_CONNECTED, "the saved network works after the failure");
+			app_cmd(CMD_WIFI_FORGET, 0);
+			step = 5;
+			since = now;
+		}
+		break;
+	case 5:
+		if ((wifi_state() == WIFI_DISCONNECTED && !app_wifi_saved(name, sizeof(name))) || now - since > 20000) {
+			check(wifi_state() == WIFI_DISCONNECTED, "forget leaves the network");
+			check(!app_wifi_saved(name, sizeof(name)), "forget removes the saved network");
+			check(fs_stat("/SD:/wifi.cfg", &st) != 0, "forget deletes the file");
+			app_cmd_wifi(wifi_name, wifi_pass);
+			step = 6;
+			since = now;
+		}
+		break;
+	case 6:
+		/* the name is saved a moment after the join has ended */
+		if ((wifi_state() == WIFI_CONNECTED && app_wifi_saved(name, sizeof(name))) || now - since > 60000) {
+			check(wifi_state() == WIFI_CONNECTED, "the network is joined with its password");
+			check(app_wifi_saved(name, sizeof(name)) && strcmp(name, wifi_name) == 0, "joining saves the network again");
+			check(fs_stat("/SD:/wifi.cfg", &st) == 0, "the file is back");
+			check(failures == 0, "no step failed");
+			printk("selftest: %s\n", failures == 0 ? "PASS (0 failures)" : "FAIL");
+			to(P_DONE);
+		}
+		break;
+	}
+}
+
 /* plays the first videos for a while: the position has to move */
 static void play_phase(void)
 {
@@ -509,6 +611,9 @@ static void tick(lv_timer_t *t)
 		break;
 	case P_PLAY:
 		play_phase();
+		break;
+	case P_WIFI:
+		wifi_phase();
 		break;
 	default:
 		lv_timer_delete(t);

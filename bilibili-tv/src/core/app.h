@@ -40,6 +40,8 @@ enum app_cmd_type {
 	CMD_WIFI_SCAN,	/**< look for networks */
 	CMD_SAVE_SETTINGS, /**< write volume and brightness to the card */
 	CMD_USER_STATS,	/**< ask for the numbers of the account page */
+	CMD_WIFI_DISCONNECT, /**< leave the network, the saved one stays */
+	CMD_WIFI_FORGET, /**< leave the network and delete the saved one */
 };
 
 /** Posts a command to the worker thread; may be called from any thread */
@@ -47,6 +49,8 @@ void app_cmd(enum app_cmd_type type, int arg);
 /** Joins a network; the name and password are kept on the card when it worked */
 void app_cmd_wifi(const char *ssid, const char *psk);
 void app_cmd_search(const char *keyword);
+/** The name of the network that is saved on the card (and joined again at the start); false when there is none */
+bool app_wifi_saved(char *ssid, size_t size);
 
 /** What a list holds now; @p gen changes when the list was replaced (a refresh or a new search) */
 struct list_info {

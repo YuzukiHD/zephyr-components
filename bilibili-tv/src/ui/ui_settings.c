@@ -5,10 +5,12 @@
  */
 
 /*
- * The settings tab of the home page: the Wi-Fi network (scan, pick one, type the password) on the
- * left, volume and brightness on the right.
+ * The settings tab of the home page: the Wi-Fi network (the state, disconnect / join the saved network
+ * again / forget it, scan, pick another one and type its password) on the left, volume and brightness
+ * on the right.
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/kernel.h>
@@ -21,9 +23,15 @@
 #define AP_SHOWN	10
 #define ROW_H		54
 #define C_ROW		lv_color_hex(0x26303c)
+#define C_ERR		lv_color_hex(0xf26d6d)
+#define FORGET_CONFIRM_MS 3000
 
 static lv_obj_t *area, *cur_label, *scan_btn, *scan_label, *ap_box, *pw_box, *pw_title, *pw_ta, *kb;
 static lv_obj_t *vol_slider, *vol_value, *bri_slider, *bri_value;
+static lv_obj_t *act_row, *disc_btn, *again_btn, *forget_btn, *forget_label;
+static char saved[33];
+static int64_t forget_armed;
+static enum wifi_state shown_state = (enum wifi_state)-1;
 static struct wifi_ap shown[AP_SHOWN];
 static int shown_n;
 static char selected[33];
@@ -34,6 +42,31 @@ static void scan_clicked(lv_event_t *e)
 {
 	app_cmd(CMD_WIFI_SCAN, 0);
 	lv_label_set_text(scan_label, "\xe6\x89\xab\xe6\x8f\x8f\xe4\xb8\xad...");		/* scanning */
+}
+
+static void disc_clicked(lv_event_t *e)
+{
+	app_cmd(CMD_WIFI_DISCONNECT, 0);
+}
+
+static void again_clicked(lv_event_t *e)
+{
+	app_cmd(CMD_WIFI, 0);		/* the saved network */
+}
+
+/* two taps within a few seconds: a wrong tap must not lose the password */
+static void forget_clicked(lv_event_t *e)
+{
+	int64_t now = k_uptime_get();
+
+	if (forget_armed != 0 && now - forget_armed < FORGET_CONFIRM_MS) {
+		forget_armed = 0;
+		app_cmd(CMD_WIFI_FORGET, 0);
+		lv_label_set_text(forget_label, "\xe5\xbf\x98\xe8\xae\xb0");			/* forget */
+	} else {
+		forget_armed = now;
+		lv_label_set_text(forget_label, "\xe7\xa1\xae\xe8\xae\xa4\xe5\xbf\x98\xe8\xae\xb0");	/* sure? forget */
+	}
 }
 
 static void pw_hide(void)
@@ -61,6 +94,13 @@ static void ap_clicked(lv_event_t *e)
 		return;
 	}
 	snprintf(selected, sizeof(selected), "%s", shown[i].ssid);
+	if (strcmp(selected, wifi_current()) == 0 && wifi_state() != WIFI_FAILED) {
+		return;		/* the network of the connection (or the join) */
+	}
+	if (saved[0] != '\0' && strcmp(selected, saved) == 0) {
+		app_cmd(CMD_WIFI, 0);	/* its password is saved */
+		return;
+	}
 	if (!shown[i].secured) {
 		app_cmd_wifi(selected, "");
 		return;
@@ -132,17 +172,35 @@ lv_obj_t *ui_settings_create(lv_obj_t *parent, lv_obj_t *overlay, int top, int h
 	wifi = ui_card_panel(area, 24, 12, 620, height - 24);
 	ui_text(wifi, ui_font_l, C_TEXT, 28, 22);
 	lv_label_set_text(lv_obj_get_child(wifi, -1), "\xe6\x97\xa0\xe7\xba\xbf\xe7\xbd\x91\xe7\xbb\x9c");	/* wireless network */
-	cur_label = ui_text(wifi, ui_font_s, C_DIM, 28, 70);
+	cur_label = ui_text(wifi, ui_font_m, C_DIM, 28, 66);
 	lv_label_set_long_mode(cur_label, LV_LABEL_LONG_DOT);
-	lv_obj_set_width(cur_label, 400);
+	lv_obj_set_width(cur_label, 564);
+	/* what can be done with the connection, the buttons that do not fit the state are hidden */
+	act_row = lv_obj_create(wifi);
+	lv_obj_set_pos(act_row, 16, 104);
+	lv_obj_set_size(act_row, 588, 48);
+	lv_obj_set_style_bg_opa(act_row, LV_OPA_TRANSP, 0);
+	lv_obj_set_style_border_width(act_row, 0, 0);
+	lv_obj_set_style_pad_all(act_row, 0, 0);
+	lv_obj_set_style_pad_column(act_row, 12, 0);
+	lv_obj_remove_flag(act_row, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_flex_flow(act_row, LV_FLEX_FLOW_ROW);
+	disc_btn = ui_button(act_row, "\xe6\x96\xad\xe5\xbc\x80", disc_clicked, NULL);			/* disconnect */
+	ui_button_size(disc_btn, 130, 44);
+	again_btn = ui_button(act_row, "\xe9\x87\x8d\xe6\x96\xb0\xe8\xbf\x9e\xe6\x8e\xa5", again_clicked, NULL);	/* connect again */
+	ui_button_size(again_btn, 150, 44);
+	lv_obj_set_style_bg_color(again_btn, C_ACCENT, 0);
+	forget_btn = ui_button(act_row, "\xe5\xbf\x98\xe8\xae\xb0", forget_clicked, NULL);		/* forget */
+	forget_label = lv_obj_get_child(forget_btn, 0);
+	ui_button_size(forget_btn, 170, 44);
 	scan_btn = ui_button(wifi, "\xe6\x89\xab\xe6\x8f\x8f", scan_clicked, NULL);			/* scan */
 	scan_label = lv_obj_get_child(scan_btn, 0);
 	ui_button_size(scan_btn, 130, 46);
 	lv_obj_set_style_bg_color(scan_btn, C_ACCENT, 0);
 	lv_obj_set_pos(scan_btn, 620 - 28 - 130, 24);
 	ap_box = lv_obj_create(wifi);
-	lv_obj_set_pos(ap_box, 16, 112);
-	lv_obj_set_size(ap_box, 588, height - 24 - 112 - 16);
+	lv_obj_set_pos(ap_box, 16, 164);
+	lv_obj_set_size(ap_box, 588, height - 24 - 164 - 16);
 	lv_obj_set_style_bg_opa(ap_box, LV_OPA_TRANSP, 0);
 	lv_obj_set_style_border_width(ap_box, 0, 0);
 	lv_obj_set_style_pad_all(ap_box, 0, 0);
@@ -242,16 +300,93 @@ static void ap_rebuild(void)
 		lv_obj_set_style_text_color(l, now ? C_ACCENT : C_TEXT, 0);
 		lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
 		lv_obj_set_width(l, 390);
-		snprintf(t, sizeof(t), "%s%s", now ? LV_SYMBOL_OK "  " : "", aps[i].ssid);
+		snprintf(t, sizeof(t), "%s%s", now && wifi_state() == WIFI_CONNECTED ? LV_SYMBOL_OK "  " : "", aps[i].ssid);
 		lv_label_set_text(l, t);
 		lv_obj_align(l, LV_ALIGN_LEFT_MID, 18, 0);
 		l = lv_label_create(b);
 		lv_obj_set_style_text_font(l, ui_font_s, 0);
 		lv_obj_set_style_text_color(l, aps[i].rssi > -60 ? C_ACCENT : C_DIM, 0);
-		snprintf(t, sizeof(t), "%s" LV_SYMBOL_WIFI, aps[i].secured ? "\xe5\x8a\xa0\xe5\xaf\x86  " : "");	/* secured */
+		snprintf(t, sizeof(t), "%s%s" LV_SYMBOL_WIFI,
+			 saved[0] != '\0' && strcmp(aps[i].ssid, saved) == 0 ? "\xe5\xb7\xb2\xe4\xbf\x9d\xe5\xad\x98  " : "",	/* saved */
+			 aps[i].secured ? "\xe5\x8a\xa0\xe5\xaf\x86  " : "");					/* secured */
 		lv_label_set_text(l, t);
 		lv_obj_align(l, LV_ALIGN_RIGHT_MID, -18, 0);
 		lv_obj_add_event_cb(b, ap_clicked, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+	}
+}
+
+/* the line with the state of the connection and the buttons that fit it */
+static void wifi_status_show(void)
+{
+	enum wifi_state st = wifi_state();
+	char t[96], name[33], now_saved[33];
+	const char *cur = wifi_current();
+	lv_color_t color = C_DIM;
+	bool has_saved = app_wifi_saved(now_saved, sizeof(now_saved));
+
+	if (strcmp(now_saved, saved) != 0) {
+		snprintf(saved, sizeof(saved), "%s", now_saved);
+		ap_dirty = true;
+	}
+	snprintf(name, sizeof(name), "%s", cur);
+	switch (st) {
+	case WIFI_CONNECTED:
+		snprintf(t, sizeof(t), "%s%s", "\xe5\xb7\xb2\xe8\xbf\x9e\xe6\x8e\xa5\xef\xbc\x9a", name);	/* connected: */
+		color = C_ACCENT;
+		break;
+	case WIFI_CONNECTING:
+		snprintf(t, sizeof(t), "%s%s ...", "\xe6\xad\xa3\xe5\x9c\xa8\xe8\xbf\x9e\xe6\x8e\xa5\xef\xbc\x9a", name);	/* connecting: */
+		color = C_TEXT;
+		break;
+	case WIFI_FAILED:
+		snprintf(t, sizeof(t), "%s%s\xef\xbc\x88%s\xef\xbc\x89", "\xe8\xbf\x9e\xe6\x8e\xa5\xe5\xa4\xb1\xe8\xb4\xa5\xef\xbc\x9a", name,	/* failed: */
+			 wifi_last_error() == -ENETUNREACH ? "\xe6\x97\xa0\xe6\xb3\x95\xe8\x8e\xb7\xe5\x8f\x96\xe5\x9c\xb0\xe5\x9d\x80" :	/* no address */
+			 "\xe5\xaf\x86\xe7\xa0\x81\xe9\x94\x99\xe8\xaf\xaf\xe6\x88\x96\xe4\xbf\xa1\xe5\x8f\xb7\xe5\xbc\xb1");	/* wrong password or weak signal */
+		color = C_ERR;
+		break;
+	default:
+		snprintf(t, sizeof(t), "%s%s%s", "\xe6\x9c\xaa\xe8\xbf\x9e\xe6\x8e\xa5",			/* not connected */
+			 has_saved ? "\xef\xbc\x88\xe5\xb7\xb2\xe4\xbf\x9d\xe5\xad\x98\xef\xbc\x9a" : "", has_saved ? saved : "");	/* (saved: */
+		if (has_saved) {
+			strncat(t, "\xef\xbc\x89", sizeof(t) - strlen(t) - 1);
+		}
+		break;
+	}
+	if (strcmp(lv_label_get_text(cur_label), t) != 0) {
+		lv_label_set_text(cur_label, t);
+		ap_dirty = true;
+	}
+	lv_obj_set_style_text_color(cur_label, color, 0);
+	if (st != shown_state) {
+		shown_state = st;
+		ap_dirty = true;
+		lv_obj_remove_flag(disc_btn, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_remove_flag(again_btn, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_remove_flag(forget_btn, LV_OBJ_FLAG_HIDDEN);
+		if (st != WIFI_CONNECTED) {
+			lv_obj_add_flag(disc_btn, LV_OBJ_FLAG_HIDDEN);
+		}
+		if (st == WIFI_CONNECTED || st == WIFI_CONNECTING || !has_saved) {
+			lv_obj_add_flag(again_btn, LV_OBJ_FLAG_HIDDEN);
+		}
+		if (st == WIFI_CONNECTING || !has_saved) {
+			lv_obj_add_flag(forget_btn, LV_OBJ_FLAG_HIDDEN);
+		}
+	} else {
+		/* the saved network can appear or go while the state stays */
+		if (has_saved && st != WIFI_CONNECTING) {
+			lv_obj_remove_flag(forget_btn, LV_OBJ_FLAG_HIDDEN);
+			if (st != WIFI_CONNECTED) {
+				lv_obj_remove_flag(again_btn, LV_OBJ_FLAG_HIDDEN);
+			}
+		} else {
+			lv_obj_add_flag(forget_btn, LV_OBJ_FLAG_HIDDEN);
+			lv_obj_add_flag(again_btn, LV_OBJ_FLAG_HIDDEN);
+		}
+	}
+	if (forget_armed != 0 && k_uptime_get() - forget_armed >= FORGET_CONFIRM_MS) {
+		forget_armed = 0;
+		lv_label_set_text(forget_label, "\xe5\xbf\x98\xe8\xae\xb0");
 	}
 }
 
@@ -277,7 +412,6 @@ void ui_settings_run(bool visible)
 {
 	bool scanning = false;
 	struct wifi_ap none;
-	char t[64];
 
 	if (!visible) {
 		if (!lv_obj_has_flag(pw_box, LV_OBJ_FLAG_HIDDEN)) {
@@ -285,12 +419,7 @@ void ui_settings_run(bool visible)
 		}
 		return;
 	}
-	snprintf(t, sizeof(t), "%s%s", "\xe5\xbd\x93\xe5\x89\x8d\xe7\xbd\x91\xe7\xbb\x9c\xef\xbc\x9a",	/* current network: */
-		 wifi_current()[0] != '\0' ? wifi_current() : "-");
-	if (strcmp(lv_label_get_text(cur_label), t) != 0) {
-		lv_label_set_text(cur_label, t);
-		ap_dirty = true;
-	}
+	wifi_status_show();
 	app_wifi_results(&none, 0, &scanning);
 	if (was_scanning && !scanning) {
 		lv_label_set_text(scan_label, "\xe6\x89\xab\xe6\x8f\x8f");			/* scan */

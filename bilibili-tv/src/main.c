@@ -435,6 +435,37 @@ static void play_loop(const struct bili_video *v, const struct player_info *info
 	ui_set_playing(NULL, 0);
 }
 
+/*
+ * The header is in, but the data arrives slower than it is played while the connection is still in
+ * its slow start, so playing at once stalls in the first seconds. Wait until a few seconds of the
+ * stream are in the file (the download's own progress shows the percentage meanwhile), or the
+ * download is over, fails, is cancelled or takes too long.
+ */
+static void prebuffer(const struct bili_stream *s, const struct player_info *info)
+{
+	uint64_t want, av;
+	int64_t t0 = k_uptime_get();
+	int state;
+
+	if (CONFIG_BILI_PREBUFFER_SEC <= 0 || info->duration_ms == 0 || s->size == 0) {
+		return;
+	}
+	want = s->size * (CONFIG_BILI_PREBUFFER_SEC * 1000ULL) / info->duration_ms;
+	want = MIN(MAX(want, 256 * 1024ULL), s->size);
+	for (;;) {
+		av = dl_avail(NULL, &state);
+		ui_set_status("\xe6\xad\xa3\xe5\x9c\xa8\xe7\xbc\x93\xe5\x86\xb2 %u%%",	/* buffering */
+			      (unsigned int)MIN(av * 100 / want, 99ULL));
+		if (state != 0 || av >= want || atomic_get(&stop_req) ||
+		    k_uptime_get() - t0 > CONFIG_BILI_PREBUFFER_TIMEOUT_SEC * 1000) {
+			break;
+		}
+		k_msleep(50);
+	}
+	printk("play: prebuffer %u of %u KiB in %d ms\n", (unsigned int)(av / 1024),
+	       (unsigned int)(want / 1024), (int)(k_uptime_get() - t0));
+}
+
 static void play(enum list_id list, int index)
 {
 	struct bili_video v;
@@ -519,7 +550,10 @@ static void play(enum list_id list, int index)
 		mem_note("with the player open");
 	} else {
 		/* the file is played while it comes: the header is at its beginning */
-		struct player_growing g = {.total = s.size, .avail = dl_avail};
+		/* the player keeps this pointer until it is closed: not a variable of the block */
+		static struct player_growing g;
+
+		g = (struct player_growing){.total = s.size, .avail = dl_avail};
 
 		loading_text = true;
 		ui_set_status("\xe6\xad\xa3\xe5\x9c\xa8\xe7\xbc\x93\xe5\x86\xb2 0%%");		/* buffering */
@@ -532,8 +566,13 @@ static void play(enum list_id list, int index)
 		ret = player_open_growing(path, &g, &info);
 		mem_note("with the player open");
 		printk("play: player_open_growing returned %d\n", ret);
-		loading_text = false;
 		growing = true;
+		loading_text = false;	/* the prebuffer shows its own percentage */
+		if (ret == 0) {
+			prebuffer(&s, &info);
+		}
+		loading_text = false;
+		ui_set_status("");
 		if (ret != 0) {
 			dl_stop();
 			fs_unlink(path);

@@ -561,11 +561,53 @@ static void play_phase(void)
 			since = now;
 		}
 	} else if (step == 2) {
-		if (now - t0 >= CONFIG_BILI_SELFTEST_PLAY_SECONDS * 1000) {
+		/* pause for a moment and go on: the state must follow and the position move again */
+		static int pause_phase;
+		static int64_t pause_at;
+		static uint32_t pause_pos;
+		static int pause_toggles;
+
+		if (pause_phase == 0 && now - t0 >= 3000) {
+			app_cmd(CMD_PAUSE, 0);
+			pause_at = now;
+			pause_phase = 1;
+		} else if (pause_phase == 1 && now - pause_at >= 2500) {
+			check(player_state() == PLAYER_PAUSED, "the player is paused");
+			pause_pos = player_position_ms();
+			app_cmd(CMD_PAUSE, 0);
+			pause_at = now;
+			pause_phase = 2;
+		} else if (pause_phase == 2 && now - pause_at >= 3000) {
+			check(player_state() == PLAYER_PLAYING && player_position_ms() > pause_pos + 1500,
+			      "the player plays on after the pause");
+			pause_phase = 3;
+			pause_at = now;
+			pause_toggles = 0;
+		} else if (pause_phase == 3 && now - pause_at >= 350) {
+			/* quick taps on the button */
+			app_cmd(CMD_PAUSE, 0);
+			pause_at = now;
+			if (++pause_toggles >= 9) {
+				pause_phase = 4;
+			}
+		} else if (pause_phase == 4 && now - pause_at >= 4000) {
+			if (player_state() == PLAYER_PAUSED) {
+				app_cmd(CMD_PAUSE, 0);
+			}
+			pause_phase = 5;
+			pause_at = now;
+		} else if (pause_phase == 5 && now - pause_at >= 3000) {
+			check(player_state() == PLAYER_PLAYING, "the player plays after quick pause taps");
+			pause_phase = 6;
+			pos0 = player_position_ms();
+			t0 = now;
+		}
+		if (pause_phase == 6 && now - t0 >= CONFIG_BILI_SELFTEST_PLAY_SECONDS * 1000) {
 			uint32_t moved = player_position_ms() - pos0;
 
 			snprintf(what, sizeof(what), "video %d plays on (%u ms in %d s)", index, moved, CONFIG_BILI_SELFTEST_PLAY_SECONDS);
 			check(player_state() == PLAYER_PLAYING && moved > CONFIG_BILI_SELFTEST_PLAY_SECONDS * 750, what);
+			pause_phase = 0;
 			app_cmd(CMD_STOP, 0);
 			step = 3;
 			since = now;

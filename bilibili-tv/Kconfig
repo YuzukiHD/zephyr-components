@@ -74,6 +74,18 @@ config BILI_UI_RAM
 	select CODE_DATA_RELOCATION
 	default y
 
+config BILI_PREBUFFER_SEC
+	int "Seconds of video to download before playing starts"
+	default 6
+	range 0 30
+	help
+	  Avoids stalls in the first seconds while the connection speeds up. 0: start at once.
+
+config BILI_PREBUFFER_TIMEOUT_SEC
+	int "Longest wait for the prebuffer, in seconds"
+	default 20
+	range 1 120
+
 config BILI_DM_FETCH
 	bool "Fetch the comments of a video before it plays"
 	default y

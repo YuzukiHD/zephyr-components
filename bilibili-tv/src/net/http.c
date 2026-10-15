@@ -154,17 +154,38 @@ static int fd_send_all(int sock, const void *data, size_t len)
 	return 0;
 }
 
-/* waits for data; 0 when there is some, -ETIMEDOUT or -errno otherwise */
+static http_cancel_fn cancel_fn;
+
+void http_set_cancel(http_cancel_fn fn)
+{
+	cancel_fn = fn;
+}
+
+/* waits for data; 0 when there is some, -ETIMEDOUT, -ECANCELED or -errno otherwise */
 static int fd_wait(int fd, int timeout_ms)
 {
 	struct zsock_pollfd pfd = {.fd = fd, .events = ZSOCK_POLLIN};
-	int ret = zsock_poll(&pfd, 1, timeout_ms);
+	int waited = 0;
 
-	if (ret < 0) {
-		printk("http: poll failed (%d)\n", -errno);
+	for (;;) {
+		int slice = MIN(timeout_ms - waited, 200);
+		int ret = zsock_poll(&pfd, 1, slice);
+
+		if (ret < 0) {
+			printk("http: poll failed (%d)\n", -errno);
+			return -errno;
+		}
+		if (ret > 0) {
+			return 0;
+		}
+		waited += slice;
+		if (cancel_fn != NULL && cancel_fn()) {
+			return -ECANCELED;
+		}
+		if (waited >= timeout_ms) {
+			return -ETIMEDOUT;
+		}
 	}
-
-	return ret > 0 ? 0 : (ret == 0 ? -ETIMEDOUT : -errno);
 }
 
 static int bio_send(void *ctx, const unsigned char *buf, size_t len)

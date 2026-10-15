@@ -9,6 +9,7 @@
 #ifndef BILI_HTTP_H_
 #define BILI_HTTP_H_
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -36,6 +37,13 @@ struct http_result {
  * absolute-address requests, https:// URLs through a CONNECT tunnel with the TLS handshake done
  * here (the server certificate is not checked in that case).
  */
+/**
+ * A function that is asked every 200 ms while a request waits for data; true ends the request with
+ * -ECANCELED. It runs in the thread of the request.
+ */
+typedef bool (*http_cancel_fn)(void);
+void http_set_cancel(http_cancel_fn fn);
+
 void http_set_proxy(const char *hostport);
 
 /**

@@ -59,6 +59,26 @@ struct vlist {
 
 K_MSGQ_DEFINE(cmd_q, sizeof(struct cmd), 8, 4);
 static atomic_t stop_req;
+static k_tid_t worker_tid;
+static volatile bool preparing;	/* play() is running in the worker: a stop ends its requests */
+
+/* asked by the HTTP client while the worker waits for an answer */
+static bool http_cancelled(void)
+{
+	return preparing && k_current_get() == worker_tid && atomic_get(&stop_req);
+}
+
+/* the player reads the state of the download: a stop looks like a failed download to it */
+static uint64_t avail_or_stop(void *ctx, int *state)
+{
+	uint64_t av = dl_avail(ctx, state);
+
+	if (*state == 0 && atomic_get(&stop_req)) {
+		*state = -ECANCELED;
+	}
+
+	return av;
+}
 
 static K_MUTEX_DEFINE(lists_lock);
 static struct vlist lists[LIST_COUNT];
@@ -466,7 +486,7 @@ static void prebuffer(const struct bili_stream *s, const struct player_info *inf
 	       (unsigned int)(want / 1024), (int)(k_uptime_get() - t0));
 }
 
-static void play(enum list_id list, int index)
+static void play_run(enum list_id list, int index)
 {
 	struct bili_video v;
 	struct bili_stream s;
@@ -495,6 +515,11 @@ static void play(enum list_id list, int index)
 
 	ui_set_status("\xe6\xad\xa3\xe5\x9c\xa8\xe8\x8e\xb7\xe5\x8f\x96\xe6\x92\xad\xe6\x94\xbe\xe5\x9c\xb0\xe5\x9d\x80...");	/* getting the address */
 	ret = bili_api_stream(&v, &s);
+	if (atomic_get(&stop_req)) {
+		ui_set_status("");
+		ui_set_playing(NULL, 0);
+		return;
+	}
 	if (ret != 0) {
 		ui_set_status("\xe6\x97\xa0\xe6\xb3\x95\xe8\x8e\xb7\xe5\x8f\x96\xe6\x92\xad\xe6\x94\xbe\xe5\x9c\xb0\xe5\x9d\x80 (%d)", ret);	/* no stream address */
 		goto leave;
@@ -519,6 +544,11 @@ static void play(enum list_id list, int index)
 		}
 		printk("danmaku: %d comments\n", n);
 		ui_set_danmaku(dm);
+	}
+	if (atomic_get(&stop_req)) {
+		ui_set_status("");
+		ui_set_playing(NULL, 0);
+		return;
 	}
 
 	if (fs_stat(CONFIG_BILI_CACHE_DIR, &st) != 0) {
@@ -553,7 +583,7 @@ static void play(enum list_id list, int index)
 		/* the player keeps this pointer until it is closed: not a variable of the block */
 		static struct player_growing g;
 
-		g = (struct player_growing){.total = s.size, .avail = dl_avail};
+		g = (struct player_growing){.total = s.size, .avail = avail_or_stop};
 
 		loading_text = true;
 		ui_set_status("\xe6\xad\xa3\xe5\x9c\xa8\xe7\xbc\x93\xe5\x86\xb2 0%%");		/* buffering */
@@ -871,9 +901,19 @@ static void wifi_scan_now(void)
 	printk("wifi: %d networks found (%d)\n", ap_count, n);
 }
 
+static void play(enum list_id list, int index)
+{
+	preparing = true;
+	play_run(list, index);
+	preparing = false;
+}
+
 static void worker_main(void *a, void *b, void *c)
 {
 	struct cmd cmd;
+
+	worker_tid = k_current_get();
+	http_set_cancel(http_cancelled);
 
 	char ssid[33] = CONFIG_BILI_WIFI_SSID, psk[65] = CONFIG_BILI_WIFI_PSK;
 

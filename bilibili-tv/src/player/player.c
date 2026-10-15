@@ -347,9 +347,14 @@ static int open_impl(const char *path, const struct player_growing *g, struct pl
 	pl_audio_running = false;
 	pl_audio_end_us = -1;
 	pl_video_ready_seq = UINT32_MAX;
-	pl_state = PLAYER_PLAYING;
+	/*
+	 * A file that is still downloading is opened held on its first picture: the application starts the
+	 * sound and the video with player_play() when enough of the stream is in, so the slow start of the
+	 * connection does not eat the first seconds.
+	 */
+	pl_state = g != NULL ? PLAYER_PAUSED : PLAYER_PLAYING;
 	pl_req.seq = 0;
-	pl_req_post(0, true);
+	pl_req_post(0, g == NULL);
 	k_thread_create(&pl_video_thread, video_stack, K_THREAD_STACK_SIZEOF(video_stack), pl_video_main,
 			NULL, NULL, NULL, 6, 0, K_NO_WAIT);
 	k_thread_name_set(&pl_video_thread, "pl_video");

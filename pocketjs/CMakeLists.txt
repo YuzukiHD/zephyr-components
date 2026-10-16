@@ -56,7 +56,15 @@ zephyr_library_include_directories(${QJS_DIR})
 # libcs by the name of the platform; __DJGPP is the one of them that also times with
 # gettimeofday(), which src/pocketjs_std.c provides (no SharedArrayBuffer/Atomics).
 zephyr_library_compile_definitions(_GNU_SOURCE QUICKJS_NG_BUILD __DJGPP)
-zephyr_library_compile_options(-O2 -std=gnu11 -include ${CMAKE_CURRENT_LIST_DIR}/shim/pocketjs_libc.h
+# JS_CallInternal is 39 KB at -O2 and 26 KB at -Os, the instruction cache has 32 KB: measured on
+# the benchmark scenes -Os gives 5..12% less script time (IPC 0.09 -> 0.11) and a smaller image
+set(POCKETJS_QJS_OPT "-Os" CACHE STRING "Optimisation flag of the QuickJS interpreter")
+set_source_files_properties(${QJS_PREPARED} PROPERTIES COMPILE_OPTIONS ${POCKETJS_QJS_OPT})
+
+# -ffreestanding (from the Zephyr flags) implies -fno-builtin: QuickJS reads the operands of its
+# bytecodes with memcpy(&x, pc, 2), which then became a call of the libc memcpy for every local
+# variable access (110 cycles per bytecode). -fbuiltin turns the small copies into loads again.
+zephyr_library_compile_options(-O2 -fbuiltin -std=gnu11 -include ${CMAKE_CURRENT_LIST_DIR}/shim/pocketjs_libc.h
   -Wno-unused-parameter -Wno-sign-compare -Wno-implicit-fallthrough
   -Wno-missing-field-initializers -Wno-format -Wno-cast-function-type)
 # the host's own C files are written to -Wall -Wextra clean; the format macros
@@ -64,6 +72,11 @@ zephyr_library_compile_options(-O2 -std=gnu11 -include ${CMAKE_CURRENT_LIST_DIR}
 zephyr_library_link_libraries(m)
 
 zephyr_library_sources_ifdef(CONFIG_POCKETJS_G2D ${CMAKE_CURRENT_LIST_DIR}/src/pocketjs_g2d.c)
+if(CONFIG_POCKETJS_TURN_STATS)
+  zephyr_library_sources(${CMAKE_CURRENT_LIST_DIR}/src/pocketjs_turn_stats.c)
+  zephyr_link_libraries(-Wl,--wrap=pocketjs_guest_frame -Wl,--wrap=pocketjs_ui_core_tick
+    -Wl,--wrap=pocketjs_ui_core_draw)
+endif()
 zephyr_include_directories(${CMAKE_CURRENT_LIST_DIR}/include)
 
 # --- Rust archives ----------------------------------------------------------
@@ -110,7 +123,16 @@ set(RS_SRC ${HOST}/native/render-rgb565 ${HOST}/native/abi ${HOST}/native/runtim
 file(GLOB_RECURSE RS_FILES CONFIGURE_DEPENDS
   ${HOST}/native/render-rgb565/*.rs ${HOST}/native/render-rgb565/Cargo.*
   ${PJS_DIR}/engine/backends/rgb565/src/*.rs ${PJS_DIR}/engine/backends/rgb565/Cargo.*
-  ${CMAKE_CURRENT_LIST_DIR}/tools/patch_rgb565.py)
+  ${CMAKE_CURRENT_LIST_DIR}/tools/patch_rgb565.py
+  ${CMAKE_CURRENT_LIST_DIR}/tools/patch_core_raster.py
+  ${PJS_DIR}/engine/core/src/raster.rs)
+# the patched copies are made at configure time: a change of a patch or of a patched file
+# has to run the configuration again
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_LIST_DIR}/tools/patch_rgb565.py
+  ${CMAKE_CURRENT_LIST_DIR}/tools/patch_core_raster.py
+  ${PJS_DIR}/engine/core/src/raster.rs
+  ${PJS_DIR}/engine/backends/rgb565/src/lib.rs)
 file(REMOVE ${RS}/engine/backends/rgb565/src/lib.rs)
 foreach(d render-rgb565 abi runtime)
   file(COPY ${HOST}/native/${d} DESTINATION ${RS}/hosts/esp-idf/native
@@ -124,6 +146,12 @@ execute_process(COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/tools/pa
                 RESULT_VARIABLE _patch)
 if(NOT _patch EQUAL 0)
   message(FATAL_ERROR "patching the RGB565 renderer failed")
+endif()
+execute_process(COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/tools/patch_core_raster.py
+                ${RS}/engine/core/src/raster.rs
+                RESULT_VARIABLE _patch)
+if(NOT _patch EQUAL 0)
+  message(FATAL_ERROR "patching the software rasterizer failed")
 endif()
 
 function(pocketjs_rust_archive crate archive)
@@ -154,6 +182,8 @@ function(pocketjs_rust_archive crate archive)
         ${CARGO_OFFLINE_ARG} --target ${RUST_TARGET_ARG} --manifest-path ${root}/Cargo.toml
     DEPENDS ${sources} ${WRAPPER_SRC} ${RS}/engine/backends/rgb565/src/lib.rs
             ${CMAKE_CURRENT_LIST_DIR}/tools/patch_rgb565.py
+            ${CMAKE_CURRENT_LIST_DIR}/tools/patch_core_raster.py
+            ${RS}/engine/core/src/raster.rs
     COMMENT "cargo build ${crate} (${RUST_TARGET})"
     USES_TERMINAL VERBATIM)
   add_custom_target(${archive}_build DEPENDS ${out})

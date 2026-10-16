@@ -30,12 +30,27 @@ config POCKETJS_RUST_RVV
 	  Build the Rust libraries with the V extension, so the compiler may vectorise loops
 	  (fills, blends). The image saves the vector registers in every interrupt.
 
+config POCKETJS_TURN_STATS
+	bool "Time the script frame, the tick and the draw of a turn"
+	help
+	  Intercepts the three calls of a turn with the linker and sums their time, see
+	  pocketjs_turn_stats_take().
+
 config POCKETJS_G2D
 	bool "Draw big fills and blends with the G2D"
 	depends on G2D
 	default y
 	help
 	  Provides pocketjs_g2d_accelerator() for the RGB565 renderer.
+
+config POCKETJS_BLEND_RVV
+	bool "Blend A8 masks over the picture with the vector unit"
+	depends on POCKETJS_G2D && SUN252I_F101_RVV
+	default y
+	help
+	  Blends the masks (text, rounded corners, translucent textures) with vector code that gives
+	  the pixels of the software renderer. When off they go through an ARGB staging buffer and
+	  the G2D.
 
 config POCKETJS_G2D_MIN_FILL
 	int "Smallest opaque fill (pixels) done by the G2D"

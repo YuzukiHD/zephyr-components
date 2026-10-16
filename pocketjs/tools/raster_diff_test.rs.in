@@ -1,0 +1,172 @@
+
+// Appended by patch_core_raster.py --with-reference: the rasterizer before and after the patch
+// must draw the same pixels.
+#[cfg(test)]
+mod diff_tests {
+    use super::*;
+    use crate::resources::FontView;
+
+    struct Res<'a> {
+        tex: TexView<'a>,
+        font: &'a [u8],
+        density: u8,
+    }
+
+    impl RenderResources for Res<'_> {
+        fn viewport(&self) -> (f32, f32) {
+            (100.0, 100.0)
+        }
+        fn raster_revision(&self) -> u64 {
+            0
+        }
+        fn texture(&self, handle: i32) -> Option<TexView<'_>> {
+            (handle == 1).then(|| TexView {
+                pixels: self.tex.pixels,
+                w: self.tex.w,
+                h: self.tex.h,
+                psm: self.tex.psm,
+                palette: None,
+                linear: self.tex.linear,
+            })
+        }
+        fn font_atlas(&self, _slot: u8) -> Option<FontView<'_>> {
+            Some(FontView {
+                bitmap: self.font,
+                cell_w: 8,
+                cell_h: 12,
+                raster_density: self.density,
+                glyph_count: 4,
+            })
+        }
+    }
+
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u32 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            (self.0 >> 16) as u32
+        }
+        fn range(&mut self, lo: i32, hi: i32) -> i32 {
+            lo + (self.next() % (hi - lo) as u32) as i32
+        }
+    }
+
+    fn xyw(x: i32, y: i32) -> u32 {
+        (x as i16 as u16 as u32) | ((y as i16 as u16 as u32) << 16)
+    }
+
+    fn color(r: &mut Rng) -> u32 {
+        let a = match r.next() % 4 {
+            0 => 255,
+            1 => 128,
+            2 => r.next() % 256,
+            _ => 255,
+        };
+        (r.next() & 0x00ff_ffff) | (a << 24)
+    }
+
+    /// One texture per pixel format and filter: random, or a few flat colours so that the
+    /// "all four texels equal" shortcut is taken
+    fn texture_bytes(rng: &mut Rng, flat: bool) -> Vec<u8> {
+        let palette = [rng.next(), rng.next(), rng.next()];
+        let mut bytes = Vec::new();
+        for i in 0..16 * 12 {
+            let px = if flat { palette[(i / 7) % 3] } else { rng.next() };
+            bytes.extend_from_slice(&px.to_le_bytes());
+        }
+        bytes
+    }
+
+    #[test]
+    fn rasterizer_matches_the_reference() {
+        let mut rng = Rng(0x1234_5678_9abc_def1);
+        let textures = [texture_bytes(&mut rng, false), texture_bytes(&mut rng, true)];
+        let font: Vec<u8> = (0..4 * 8 * 12 * 4)
+            .map(|_| if rng.next() % 3 == 0 { 0 } else { rng.next() as u8 })
+            .collect();
+        let (w, h) = (100i32, 100i32);
+
+        for case in 0..6000 {
+            let scale = 1 + (case % 2) as i32;
+            let stride = w * scale;
+            let linear = case % 3 == 0;
+            let res = Res {
+                font: &font,
+                density: 1 + (case / 5 % 2) as u8,
+                tex: TexView {
+                    pixels: &textures[(case / 7) % 2],
+                    w: 16,
+                    h: 12,
+                    psm: spec::psm::PSM_8888,
+                    palette: None,
+                    linear,
+                },
+            };
+            let init: Vec<u8> = (0..(stride * h * scale * 4) as usize)
+                .map(|_| rng.next() as u8)
+                .collect();
+            let cx0 = rng.range(0, 60 * scale);
+            let cy0 = rng.range(0, 60 * scale);
+            let clip = Clip {
+                x0: cx0,
+                y0: cy0,
+                x1: (cx0 + rng.range(1, 90 * scale)).min(stride),
+                y1: (cy0 + rng.range(1, 90 * scale)).min(h * scale),
+            };
+            let vertex = |r: &mut Rng| (r.range(-30, 130), r.range(-30, 130));
+            let (p0, p1, p2) = (vertex(&mut rng), vertex(&mut rng), vertex(&mut rng));
+            let uv = |r: &mut Rng| (r.range(-20, 120) as f32 / 100.0).to_bits();
+
+            let c0 = color(&mut rng);
+            let tri_words = if case % 5 == 0 {
+                [xyw(p0.0, p0.1), xyw(p1.0, p1.1), xyw(p2.0, p2.1), c0, color(&mut rng), color(&mut rng)]
+            } else {
+                [xyw(p0.0, p0.1), xyw(p1.0, p1.1), xyw(p2.0, p2.1), c0, c0, c0]
+            };
+            let modulate = if case % 4 == 0 { 0xffff_ffff } else { color(&mut rng) };
+            let tt_words = [
+                1, xyw(p0.0, p0.1), uv(&mut rng), uv(&mut rng),
+                xyw(p1.0, p1.1), uv(&mut rng), uv(&mut rng),
+                xyw(p2.0, p2.1), uv(&mut rng), uv(&mut rng), modulate,
+            ];
+            let tq_words = [
+                1, xyw(p0.0, p0.1),
+                (rng.range(1, 70) as u32) | ((rng.range(1, 70) as u32) << 16),
+                uv(&mut rng), uv(&mut rng), uv(&mut rng), uv(&mut rng), modulate,
+            ];
+
+            let glyphs = [
+                xyw(rng.range(-10, 100), rng.range(-10, 100)),
+                rng.range(0, 5) as u32,
+                xyw(rng.range(-10, 100), rng.range(-10, 100)),
+                rng.range(0, 4) as u32,
+            ];
+            let mut a = init.clone();
+            let mut b = init.clone();
+            glyph_run(&res, &mut RgbaTarget::<false> { bytes: &mut a }, stride, scale, clip, 0, c0, &glyphs);
+            glyph_run_ref(&res, &mut RgbaTarget::<false> { bytes: &mut b }, stride, scale, clip, 0, c0, &glyphs);
+            assert!(a == b, "glyph_run differs in case {case}");
+
+            let mut a = init.clone();
+            let mut b = init.clone();
+            tri(&mut RgbaTarget::<false> { bytes: &mut a }, stride, scale, clip, &tri_words);
+            tri_ref(&mut RgbaTarget::<false> { bytes: &mut b }, stride, scale, clip, &tri_words);
+            assert!(a == b, "tri differs in case {case}");
+
+            let mut a = init.clone();
+            let mut b = init.clone();
+            tex_tri(&res, &mut RgbaTarget::<false> { bytes: &mut a }, stride, scale, clip, &tt_words);
+            tex_tri_ref(&res, &mut RgbaTarget::<false> { bytes: &mut b }, stride, scale, clip, &tt_words);
+            assert!(a == b, "tex_tri differs in case {case}");
+
+            let mut a = init.clone();
+            let mut b = init.clone();
+            tex_quad(&res, &mut RgbaTarget::<false> { bytes: &mut a }, stride, scale, clip, &tq_words);
+            tex_quad_ref(&res, &mut RgbaTarget::<false> { bytes: &mut b }, stride, scale, clip, &tq_words);
+            assert!(a == b, "tex_quad differs in case {case}");
+        }
+    }
+}

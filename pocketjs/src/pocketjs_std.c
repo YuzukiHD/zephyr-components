@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "quickjs-libc.h"
@@ -17,6 +18,10 @@ void js_std_free_handlers(JSRuntime *rt)
 	(void)rt;
 }
 
+/* the number of the last `BENCH <n>` line a script printed; the profiler of the player labels
+ * its reports with it */
+volatile int pocketjs_scene_tag = -1;
+
 static JSValue js_print(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
 	(void)this_val;
@@ -28,6 +33,9 @@ static JSValue js_print(JSContext *ctx, JSValueConst this_val, int argc, JSValue
 		}
 		fputs(i != 0 ? " " : "", stdout);
 		fputs(s, stdout);
+		if (i == 0 && strncmp(s, "BENCH ", 6) == 0) {
+			pocketjs_scene_tag = atoi(s + 6);
+		}
 		JS_FreeCString(ctx, s);
 	}
 	fputc('\n', stdout);

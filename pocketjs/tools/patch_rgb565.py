@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Speed up the RGB565 renderer on a CPU without an FPU (patches a copy of the crate).
+"""Speed up the RGB565 renderer (patches a copy of the crates).
+
+patch_rgb565.py <backend lib.rs>
 
 alpha_quad_into_mask computed the texture coordinates of every pixel in f32, which is
 soft-float code here. A coordinate depends only on the column (u) or the row (v), so
@@ -70,3 +72,64 @@ new = """    // x part of the sample per column, y part per row: the same f32 ex
 if text.count(old) != 1:
     sys.exit("alpha_quad_into_mask not found in the renderer")
 path.write_text(text.replace(old, new))
+
+# A rectangle with a fixed alpha has the same coverage everywhere: let the host blend it as a
+# solid colour (an empty mask means that) before a mask of the rectangle is built and filled
+old = """        } else if rect.area() >= self.config.min_blend_pixels {
+            let mask = self.mask_mut();
+            fill_mask_rect(mask, width, rect, a as u8);
+"""
+new = """        } else if rect.area() >= self.config.min_blend_pixels {
+            if ppa.blend_a8_rgb565(
+                destination,
+                width,
+                height,
+                &[],
+                rect,
+                [r as u8, g as u8, b as u8],
+                a as u8,
+            ) {
+                stats.ppa_blends += 1;
+                return true;
+            }
+            let mask = self.mask_mut();
+            fill_mask_rect(mask, width, rect, a as u8);
+"""
+text = path.read_text()
+if text.count(old) != 1:
+    sys.exit("try_rect blend branch not found in the renderer")
+path.write_text(text.replace(old, new))
+
+# The classification of a palette (T8) texture was never cached: every draw of an icon scanned all
+# its texels (4096 for a 64x64 icon, a palette lookup each). An in-place update of such a texture
+# (update_texture_t8) and a free bump the raster revision, which empties the cache at the start of
+# every render, so the result of the handle can be kept like the others.
+old = """        // T8 video planes can replace their palette and indices in place, so
+        // their classification is intentionally never cached.
+        if view.psm == spec::psm::PSM_T8 {
+            return is_white_alpha_texture(view);
+        }
+"""
+text = path.read_text()
+if text.count(old) != 1:
+    sys.exit("T8 classification bypass not found in the renderer")
+path.write_text(text.replace(old, "", 1))
+
+# The fake host of the tests does not know the empty mask (see above): it answers false, so the
+# renderer takes the path with a mask and the tests keep checking that one.
+old = """            global_alpha: u8,
+        ) -> bool {
+            self.blends += 1;
+            self.last_surface_width = width;"""
+new = """            global_alpha: u8,
+        ) -> bool {
+            if mask.is_empty() {
+                return false;
+            }
+            self.blends += 1;
+            self.last_surface_width = width;"""
+text = path.read_text()
+if text.count(old) != 1:
+    sys.exit("test host blend method not found in the renderer")
+path.write_text(text.replace(old, new, 1))
+

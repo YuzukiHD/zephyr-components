@@ -11,10 +11,17 @@ set(PJS ${CMAKE_CURRENT_SOURCE_DIR}/../../pocketjs)
 # -DPOCKETJS_APP=hero runs apps/hero of the PocketJS tree (480x272, buttons only), the
 # default is the small app in app/
 set(POCKETJS_APP "" CACHE STRING "App of the PocketJS tree to run (apps/<name>)")
+# -DPOCKETJS_LOCAL_APP=bench runs the app in the directory of that name next to this file
+# (bench/: the renderer benchmark, with its own host profile for a 512x384 canvas)
+set(POCKETJS_LOCAL_APP "" CACHE STRING "App directory of this sample to run")
 if(POCKETJS_APP)
   set(APP ${PJS}/apps/${POCKETJS_APP})
   set(ROOT ${PJS})
   set(PROFILE ${CMAKE_CURRENT_SOURCE_DIR}/pocket.host.480x272.json)
+elseif(POCKETJS_LOCAL_APP)
+  set(APP ${CMAKE_CURRENT_SOURCE_DIR}/${POCKETJS_LOCAL_APP})
+  set(ROOT ${APP})
+  set(PROFILE ${APP}/pocket.host.json)
 else()
   set(APP ${CMAKE_CURRENT_SOURCE_DIR}/app)
   set(ROOT ${APP})

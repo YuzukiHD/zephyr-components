@@ -27,6 +27,9 @@
 #include "input.h"
 #ifdef CONFIG_POCKETJS_G2D
 #include "pocketjs_zephyr/g2d_accel.h"
+#ifdef CONFIG_POCKETJS_TURN_STATS
+#include "pocketjs_zephyr/turn_stats.h"
+#endif
 #endif
 #include "pocketjs_package_player.h"
 
@@ -56,7 +59,7 @@ static void video_main(void *a, void *b, void *c)
 	bool warned = false;
 
 	while (true) {
-		struct display_sunxi_rgb img = {.xrgb8888 = false};
+		struct display_sunxi_rgb img = {.xrgb8888 = false, .pixel_perfect = true};
 		int ret;
 
 		k_sem_take(&frame_sem, K_FOREVER);
@@ -188,7 +191,7 @@ int main(void)
 
 	pocketjs_rgb565_renderer_config_t renderer_config;
 	pocketjs_rgb565_renderer_t *renderer = NULL;
-	pocketjs_rgb565_target_t *target = NULL;
+	pocketjs_rgb565_target_t *targets[NPIC] = {NULL};
 
 	pocketjs_rgb565_renderer_config_defaults(&renderer_config);
 	renderer_config.scale = CONTRACT.raster_density;
@@ -206,24 +209,20 @@ int main(void)
 	const pocketjs_rgb565_accelerator_t *accel = NULL;
 #endif
 	CHECK(pocketjs_rgb565_renderer_create(&renderer_config, &renderer));
-	CHECK(pocketjs_rgb565_target_create(&target));
+	for (int i = 0; i < NPIC; i++) {
+		CHECK(pocketjs_rgb565_target_create(&targets[i]));
+	}
 
 	/*
-	 * The canvas keeps the whole picture and is drawn into by the damaged strips; every
-	 * changed tick it is copied into the next picture of the ring, which the video thread
-	 * shows. A picture that is on the plane is never written.
+	 * The damaged strips are drawn straight into the next picture of the ring, which the video
+	 * thread shows; every picture has its own render target, so each one is repainted by what
+	 * changed since it was last drawn. A picture that is on the plane is never written.
 	 */
 	pic_w = CONTRACT.logical_width * CONTRACT.raster_density;
 	pic_h = CONTRACT.logical_height * CONTRACT.raster_density;
 	pic_stride = pic_w * 2;
 	const size_t size = ROUND_UP(pic_stride * pic_h, 64);
-	uint8_t *canvas = aligned_alloc(64, size);
 
-	if (canvas == NULL) {
-		printk("[E] pocketjs_player: out of memory\n");
-		return 0;
-	}
-	memset(canvas, 0, size);
 	for (int i = 0; i < NPIC; i++) {
 		pic[i] = aligned_alloc(64, size);
 		if (pic[i] == NULL) {
@@ -242,6 +241,8 @@ int main(void)
 	unsigned int cur = 0, frames = 0, shown = 0;
 	int64_t report = next;
 	unsigned int ppa_ops = 0, last_touches = 0;
+	unsigned int n_fill = 0, n_blend = 0, n_srm = 0, n_sw = 0, n_sw_words = 0;
+	uint64_t n_pixels = 0;
 	uint32_t last_buttons = 0;
 	int64_t busy_sum = 0, busy_max = 0, t_turn = 0, t_render = 0, t_copy = 0;
 
@@ -266,7 +267,9 @@ int main(void)
 		CHECK(pocketjs_ui_turn(binding, &input, &frame));
 		const int64_t t1 = k_ticks_to_us_floor64(k_uptime_ticks());
 
-		CHECK(pocketjs_rgb565_prepare(renderer, target, &frame, &plan));
+		const unsigned int nxt = (cur + 1) % NPIC;
+
+		CHECK(pocketjs_rgb565_prepare(renderer, targets[nxt], &frame, &plan));
 		frames++;
 
 		if (plan.region_count != 0) {
@@ -274,21 +277,31 @@ int main(void)
 				const pocketjs_rgb565_rect_t region = plan.regions[i];
 				pocketjs_rgb565_render_stats_t stats = {.struct_size = sizeof(stats)};
 
-				/* a strip is full width: its rows lie in the canvas as they are */
+				/* a strip is full width: its rows lie in the picture as they are */
 				CHECK(pocketjs_rgb565_render_strip(
 					renderer, &frame,
-					(uint16_t *)(canvas + (size_t)region.y * pic_stride),
+					(uint16_t *)(pic[nxt] + (size_t)region.y * pic_stride),
 					(size_t)pic_w * region.height, region, accel, &stats));
 				ppa_ops += stats.ppa_fills + stats.ppa_blends;
+				n_fill += stats.ppa_fills;
+				n_blend += stats.ppa_blends;
+				n_srm += stats.ppa_srm;
+				n_sw += stats.software_ops;
+				n_sw_words += stats.software_words;
+				n_pixels += stats.damage_pixels;
 			}
-			CHECK(pocketjs_rgb565_commit(renderer, target, &frame));
+			CHECK(pocketjs_rgb565_commit(renderer, targets[nxt], &frame));
 
 			const int64_t t2 = k_ticks_to_us_floor64(k_uptime_ticks());
 
 			t_render += t2 - t1;
-			cur = (cur + 1) % NPIC;
-			memcpy(pic[cur], canvas, pic_stride * pic_h);
-			sys_cache_data_flush_range(pic[cur], pic_stride * pic_h);
+			for (uint32_t i = 0; i < plan.region_count; i++) {
+				const pocketjs_rgb565_rect_t region = plan.regions[i];
+
+				sys_cache_data_flush_range(pic[nxt] + (size_t)region.y * pic_stride,
+							   (size_t)region.height * pic_stride);
+			}
+			cur = nxt;
 			atomic_set(&ready_idx, cur);
 			k_sem_give(&frame_sem);
 			t_copy += k_ticks_to_us_floor64(k_uptime_ticks()) - t2;
@@ -308,11 +321,29 @@ int main(void)
 		}
 		if (now - report >= 5000000) {
 			printk("pocketjs_player: %u ticks, %u pictures in 5 s, busy %u us avg %u max "
-			       "(turn %u, render %u, copy %u) g2d %u\n",
+			       "(turn %u, render %u, flush %u) g2d %u\n",
 			       frames, shown, (unsigned int)(busy_sum / MAX(frames, 1U)),
 			       (unsigned int)busy_max, (unsigned int)(t_turn / MAX(frames, 1U)),
 			       (unsigned int)(t_render / MAX(shown, 1U)),
 			       (unsigned int)(t_copy / MAX(shown, 1U)), ppa_ops);
+			printk("pocketjs_player: ops fill %u blend %u srm %u software %u (%u words), "
+			       "damage %u kpx per picture\n",
+			       n_fill, n_blend, n_srm, n_sw, n_sw_words,
+			       (unsigned int)(n_pixels / MAX(shown, 1U) / 1000U));
+#ifdef CONFIG_POCKETJS_TURN_STATS
+			const struct pocketjs_turn_stats ts = pocketjs_turn_stats_take();
+
+			printk("pocketjs_player: turn script %u us, tick %u us, draw %u us, "
+			       "script %u kcycles %u kinstr (ipc %u/100)\n",
+			       (unsigned int)(ts.script_us / MAX(ts.turns, 1U)),
+			       (unsigned int)(ts.tick_us / MAX(ts.turns, 1U)),
+			       (unsigned int)(ts.draw_us / MAX(ts.turns, 1U)),
+			       (unsigned int)(ts.script_cycles / MAX(ts.turns, 1U) / 1000U),
+			       (unsigned int)(ts.script_instrs / MAX(ts.turns, 1U) / 1000U),
+			       (unsigned int)(ts.script_instrs * 100U / MAX(ts.script_cycles, 1U)));
+#endif
+			n_fill = n_blend = n_srm = n_sw = n_sw_words = 0;
+			n_pixels = 0;
 			ppa_ops = 0;
 			frames = shown = 0;
 			busy_sum = busy_max = t_turn = t_render = t_copy = 0;

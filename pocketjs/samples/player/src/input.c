@@ -113,6 +113,7 @@ static uint32_t key_buttons(int c)
 K_THREAD_STACK_DEFINE(uart_stack, 1024);
 static struct k_thread uart_thread;
 
+/* above the main thread (6): a scene that keeps the main thread busy must not starve the keys */
 static void uart_main(void *a, void *b, void *c)
 {
 	const struct device *uart = DEVICE_DT_GET(UART_NODE);
@@ -145,7 +146,7 @@ void input_init(unsigned int w, unsigned int h)
 	screen_h = caps.y_resolution;
 	if (device_is_ready(DEVICE_DT_GET(UART_NODE))) {
 		k_thread_create(&uart_thread, uart_stack, K_THREAD_STACK_SIZEOF(uart_stack),
-				uart_main, NULL, NULL, NULL, 7, 0, K_NO_WAIT);
+				uart_main, NULL, NULL, NULL, 5, 0, K_NO_WAIT);
 		k_thread_name_set(&uart_thread, "keys");
 	}
 }
@@ -153,8 +154,13 @@ void input_init(unsigned int w, unsigned int h)
 /* screen pixel -> logical pixel of the centred, aspect kept picture; false outside it */
 static bool to_logical(int sx, int sy, int *lx, int *ly)
 {
-	/* the picture is scaled by the smaller factor, in 1/256 steps */
+	/* the picture is a whole multiple of its size when it fits (pixel perfect), else it is
+	 * scaled by the smaller factor, in 1/256 steps */
 	int64_t sc = MIN((int64_t)screen_w * 256 / logical_w, (int64_t)screen_h * 256 / logical_h);
+
+	if (sc >= 256) {
+		sc = sc / 256 * 256;
+	}
 	int pw = logical_w * sc / 256, ph = logical_h * sc / 256;
 	int ox = (screen_w - pw) / 2, oy = (screen_h - ph) / 2;
 

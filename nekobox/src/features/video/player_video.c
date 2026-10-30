@@ -269,6 +269,7 @@ static void pl_video_session(const struct request *r, uint8_t *raw, uint8_t *ab)
 		return;
 	}
 
+	pl_vfile.seq = r->seq;
 	it_first = it.next;
 	int64_t stat_ms = k_uptime_get(), wait_ms = 0, feed_ms = 0;
 	uint32_t st_shown = 0, st_late = 0;
@@ -378,11 +379,20 @@ static void pl_video_session(const struct request *r, uint8_t *raw, uint8_t *ab)
 			if (mp4_next(v, &it, &s) != 0) {
 				eof = true;
 			} else {
+				int64_t waited = pl_vfile.wait_ms;
+
 				if (pl_file_read(&pl_vfile, s.offset, raw, s.size) != 0) {
+					if (pl_req_changed(r->seq)) {
+						break;
+					}
 					printk("video: read error at sample %u\n", s.index);
 					pl_state = PLAYER_ERROR;
 					held = true;
 					break;
+				}
+				if (!pl_audio_present) {
+					/* With no audio clock, buffering holds the presentation clock too. */
+					start_ms += pl_vfile.wait_ms - waited;
 				}
 				ab_len = avcc_to_annexb(raw, s.size, ab, first || s.sync);
 				ab_used = 0;

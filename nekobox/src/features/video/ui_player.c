@@ -35,7 +35,9 @@ static uint32_t duration_ms;
 static char current_path[256];
 static const char *origin = "home";
 static int64_t saved_ms;
-static const char *open_path;
+static const struct player_growing *open_growing;
+static bool streaming;
+static int open_result;
 
 #define SAVE_EVERY_MS	10000
 #define RESUME_MIN_MS	5000
@@ -109,7 +111,7 @@ static void history_save(void)
 	enum player_state st = player_state();
 	uint32_t pos = st == PLAYER_ENDED ? 0 : player_position_ms();
 
-	if (current_path[0] != '\0' && duration_ms > 0 && st != PLAYER_ERROR) {
+	if (!streaming && current_path[0] != '\0' && duration_ms > 0 && st != PLAYER_ERROR) {
 		history_update(current_path, pos, duration_ms);
 		saved_ms = k_uptime_get();
 	}
@@ -118,8 +120,21 @@ static void history_save(void)
 void ui_player_open(const char *path, const char *from)
 {
 	origin = from;
-	open_path = path;
+	open_growing = NULL;
 	ui_goto_arg("player", (void *)path);
+}
+
+int ui_player_open_growing(const char *path, const struct player_growing *g, const char *from)
+{
+	origin = from;
+	open_growing = g;
+	ui_goto_arg("player", (void *)path);
+	return open_result;
+}
+
+uint32_t ui_player_duration_ms(void)
+{
+	return duration_ms;
 }
 
 static void play_clicked(lv_event_t *e)
@@ -403,7 +418,10 @@ static void player_enter(void *arg)
 	shown_state = PLAYER_IDLE;
 	duration_ms = 0;
 
-	ret = player_open(path, &info);
+	streaming = open_growing != NULL;
+	ret = streaming ? player_open_growing(path, open_growing, &info) : player_open(path, &info);
+	open_growing = NULL;
+	open_result = ret;
 	if (ret != 0) {
 		lv_label_set_text_fmt(message, LV_SYMBOL_WARNING "\nCannot play this file (%d)", ret);
 		lv_obj_remove_flag(message, LV_OBJ_FLAG_HIDDEN);
@@ -430,7 +448,7 @@ static void player_enter(void *arg)
 		/* go on from where the video was left, unless that was the start or the end */
 		const struct history_entry *h = history_find(path);
 
-		if (h != NULL && h->pos_ms > RESUME_MIN_MS && h->pos_ms + RESUME_END_MS < duration_ms) {
+		if (!streaming && h != NULL && h->pos_ms > RESUME_MIN_MS && h->pos_ms + RESUME_END_MS < duration_ms) {
 			player_seek(h->pos_ms);
 		}
 	}

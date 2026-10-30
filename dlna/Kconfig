@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig DLNA
+	bool "DLNA / UPnP media renderer"
+	depends on NETWORKING && NET_IPV4 && NET_UDP && NET_TCP
+	select NET_SOCKETS
+	select NET_IPV4_IGMP
+	help
+	  A UPnP AV MediaRenderer:1 (the "cast to this device" target of phones and PCs): SSDP
+	  announcement and search answers, the device description, the AVTransport, RenderingControl and
+	  ConnectionManager services over SOAP, and event notices for the transport state. What is played
+	  is up to the application, which gives a table of callbacks to dlna_start().
+
+if DLNA
+
+config DLNA_HTTP_PORT
+	int "TCP port of the description and control server"
+	default 49152
+	range 1024 65535
+
+config DLNA_MAX_REQUEST
+	int "Largest control request in bytes (the media metadata of a controller can be several KiB)"
+	default 12288
+	range 2048 65536
+
+config DLNA_MAX_SUBSCRIBERS
+	int "Event subscribers"
+	default 4
+	range 1 8
+
+config DLNA_STACK_SIZE
+	int "Stack of the SSDP and the HTTP threads in bytes"
+	default 6144
+
+config DLNA_THREAD_PRIORITY
+	int "Priority of the SSDP and the HTTP threads"
+	default 9
+
+config DLNA_ANNOUNCE_INTERVAL_S
+	int "Seconds between the alive notices (the advertised lifetime is twice this)"
+	default 600
+	range 30 1800
+
+endif # DLNA

@@ -77,6 +77,7 @@ static struct k_mutex lock;
 static volatile enum link_state link = LINK_STARTING;
 static volatile bool net_started;	/* the thread is past its start and takes requests */
 static bool radio_up;			/* the chip is running */
+static volatile bool keep_awake;	/* a service listens: no idle switch off */
 static int64_t last_use;		/* uptime of the last request, for the idle switch off */
 static char ssid_now[33];
 static char addr_now[NET_IPV4_ADDR_LEN];
@@ -440,7 +441,7 @@ static void radio_off(void)
 #endif
 }
 
-/* joins the saved network (when there is one) so that it is known to work, then back to off */
+/* Checks the saved network, retaining the link when a listening service needs it. */
 static void boot_check(struct net_if *iface)
 {
 	char ssid[33], psk[65];
@@ -456,7 +457,9 @@ static void boot_check(struct net_if *iface)
 		do_connect(iface, ssid, psk);
 		printk("net: link state %d (%s)\n", (int)link, addr_now);
 	}
-	radio_off();
+	if (!keep_awake) {
+		radio_off();
+	}
 }
 
 static void net_main(void *a, void *b, void *c)
@@ -487,12 +490,17 @@ static void net_main(void *a, void *b, void *c)
 	nekobox_background_wait();
 	net_started = true;
 	boot_check(iface);
+	if (keep_awake && link != LINK_ONLINE) {
+		struct request wake = {.cmd = CMD_SYNC};
+
+		k_msgq_put(&requests, &wake, K_NO_WAIT);
+	}
 
 	for (;;) {
 		char ssid[33], psk[65];
 
 		if (k_msgq_get(&requests, &req, K_SECONDS(2)) != 0) {
-			if (radio_up && k_uptime_get() - last_use > IDLE_OFF_S * 1000) {
+			if (radio_up && !keep_awake && k_uptime_get() - last_use > IDLE_OFF_S * 1000) {
 				radio_off();
 			}
 			continue;
@@ -562,6 +570,19 @@ static void net_hold(bool hold)
 	/* before the thread has started it waits for the end of the hold by itself; when the hold
 	 * ends the chip stays off until something needs it */
 	if (hold && net_started) {
+		put(&r);
+	} else if (!hold && keep_awake && net_started) {
+		r.cmd = CMD_SYNC;
+		put(&r);
+	}
+}
+
+void app_net_keep_awake(bool keep)
+{
+	struct request r = {.cmd = CMD_SYNC};
+
+	keep_awake = keep;
+	if (keep && net_started && !nekobox_background_held()) {
 		put(&r);
 	}
 }

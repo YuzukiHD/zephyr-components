@@ -18,6 +18,7 @@ settings row and no file type behind.
 | Games from RAM | `NEKOBOX_GAMES_HOT_RAM` | the renderer and the memory handlers of the GBA core (gpSP) run from RAM, not from the flash window |
 | USB Display | `NEKOBOX_FEATURE_USB_DISPLAY` | second screen of a PC with touch |
 | Network | `NEKOBOX_FEATURE_NET` | Wi-Fi (AIC8800, saved passwords) and the time from NTP. The chip is on only while it is used: at the start it joins the saved network and sets the clock, then it is switched off completely (tasks stopped, chip powered off, memory given back). A scan, a join or a time request starts it again (about 2.5 s), 30 s without a request or a game switches it off |
+| DLNA | `NEKOBOX_FEATURE_DLNA` | home screen entry with the device name, receiver controls, connection status and Wi-Fi settings; cast H.264/AAC MP4 videos from a phone or PC. The SD card buffers the download while it plays, and Wi-Fi stays on while the renderer is enabled |
 | Bluetooth | `NEKOBOX_FEATURE_BT` | checked once at the start (the controller answers, it advertises for a moment) and then switched off with the chip; the result is shown in the settings |
 
 ## Source layout
@@ -74,6 +75,22 @@ Seeking has to decode from the key frame before the position. A file with one ke
 (for example `ffmpeg` with the default settings and a long clip) takes seconds to seek; give the
 encoder a key frame every 1 or 2 seconds (`-g 30`) for a quick seek.
 
+DLNA starts after the complete MP4 header and an initial 512 KiB buffer have arrived
+(`CONFIG_NEKOBOX_DLNA_BUFFER_KB`). A header at the end of the file requires the whole download.
+Chunked HTTP and unknown response lengths work; HTTPS, playlists and fragmented MP4 do not.
+The receiver page opens when a cast arrives, showing loading progress or a specific error.
+All three services send initial subscription events, and Wi-Fi stays on after the boot check
+when receiving is enabled. Temporary cast files do not appear in the recent list. See [the DLNA module](../dlna/README.md)
+for protocol details and `tests/streaming/run.sh` for the host streaming tests.
+
+Cast videos are limited to 360p: at most 640x360, or 360x640 in portrait orientation.
+`CONFIG_NEKOBOX_DLNA_MAX_WIDTH` and `CONFIG_NEKOBOX_DLNA_MAX_HEIGHT` set these bounds.
+Matching DIDL resource metadata can reject an oversized cast before downloading; the MP4 header
+is also checked before opening the decoder, including when metadata is absent or incorrect.
+The receiver stops oversized downloads and asks for a lower quality stream. Select 360p in the
+casting app: DLNA does not force the sender to choose a lower resolution. This limit applies
+to casts; local file playback keeps its own decoder checks.
+
 ## XIP
 
 The image runs in place from the SPI NOR flash: it is linked into the window of the SPIF controller
@@ -101,10 +118,14 @@ decoder shares the memory bus with the display and is slower at the lower clock,
 With the board in FEL mode:
 
 ```sh
-xfel spinor write 0x8000 build/nekobox/zephyr/zephyr.bin
+xfel spinor write 0x80000 build/nekobox/zephyr/zephyr.bin
 xfel write 0x20000 out/syterkit/build/yuzukineko/app_sram/xip-boot/xip-boot_fel.bin
 xfel exec 0x20000
 ```
+
+Run the write and exec steps as separate ThunderWorkbench host commands. Before starting the
+application, read back its range with `xfel spinor read 0x80000 <image-size> <readback.bin>` and
+compare its SHA-256 with the built image to confirm that the update reached the flash.
 
 ### Complete flash image (starts by itself at power on)
 

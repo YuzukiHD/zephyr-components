@@ -1,0 +1,58 @@
+menu "DLNA cast target"
+
+config NEKOBOX_FEATURE_DLNA
+	bool "DLNA media renderer (cast videos from a phone or PC)"
+	default y
+	depends on NEKOBOX_FEATURE_NET && NEKOBOX_FEATURE_VIDEO && NEKOBOX_FEATURE_SETTINGS
+	select DLNA
+	help
+	  The player shows up as a media renderer in the cast menu of phones and PCs. A cast video is
+	  fetched over HTTP into the card and played as it arrives, once its MP4 header and initial
+	  buffer are available. Off by default at run time: start it from the DLNA home tile or the
+	  settings switch. Wi-Fi stays on while the receiver is enabled.
+
+config NEKOBOX_DLNA_BUFFER_KB
+	int "Initial download buffer (KiB)"
+	default 512
+	range 64 4096
+	depends on NEKOBOX_FEATURE_DLNA
+	help
+	  Start playback after this many bytes have been synced to the card and the MP4 movie box
+	  is complete. Smaller files start once the download finishes.
+
+config NEKOBOX_DLNA_NAME
+	string "Name shown in the cast menu"
+	default "NekoBox"
+	depends on NEKOBOX_FEATURE_DLNA
+
+config NEKOBOX_DLNA_MAX_WIDTH
+	int "Maximum cast video width"
+	default 640
+	range 16 4096
+	depends on NEKOBOX_FEATURE_DLNA
+	help
+	  Bound decoded video dimensions before starting the decoder. Portrait videos may use
+	  the rotated dimensions. Senders still choose the stream; oversized videos are refused.
+
+config NEKOBOX_DLNA_MAX_HEIGHT
+	int "Maximum cast video height"
+	default 360
+	range 16 4096
+	depends on NEKOBOX_FEATURE_DLNA
+
+config NEKOBOX_DLNA_DIR
+	string "Directory on the card for the fetched videos (emptied at every start)"
+	default "/SD:/dlna"
+	depends on NEKOBOX_FEATURE_DLNA
+
+# Wi-Fi control links coexist with the renderer, callbacks and recently closed TCP connections.
+config NET_MAX_CONN
+	default 64 if NEKOBOX_FEATURE_DLNA
+
+config NET_MAX_CONTEXTS
+	default 48 if NEKOBOX_FEATURE_DLNA
+
+config ZVFS_OPEN_MAX
+	default 64 if NEKOBOX_FEATURE_DLNA
+
+endmenu

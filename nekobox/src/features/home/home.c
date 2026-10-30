@@ -174,6 +174,8 @@ static lv_obj_t *home_create(void)
 	lv_obj_t *scr = ui_screen_new(false);
 	lv_obj_t *card, *left, *brand, *row;
 
+	lv_obj_add_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_set_scroll_dir(scr, LV_DIR_VER);
 	lv_obj_set_flex_flow(scr, LV_FLEX_FLOW_COLUMN);
 	lv_obj_set_flex_align(scr, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 	lv_obj_set_style_pad_all(scr, 36, 0);

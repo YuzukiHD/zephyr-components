@@ -29,6 +29,7 @@
 #include <zephyr/sys/printk.h>
 
 #include "features/video/player.h"
+#include "features/video/player_file.h"
 
 
 #define AAC_FRAMES	1024
@@ -44,18 +45,6 @@
 /* pictures are put up this much before their time, the display waits for a refresh */
 #define LEAD_US		8000
 #define VOLUME_MAX_REG	200
-
-/*
- * A file with a read window: the samples of a track are small and spread over the file, a seek in
- * FAT walks the cluster chain, so a window is read at a time and the samples are cut out of it.
- */
-struct reader {
-	struct fs_file_t f;
-	uint8_t *win;
-	size_t win_size;
-	uint64_t win_off;
-	size_t win_len;
-};
 
 /* A request for a session: where to start and whether to play */
 struct request {
@@ -85,6 +74,7 @@ extern volatile enum player_state pl_state;
 extern volatile int pl_volume_pct;
 extern volatile bool pl_audio_present, pl_audio_running, pl_audio_eof;
 extern volatile int64_t pl_audio_base_us, pl_audio_end_us, pl_audio_end_ms;
+extern volatile int64_t pl_audio_queued_us;
 extern bool pl_raw_mode;
 extern uint64_t pl_raw_size, pl_raw_duration_us;
 extern uint32_t pl_raw_period_us;
@@ -95,9 +85,6 @@ struct request pl_req_get(void);
 void pl_req_post(int64_t pos_us, bool play);
 bool pl_pos_publish(uint32_t seq, uint32_t ms);
 bool pl_req_changed(uint32_t seq);
-int pl_file_read(void *ctx, uint64_t off, void *buf, size_t len);
-void pl_reader_close(struct reader *r);
-int pl_reader_open(struct reader *r, const char *path, size_t win_size);
 void pl_volume_apply(void);
 
 /* the sound (player_audio.c) */

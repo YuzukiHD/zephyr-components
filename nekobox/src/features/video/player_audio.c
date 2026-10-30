@@ -20,8 +20,12 @@ int64_t pl_audio_clock_us(void)
 	}
 	i2s_sunxi_codec_tx_position(pl_codec_i2s, &blocks, &cycle);
 
-	return pl_audio_base_us + (int64_t)blocks * AAC_FRAMES * 1000000 / pl_mp4.audio.sample_rate +
-	       (int64_t)k_cyc_to_us_floor64(k_cycle_get_32() - cycle);
+	int64_t now = pl_audio_base_us +
+		(int64_t)blocks * AAC_FRAMES * 1000000 / pl_mp4.audio.sample_rate +
+		(int64_t)k_cyc_to_us_floor64(k_cycle_get_32() - cycle);
+
+	/* A network stall can drain the ring. Wall time since its last IRQ is then no longer audio. */
+	return MIN(now, pl_audio_queued_us);
 }
 
 /* Decodes and plays the session that starts at r.pos_us until the request changes or the file ends */
@@ -58,11 +62,16 @@ static void audio_session(const struct request *r, tPVMP4AudioDecoderExternal *e
 		mp4_seek_sync(t, &it, it.next - 1U);
 	}
 	pl_audio_running = false;
+	pl_afile.seq = r->seq;
 
 	while (!pl_req_changed(r->seq) && mp4_next(t, &it, &s) == 0) {
 		void *blk;
 
 		if (pl_file_read(&pl_afile, s.offset, buf, s.size) != 0) {
+			if (pl_req_changed(r->seq)) {
+				break;
+			}
+			pl_state = PLAYER_ERROR;
 			printk("audio: read error at sample %u\n", s.index);
 			break;
 		}
@@ -87,20 +96,21 @@ static void audio_session(const struct request *r, tPVMP4AudioDecoderExternal *e
 		ret = i2s_write(pl_codec_i2s, blk, PCM_BLOCK);
 		if (ret == -EIO) {
 			/* the stream ran dry: start it again where it was */
-			int64_t at = pl_audio_clock_us();
-
-			if (at >= 0) {
-				pl_audio_base_us = at;
-			}
 			pl_audio_running = false;
-			k_mem_slab_free(&pcm_slab, blk);
+			pl_audio_base_us = (s.pts - t->media_start) * 1000000 / t->timescale;
 			i2s_trigger(pl_codec_i2s, I2S_DIR_TX, I2S_TRIGGER_PREPARE);
 			queued = 0;
-			continue;
+			ret = i2s_write(pl_codec_i2s, blk, PCM_BLOCK);
+			if (ret != 0) {
+				k_mem_slab_free(&pcm_slab, blk);
+				break;
+			}
 		} else if (ret != 0) {
 			k_mem_slab_free(&pcm_slab, blk);
 			break;
 		}
+		pl_audio_queued_us = (s.pts - t->media_start) * 1000000 / t->timescale +
+			(int64_t)AAC_FRAMES * 1000000 / t->sample_rate;
 		if (!pl_audio_running && ++queued >= PREFILL) {
 			/* the video has to get from its key frame to the position first, the sound
 			 * must not run away from it */

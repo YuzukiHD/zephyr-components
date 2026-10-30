@@ -64,6 +64,7 @@ volatile bool pl_audio_eof;
 volatile int64_t pl_audio_base_us;	/* position of the first block of the session */
 volatile int64_t pl_audio_end_us;	/* where the sound stopped at the end of the file */
 volatile int64_t pl_audio_end_ms;	/* uptime at that moment */
+volatile int64_t pl_audio_queued_us; /* clock cannot pass the samples queued to the codec */
 
 /* ---- requests ------------------------------------------------------------------------------ */
 
@@ -109,67 +110,6 @@ bool pl_req_changed(uint32_t seq)
 	return pl_quit || pl_req_get().seq != seq;
 }
 
-/* ---- the file ------------------------------------------------------------------------------ */
-
-int pl_file_read(void *ctx, uint64_t off, void *buf, size_t len)
-{
-	struct reader *r = ctx;
-	int ret;
-	ssize_t n;
-
-	if (len > r->win_size) {
-		ret = fs_seek(&r->f, (off_t)off, FS_SEEK_SET);
-		n = ret == 0 ? fs_read(&r->f, buf, len) : ret;
-		return n == (ssize_t)len ? 0 : (n < 0 ? (int)n : -EIO);
-	}
-	if (off < r->win_off || off + len > r->win_off + r->win_len) {
-		ret = fs_seek(&r->f, (off_t)off, FS_SEEK_SET);
-		if (ret != 0) {
-			return ret;
-		}
-		n = fs_read(&r->f, r->win, r->win_size);
-		if (n < (ssize_t)len) {
-			r->win_len = 0;
-			return n < 0 ? (int)n : -EIO;
-		}
-		r->win_off = off;
-		r->win_len = n;
-	}
-	memcpy(buf, r->win + (off - r->win_off), len);
-
-	return 0;
-}
-
-void pl_reader_close(struct reader *r)
-{
-	if (r->win != NULL) {
-		fs_close(&r->f);
-		free(r->win);
-		r->win = NULL;
-	}
-	r->win_len = 0;
-}
-
-int pl_reader_open(struct reader *r, const char *path, size_t win_size)
-{
-	int ret;
-
-	fs_file_t_init(&r->f);
-	r->win_size = win_size;
-	r->win_len = 0;
-	r->win = aligned_alloc(64, win_size);
-	if (r->win == NULL) {
-		return -ENOMEM;
-	}
-	ret = fs_open(&r->f, path, FS_O_READ);
-	if (ret != 0) {
-		free(r->win);
-		r->win = NULL;
-	}
-
-	return ret;
-}
-
 /* ---- volume -------------------------------------------------------------------------------- */
 
 void pl_volume_apply(void)
@@ -195,10 +135,11 @@ int player_volume(void)
 
 /* ---- control ------------------------------------------------------------------------------- */
 
-int player_open(const char *path, struct player_info *info)
+static int open_impl(const char *path, const struct player_growing *g, struct player_info *info)
 {
 	const struct mp4_track *v;
 	struct fs_dirent st;
+	uint64_t movie_size;
 	int ret;
 
 	if (pl_opened) {
@@ -218,6 +159,20 @@ int player_open(const char *path, struct player_info *info)
 		goto fail;
 	}
 	pl_raw_mode = pl_is_raw_name(path);
+	if (g != NULL) {
+		if (pl_raw_mode) {
+			ret = -ENOTSUP;
+			goto fail;
+		}
+		pl_reader_growing(&pl_vfile, g);
+		pl_reader_growing(&pl_afile, g);
+		ret = pl_reader_movie_size(&pl_vfile, &movie_size);
+		if (ret != 0) {
+			goto fail;
+		}
+	} else {
+		movie_size = st.size;
+	}
 	if (pl_raw_mode) {
 		struct request none = {0};
 
@@ -253,12 +208,16 @@ int player_open(const char *path, struct player_info *info)
 		return 0;
 	}
 	memset(&pl_mp4, 0, sizeof(pl_mp4));
-	ret = mp4_open(&pl_mp4, pl_file_read, &pl_vfile, st.size);
+	ret = mp4_open(&pl_mp4, pl_file_read, &pl_vfile, movie_size);
 	if (ret != 0 || pl_mp4.video.codec != MP4_CODEC_H264) {
 		ret = ret != 0 ? ret : -ENOTSUP;
-		goto fail;
+		goto fail_mp4;
 	}
 	v = &pl_mp4.video;
+	ret = player_growing_check_resolution(g, v->width, v->height);
+	if (ret != 0) {
+		goto fail_mp4;
+	}
 	ret = pl_avcc_parameter_sets(v->extra, v->extra_len);
 	if (ret != 0) {
 		goto fail_mp4;
@@ -271,6 +230,7 @@ int player_open(const char *path, struct player_info *info)
 		info->width = v->width;
 		info->height = v->height;
 		info->has_audio = pl_audio_present;
+		info->raw = false;
 	}
 
 	pl_quit = false;
@@ -278,9 +238,11 @@ int player_open(const char *path, struct player_info *info)
 	pl_audio_running = false;
 	pl_audio_end_us = -1;
 	pl_video_ready_seq = UINT32_MAX;
-	pl_state = PLAYER_PLAYING;
+	pl_vfile.opening = pl_afile.opening = false;
+	pl_vfile.seq = pl_afile.seq = 1;
+	pl_state = g != NULL ? PLAYER_PAUSED : PLAYER_PLAYING;
 	pl_req.seq = 0;
-	pl_req_post(0, true);
+	pl_req_post(0, g == NULL);
 	k_thread_create(&pl_video_thread, video_stack, K_THREAD_STACK_SIZEOF(video_stack), pl_video_main,
 			NULL, NULL, NULL, 6, 0, K_NO_WAIT);
 	k_thread_name_set(&pl_video_thread, "nekobox_video");
@@ -302,6 +264,19 @@ fail:
 	pl_reader_close(&pl_afile);
 
 	return ret;
+}
+
+int player_open(const char *path, struct player_info *info)
+{
+	return open_impl(path, NULL, info);
+}
+
+int player_open_growing(const char *path, const struct player_growing *g, struct player_info *info)
+{
+	if (g == NULL || g->avail == NULL) {
+		return -EINVAL;
+	}
+	return open_impl(path, g, info);
 }
 
 void player_close(void)

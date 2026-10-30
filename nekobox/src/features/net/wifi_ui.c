@@ -29,11 +29,12 @@ static struct net_ap shown[MAX_ROWS];
 static int shown_count = -1;
 static bool shown_scanning;
 static char pending_ssid[33];
+static const char *origin = "settings";
 
 static void back_clicked(lv_event_t *e)
 {
 	ARG_UNUSED(e);
-	ui_goto("settings");
+	ui_goto(origin);
 }
 
 static void scan_clicked(lv_event_t *e)
@@ -270,7 +271,7 @@ static lv_obj_t *wifi_create(void)
 
 static void wifi_enter(void *arg)
 {
-	ARG_UNUSED(arg);
+	origin = arg != NULL ? arg : "settings";
 	shown_count = -1;
 	shown_scanning = false;
 	if (timer == NULL) {

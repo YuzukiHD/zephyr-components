@@ -36,6 +36,8 @@ bool app_net_saved_psk(const char *ssid, char *psk, size_t size);
 void app_net_connect(const char *ssid, const char *psk);
 void app_net_disconnect(void);
 bool app_net_connected(void);
+/** Keeps the Wi-Fi chip on (and the saved network joined) while a service listens; false lets the idle switch off work again */
+void app_net_keep_awake(bool keep);
 /** True when the board has a Wi-Fi module that answered */
 bool app_net_available(void);
 

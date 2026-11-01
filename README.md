@@ -46,3 +46,32 @@ The glue code is Apache-2.0 (see `LICENSE`); the submodules keep their own
 licenses (ncnn: BSD-3-Clause, mGBA: MPL-2.0, MicroPython, PocketJS: MIT, litehtml: BSD-3-Clause,
 Bochs: LGPL-2.1-or-later, doomgeneric and nofrendo: GPL-2.0, so an image that links `doom/` or `nes/` is
 GPL-2.0; RPiPlay: GPL-3.0, so `ios-screen-mirror/` as a whole is GPL-3.0).
+
+## Zephyr 4.5.0 compatibility
+
+The `yuzukineko` build sweep covers 40 application configurations: NekoBox
+with XIP/RVV, DLNA and the Miracast home app; Android and iOS mirror players;
+Bilibili TV; UF2 downloader; Doom, NES, mGBA, gpSP and Bochs; litehtml with
+and without demand paging; four AIC8800 samples; the Miracast receiver;
+ncnn; PocketJS; MicroPython; and all 20 applications under `examples/`.
+MicroPython uses its `micropython/build.sh` wrapper, which also builds the
+host bytecode compiler.
+
+The DLNA, NekoBox streaming, Miracast, AIC8800 P2P, NekoBox Miracast lifecycle
+and Android authentication host suites pass. Their entry points are:
+
+```sh
+sh zephyr-components/dlna/tests/host/run.sh
+sh zephyr-components/nekobox/tests/streaming/run.sh
+sh zephyr-components/miracast/tests/host/run.sh
+sh zephyr-components/aic8800/tests/p2p/run.sh
+sh zephyr-components/nekobox/tests/miracast/run.sh
+sh zephyr-components/android-screen-mirror/tests/host/run.sh
+```
+
+The media suites require GCC, Python and FFmpeg; the Android crypto suite
+also requires CMake and Python `cryptography`. Run them with an executable
+temporary directory. These results establish build and host-test compatibility.
+Board startup, display, audio, Wi-Fi, phone interoperability and sustained
+memory use still require validation on the new firmware. Existing component
+limitations, including the incomplete Bochs guest peripherals, still apply.

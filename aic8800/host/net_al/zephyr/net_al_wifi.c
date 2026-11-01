@@ -7,6 +7,8 @@
  * blocking and meant to be called from a thread of their own.
  */
 
+#include <errno.h>
+#include <stdio.h>
 #include <string.h>
 #include <zephyr/kernel.h>
 
@@ -27,6 +29,7 @@
 #include "aic8800/aic8800.h"
 
 static bool wifi_started;
+static bool p2p_active;
 static uint8_t last_ssid[33];
 static uint8_t last_ssid_len;
 
@@ -56,7 +59,9 @@ int aicz_wifi_start(void)
     int ret = 0;
 
     k_mutex_lock(&start_lock, K_FOREVER);
-    if (!wifi_started) {
+    if (p2p_active) {
+        ret = -EBUSY;
+    } else if (!wifi_started) {
         ret = aic_wifi_init(WIFI_MODE_STA, 0, NULL);
         if (ret == 0) {
             aic_wifi_event_register(wifi_event);
@@ -90,18 +95,21 @@ void aic8800_memory(size_t *used, size_t *peak)
     aic_mem_stats(used, peak);
 }
 
-int aic8800_stop(void)
+static int stop_locked(void)
 {
     size_t used, peak;
     int ret = 0;
 
-    k_mutex_lock(&start_lock, K_FOREVER);
-    if (!wifi_started) {
-        k_mutex_unlock(&start_lock);
-        return -EALREADY;
-    }
     /* leave the network first, so that the chip is quiet */
-    ret = aicz_wifi_disconnect();
+#ifdef CONFIG_AIC8800_P2P_WFD
+    if (p2p_active) {
+        fhost_wpa_execute_cmd(0, NULL, NULL, 1000, "P2P_GROUP_REMOVE *");
+        wlan_stop_p2p();
+    } else
+#endif
+    {
+        ret = aicz_wifi_disconnect();
+    }
     k_msleep(200);
     aicz_zif_down();
     aic_sdio_irq_off();
@@ -109,18 +117,97 @@ int aic8800_stop(void)
     k_msleep(100);
     rtos_al_shutdown();
     platform_pwr_en_pin_set(false);
+#ifdef CONFIG_AIC8800_BT
     aic_bt_reset_assert();
+#endif
     aic_mem_stats(&used, &peak);
     AIC_LOG_PRINTF("stopped, the driver had %u KiB allocated (at most %u KiB)\n",
                    (unsigned int)(used / 1024), (unsigned int)(peak / 1024));
     /* the static data of the driver as it was at the boot, then the memory back to the arena */
     aic_state_reset();
     wifi_started = false;
+    p2p_active = false;
     aic_mem_release();
-    k_mutex_unlock(&start_lock);
-
     return ret < 0 ? ret : 0;
 }
+
+int aic8800_stop(void)
+{
+    int ret;
+
+    k_mutex_lock(&start_lock, K_FOREVER);
+    ret = wifi_started ? stop_locked() : -EALREADY;
+    k_mutex_unlock(&start_lock);
+    return ret;
+}
+
+#ifdef CONFIG_AIC8800_P2P_WFD
+int aicz_p2p_start(const char *name, const char *passphrase, uint16_t rtsp_port)
+{
+    struct aic_p2p_cfg group = {0};
+    char command[128];
+    int ret;
+
+    k_mutex_lock(&start_lock, K_FOREVER);
+    if (wifi_started) {
+        k_mutex_unlock(&start_lock);
+        return -EBUSY;
+    }
+    ret = aic_wifi_init(WIFI_MODE_P2P, 0, NULL);
+    if (ret < 0) {
+        k_mutex_unlock(&start_lock);
+        return -EIO;
+    }
+    wifi_started = p2p_active = true;
+    group.aic_p2p_ssid.length = 8;
+    memcpy(group.aic_p2p_ssid.array, "Miracast", 8);
+    group.aic_ap_passwd.length = strlen(passphrase);
+    memcpy(group.aic_ap_passwd.array, passphrase, group.aic_ap_passwd.length);
+    group.channel = 6;
+    wlan_start_p2p(&group);
+    extern uint8_t p2p_started;
+    if (!p2p_started) {
+        ret = -EIO;
+        goto out;
+    }
+    /* Pass strings through %s: the control API itself is a printf-style function. */
+    snprintf(command, sizeof(command), "SET device_name %s", name);
+    ret = fhost_wpa_execute_cmd(0, NULL, NULL, 1000, "%s", command);
+    if (ret) goto out;
+    ret = fhost_wpa_execute_cmd(0, NULL, NULL, 1000, "SET config_methods virtual_push_button");
+    if (ret) goto out;
+    ret = fhost_wpa_execute_cmd(0, NULL, NULL, 1000, "SET wifi_display 1");
+    if (ret) goto out;
+    ret = fhost_wpa_execute_cmd(0, NULL, NULL, 1000,
+                              "WFD_SUBELEM_SET 0 00060011%04X0032", rtsp_port);
+    if (ret) goto out;
+    ret = fhost_wpa_execute_cmd(0, NULL, NULL, 1000, "SET p2p_group_idle 0");
+    if (ret) goto out;
+    ret = fhost_wpa_execute_cmd(0, NULL, NULL, 10000,
+                              "P2P_GROUP_ADD pass=%s freq=2437", passphrase);
+    if (ret) goto out;
+    ret = fhost_wpa_enable_network(0, 20000);
+    if (ret) goto out;
+    ret = fhost_wpa_execute_cmd(0, NULL, NULL, 1000, "WPS_PBC");
+out:
+    if (ret) {
+        stop_locked();
+    }
+    k_mutex_unlock(&start_lock);
+    return ret ? -EIO : 0;
+}
+
+int aicz_p2p_accept(void)
+{
+    int ret;
+
+    k_mutex_lock(&start_lock, K_FOREVER);
+    ret = !p2p_active ? -ENETDOWN :
+        fhost_wpa_execute_cmd(0, NULL, NULL, 1000, "WPS_PBC");
+    k_mutex_unlock(&start_lock);
+    return ret ? (ret < 0 ? ret : -EIO) : 0;
+}
+#endif
 
 const uint8_t *aicz_wifi_mac(void)
 {

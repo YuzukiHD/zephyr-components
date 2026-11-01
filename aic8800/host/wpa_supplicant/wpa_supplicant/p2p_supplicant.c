@@ -6382,8 +6382,12 @@ int wpas_p2p_group_add(struct wpa_supplicant *wpa_s, int persistent_group,
 		return -1;
 
 	p2p_go_params(wpa_s->global->p2p, &params);
-	if(pass) {
-		strcpy(params.passphrase, pass);
+	if (pass) {
+		size_t len = os_strlen(pass);
+
+		if (len < 8 || len >= sizeof(params.passphrase))
+			return -1;
+		os_memcpy(params.passphrase, pass, len + 1);
 	}
 	params.persistent_group = persistent_group;
 

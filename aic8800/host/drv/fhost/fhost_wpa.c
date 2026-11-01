@@ -602,8 +602,12 @@ static void wpa_supplicant_ctrl_iface_msg_cb(void *ctx, int level,
 					     enum wpa_msg_type type,
 					     const char *txt, size_t len)
 {
-	if (level >= wpa_debug_level)
-		AIC_LOG_PRINTF("[WPA] %s\n", txt);
+	if (level >= wpa_debug_level) {
+		if (strstr(txt, "passphrase=") || strstr(txt, "psk="))
+			AIC_LOG_PRINTF("[WPA] P2P group event (credentials omitted)\n");
+		else
+			AIC_LOG_PRINTF("[WPA] %s\n", txt);
+	}
 }
 #endif
 struct wpa_supplicant *g_wpa_s = NULL;
@@ -880,7 +884,7 @@ int fhost_wpa_execute_cmd(int fhost_vif_idx, char *resp_buf, int *resp_buf_len,
     }
     /* the passphrase and the keys are not written to the log */
     if (strstr(cmd, " psk ") != NULL || strstr(cmd, " wep_key") != NULL ||
-        strstr(cmd, " password ") != NULL) {
+        strstr(cmd, " password ") != NULL || strstr(cmd, "pass=") != NULL) {
         AIC_LOG_PRINTF("%s cmd:(%d bytes, secret)\n", __func__, cmd_len);
     } else {
         AIC_LOG_PRINTF("%s cmd:%s\n", __func__, cmd);
@@ -916,7 +920,7 @@ exit:
             uint32_t cmd_max_len = sizeof(cmd);
             cmd[cmd_max_len - 1] = '\0';
         }
-        AIC_LOG_PRINTF("Err %s, cmd:%s, res:%d, res2:%d\n", __func__, cmd, res, res2);
+        AIC_LOG_PRINTF("Err %s, res:%d, res2:%d\n", __func__, res, res2);
     }
 
     return res;

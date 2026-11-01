@@ -53,6 +53,29 @@ stopped the arena is one block again. Bluetooth must be disabled before the stop
 board: five rounds of start, scan (18-25 networks each) and stop, with the arena back to a single
 block of the same size after each stop (`NEKOBOX_RADIO_TEST` of the application).
 
+## Wi-Fi Direct display sink
+
+`CONFIG_AIC8800_P2P_WFD=y` enables `include/aic8800/p2p.h`. Call
+`aic8800_p2p_start("Display name", 7236)` after stopping STA services and all
+Bluetooth users. It takes over the single interface as an autonomous group
+owner on channel 6, advertises a primary Wi-Fi Display sink, generates a group
+passphrase, enables WPS PBC, and starts a DHCP server at `192.168.49.1/24`.
+The start returns `-EBUSY` if the driver is already running; it never silently
+disconnects another user of the chip.
+
+`aic8800_p2p_peer()` returns the first allocated DHCP lease, or `-EAGAIN` before
+a client joins. `aic8800_p2p_accept()` opens another 120-second PBC window.
+`aic8800_p2p_stop()` removes the group, stops DHCP and powers off the chip;
+STA applications can then start the driver again. Stop the media sockets
+before stopping P2P. There is no simultaneous STA/GO or group-client mode in
+this API. The [Miracast receiver](../miracast/README.md) demonstrates its use.
+
+Run `sh zephyr-components/aic8800/tests/p2p/run.sh` from the workspace to check
+P2P group passphrase parsing with ASan/UBSan. It covers 8..63-byte keys,
+invalid lengths, duplicate keys, and the generated-key path without a
+passphrase override. It runs the control parser and group creation with the
+radio operations stubbed; discovery and WPS still require hardware tests.
+
 ## Memory
 
 The driver, the supplicant and the packet buffers take their memory from a pool of their own

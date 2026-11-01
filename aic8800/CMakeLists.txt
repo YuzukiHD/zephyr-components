@@ -39,6 +39,9 @@ zephyr_library_sources(
 if(CONFIG_AIC8800_P2P)
   zephyr_library_sources(${AIC_P2P_SRCS})
 endif()
+if(CONFIG_AIC8800_P2P_WFD)
+  zephyr_library_sources(src/aic_p2p.c)
+endif()
 if(CONFIG_AIC8800_BT)
   zephyr_library_sources(src/aic_bt.c)
   # the firmware download for the Bluetooth part is compiled in with this

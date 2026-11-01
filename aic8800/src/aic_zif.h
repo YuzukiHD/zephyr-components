@@ -51,6 +51,9 @@ int aicz_wifi_disconnect(void);
 int aicz_wifi_sta_info(struct aicz_sta_info *info);
 const uint8_t *aicz_wifi_mac(void);
 
+int aicz_p2p_start(const char *name, const char *passphrase, uint16_t rtsp_port);
+int aicz_p2p_accept(void);
+
 /** The interface after the driver was stopped */
 void aicz_zif_down(void);
 

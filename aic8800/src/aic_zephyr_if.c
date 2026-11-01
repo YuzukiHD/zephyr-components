@@ -12,6 +12,9 @@
 #include <zephyr/kernel.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/dhcpv4.h>
+#ifdef CONFIG_AIC8800_P2P_WFD
+#include <zephyr/net/dhcpv4_server.h>
+#endif
 #include <zephyr/net/ethernet.h>
 #include <zephyr/net/net_pkt.h>
 #include <zephyr/net/wifi_mgmt.h>
@@ -206,11 +209,15 @@ void aicz_zif_down(void)
 	if (d->iface == NULL) {
 		return;
 	}
+#ifdef CONFIG_AIC8800_P2P_WFD
+	net_dhcpv4_server_stop(d->iface);
+#endif
 	if (d->connected) {
 		aicz_zif_dhcp_stop(d->iface);
 	}
 	d->connected = false;
 	d->connecting = false;
+	aicz_zif_ip_set(d->iface, 0, 0, 0);
 	net_eth_carrier_off(d->iface);
 }
 

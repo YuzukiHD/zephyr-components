@@ -6440,7 +6440,7 @@ static int p2p_ctrl_group_add(struct wpa_supplicant *wpa_s, char *cmd)
 	int he = wpa_s->conf->p2p_go_he;
 	int max_oper_chwidth, chwidth = 0, freq2 = 0;
 	char *token, *context = NULL;
-	char pass[16];
+	char pass[64] = { 0 };
 #ifdef CONFIG_ACS
 	int acs = 0;
 #endif /* CONFIG_ACS */
@@ -6464,8 +6464,12 @@ static int p2p_ctrl_group_add(struct wpa_supplicant *wpa_s, char *cmd)
 			he = 1;
 		} else if (os_strcmp(token, "persistent") == 0) {
 			persistent = 1;
-		} else if (sscanf(token, "pass=%s", pass) == 1) {
-			continue;
+		} else if (os_strncmp(token, "pass=", 5) == 0) {
+			size_t len = os_strlen(token + 5);
+
+			if (pass[0] || len < 8 || len >= sizeof(pass))
+				return -1;
+			os_memcpy(pass, token + 5, len + 1);
 		} else {
 			wpa_printf(MSG_DEBUG,
 				   "CTRL: Invalid P2P_GROUP_ADD parameter: '%s'",
@@ -6505,7 +6509,7 @@ static int p2p_ctrl_group_add(struct wpa_supplicant *wpa_s, char *cmd)
 
 	return wpas_p2p_group_add(wpa_s, persistent, freq, freq2, ht40, vht,
 #if defined(PLATFORM_ALLWIN_RT_THREAD) || defined(PLATFORM_ALLWIN_FREERTOS)
-				  max_oper_chwidth, he, pass);
+				  max_oper_chwidth, he, pass[0] ? pass : NULL);
 #else
 				  max_oper_chwidth, he);
 #endif

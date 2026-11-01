@@ -37,6 +37,17 @@ config AIC8800
 
 if AIC8800
 
+config AIC8800_P2P_WFD
+	bool "Exclusive Wi-Fi Direct group owner for a Wi-Fi Display sink"
+	depends on AIC8800_P2P
+	select NET_DHCPV4_SERVER
+	help
+	  Provide the aic8800/p2p.h API. This mode takes over the single network
+	  interface, advertises a primary Wi-Fi Display sink and provisions a
+	  peer through WPS push button configuration. It cannot run alongside
+	  the station connection. The application must stop its STA services
+	  and Bluetooth users before starting the group.
+
 config AIC8800_MEM_POOL_KB
 	int "Memory pool of the driver (KiB)"
 	default 640

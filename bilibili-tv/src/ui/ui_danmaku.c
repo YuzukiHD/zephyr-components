@@ -230,6 +230,7 @@ static bool spawn(const struct dm_item *it, uint32_t p)
 {
 	struct slot *s = free_slot();
 	const char *text = dm_text(set, it);
+	lv_point_t text_size;
 	int32_t w, x, y;
 	enum kind kind = it->mode == DM_TOP ? K_TOP : (it->mode == DM_BOTTOM ? K_BOTTOM : K_SCROLL);
 	int row = -1;
@@ -237,7 +238,8 @@ static bool spawn(const struct dm_item *it, uint32_t p)
 	if (s == NULL) {
 		return false;
 	}
-	w = lv_text_get_width(text, it->len, ui_font_m, 0) + 16;
+	lv_text_get_size(&text_size, text, ui_font_m, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_EXPAND);
+	w = text_size.x + 16;
 	if (kind == K_SCROLL) {
 		for (int i = 0; i < SCROLL_ROWS; i++) {
 			if (p >= scroll_free_at[i]) {

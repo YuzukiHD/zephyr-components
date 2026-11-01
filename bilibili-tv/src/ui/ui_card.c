@@ -23,6 +23,7 @@
 #include "core/lv_refr_private.h"
 #include "display/lv_display_private.h"
 #include "misc/lv_area_private.h"
+#include "misc/cache/instance/lv_image_cache.h"
 #include "debug/profile.h"
 #include "gfx/shift.h"
 #include "ui/ui_priv.h"

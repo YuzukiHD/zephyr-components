@@ -13,6 +13,7 @@
 #include <string.h>
 #include <zephyr/kernel.h>
 
+#include "misc/cache/instance/lv_image_cache.h"
 #include "ui/ui_priv.h"
 
 #define QR_SIZE		300

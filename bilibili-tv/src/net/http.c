@@ -12,7 +12,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/net/socket.h>
 #include <mbedtls/ssl.h>
-#include <zephyr/random/random.h>
 #include <zephyr/sys/printk.h>
 
 #include "net/http.h"
@@ -209,13 +208,6 @@ static int bio_recv(void *ctx, unsigned char *buf, size_t len)
 	return n < 0 ? MBEDTLS_ERR_SSL_INTERNAL_ERROR : (int)n;
 }
 
-static int rng(void *ctx, unsigned char *buf, size_t len)
-{
-	sys_rand_get(buf, len);
-
-	return 0;
-}
-
 /* asks the proxy for a tunnel to host:port */
 static int proxy_tunnel(int fd, const char *host, const char *port, int timeout_ms)
 {
@@ -296,7 +288,6 @@ static int conn_open(struct conn *c, const struct url *u, const struct http_opts
 		goto tls_fail;
 	}
 	mbedtls_ssl_conf_authmode(&c->conf, MBEDTLS_SSL_VERIFY_NONE);
-	mbedtls_ssl_conf_rng(&c->conf, rng, NULL);
 	ret = mbedtls_ssl_setup(&c->ssl, &c->conf);
 	if (ret != 0) {
 		goto tls_fail;

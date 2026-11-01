@@ -17,7 +17,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "misc/lv_types.h"
+/* LVGL loads the blend hooks before defining their descriptor types. */
+struct _lv_draw_sw_blend_fill_dsc_t;
+struct _lv_draw_sw_blend_image_dsc_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,14 +32,14 @@ void lv_rvv_enable(bool on);
 bool lv_rvv_selftest(void);
 
 /* the return values are lv_result_t: LV_RESULT_OK when the blend was done, LV_RESULT_INVALID if not */
-int lv_rvv_color_fill(lv_draw_sw_blend_fill_dsc_t *dsc);
-int lv_rvv_color_opa(lv_draw_sw_blend_fill_dsc_t *dsc);
-int lv_rvv_color_mask(lv_draw_sw_blend_fill_dsc_t *dsc);
-int lv_rvv_color_mask_opa(lv_draw_sw_blend_fill_dsc_t *dsc);
-int lv_rvv_argb_normal(lv_draw_sw_blend_image_dsc_t *dsc);
-int lv_rvv_argb_opa(lv_draw_sw_blend_image_dsc_t *dsc);
-int lv_rvv_argb_mask(lv_draw_sw_blend_image_dsc_t *dsc);
-int lv_rvv_argb_mask_opa(lv_draw_sw_blend_image_dsc_t *dsc);
+int lv_rvv_color_fill(struct _lv_draw_sw_blend_fill_dsc_t *dsc);
+int lv_rvv_color_opa(struct _lv_draw_sw_blend_fill_dsc_t *dsc);
+int lv_rvv_color_mask(struct _lv_draw_sw_blend_fill_dsc_t *dsc);
+int lv_rvv_color_mask_opa(struct _lv_draw_sw_blend_fill_dsc_t *dsc);
+int lv_rvv_argb_normal(struct _lv_draw_sw_blend_image_dsc_t *dsc);
+int lv_rvv_argb_opa(struct _lv_draw_sw_blend_image_dsc_t *dsc);
+int lv_rvv_argb_mask(struct _lv_draw_sw_blend_image_dsc_t *dsc);
+int lv_rvv_argb_mask_opa(struct _lv_draw_sw_blend_image_dsc_t *dsc);
 
 #ifdef CONFIG_BILI_GFX_RVV
 #define LV_DRAW_SW_COLOR_BLEND_TO_ARGB8888(dsc)				lv_rvv_color_fill(dsc)

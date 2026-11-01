@@ -41,4 +41,11 @@ void app_net_keep_awake(bool keep);
 /** True when the board has a Wi-Fi module that answered */
 bool app_net_available(void);
 
+#ifdef CONFIG_NEKOBOX_FEATURE_MIRACAST
+/** Stop STA work and release the radio for Wi-Fi Direct. Call from a worker thread. */
+int app_net_suspend(void);
+/** Resume saved-network services after the exclusive radio user has stopped. */
+void app_net_resume(void);
+#endif
+
 #endif /* NEKOBOX_FEATURES_NET_NET_H_ */

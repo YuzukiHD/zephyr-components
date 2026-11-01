@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: Apache-2.0
+
+menu "Miracast screen mirroring"
+
+config NEKOBOX_FEATURE_MIRACAST
+	bool "Miracast app on the home screen"
+	default y
+	depends on NEKOBOX_FEATURE_NET && DISPLAY_SUNXI && AIC8800_P2P
+	select MIRACAST
+	select MIRACAST_PLAYER
+	select AIC8800_P2P_WFD
+	select VDEC
+	select I2S
+	select AUDIO
+	select AUDIO_CODEC
+	select DMA
+	help
+	  Receive an Android phone's Wireless display / Screen mirroring stream.
+	  Opening the app temporarily pauses normal Wi-Fi and DLNA services;
+	  leaving it releases the receiver and restores those services.
+	  Video and LPCM audio are played directly without an SD card.
+
+config NEKOBOX_MIRACAST_NAME
+	string "Name shown on the Android phone"
+	default "NekoBox Miracast"
+	depends on NEKOBOX_FEATURE_MIRACAST
+	help
+	  Use 1..32 printable ASCII bytes for the Wi-Fi Display device name.
+
+config NET_DHCPV4_SERVER_ADDR_COUNT
+	default 1 if NEKOBOX_FEATURE_MIRACAST
+
+endmenu

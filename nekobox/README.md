@@ -19,6 +19,7 @@ settings row and no file type behind.
 | USB Display | `NEKOBOX_FEATURE_USB_DISPLAY` | second screen of a PC with touch |
 | Network | `NEKOBOX_FEATURE_NET` | Wi-Fi (AIC8800, saved passwords) and the time from NTP. The chip is on only while it is used: at the start it joins the saved network and sets the clock, then it is switched off completely (tasks stopped, chip powered off, memory given back). A scan, a join or a time request starts it again (about 2.5 s), 30 s without a request or a game switches it off |
 | DLNA | `NEKOBOX_FEATURE_DLNA` | home screen entry with the device name, receiver controls, connection status and Wi-Fi settings; cast H.264/AAC MP4 videos from a phone or PC. The SD card buffers the download while it plays, and Wi-Fi stays on while the renderer is enabled |
+| Miracast | `NEKOBOX_FEATURE_MIRACAST` | Android Wireless display / Screen mirroring receiver on the home screen; H.264 video and LPCM audio over Wi-Fi Direct, without an SD card |
 | Bluetooth | `NEKOBOX_FEATURE_BT` | checked once at the start (the controller answers, it advertises for a moment) and then switched off with the chip; the result is shown in the settings |
 
 ## Source layout
@@ -91,6 +92,28 @@ The receiver stops oversized downloads and asks for a lower quality stream. Sele
 casting app: DLNA does not force the sender to choose a lower resolution. This limit applies
 to casts; local file playback keeps its own decoder checks.
 
+Open **Miracast** on the home screen to start receiving, then open **Wireless display** or
+**Screen mirroring** on a Miracast-capable Android phone and select **NekoBox Miracast**.
+The page shows preparation, pairing and connection status, with controls to stop or retry.
+The instructions disappear after the first decoded picture; the close button returns home.
+Stopping or leaving the page releases the receiver, restores the saved Wi-Fi connection and
+restores DLNA if it was enabled before entering. Wi-Fi Direct owns the radio while receiving;
+any active DLNA download is cancelled and allowed to finish cleanup before switching modes.
+The DLNA preference in the settings file is preserved.
+
+Miracast uses the shared [Miracast player](../miracast/README.md) and offers 640x480p60,
+constrained baseline H.264 level 3.1 and 48 kHz stereo LPCM. Delivery may be slower than the
+negotiated timing. Phones with only Google Cast and HDCP-protected content are not supported.
+`CONFIG_NEKOBOX_FEATURE_MIRACAST=n` removes the app and receiver implementation;
+`CONFIG_NEKOBOX_MIRACAST_NAME` changes the advertised name (1..32 printable ASCII bytes).
+
+Run `sh zephyr-components/nekobox/tests/miracast/run.sh` from the workspace for the ASan/UBSan
+lifecycle tests. They exercise radio handoff, pending DLNA cleanup, connection retries,
+disconnect/reconnect, setup failures, leaving during startup, reentering during shutdown and
+twenty start/stop cycles, with and without the DLNA and local video features. The tests verify
+that player/service control stays on the UI thread and radio operations run on a worker.
+Android pairing, displayed video, sound and touch controls still require board testing.
+
 ## XIP
 
 The image runs in place from the SPI NOR flash: it is linked into the window of the SPIF controller
@@ -160,6 +183,7 @@ the UF2 application area (`0x200000`) overlaps it, so do not use both.
 | Option | Default | |
 |---|---|---|
 | `CONFIG_NEKOBOX_FEATURE_*` | on | the features above |
+| `CONFIG_NEKOBOX_MIRACAST_NAME` | `NekoBox Miracast` | device name shown by Android screen mirroring |
 | `CONFIG_NEKOBOX_GFX_RVV` | on | vector blends for LVGL (checked against the C code at boot) |
 | `CONFIG_NEKOBOX_GFX_G2D` | off | fills with the 2D engine (slower, see the help) |
 | `CONFIG_NEKOBOX_CPU_MHZ` | 960 | CPU clock, raised in steps with a memory check |

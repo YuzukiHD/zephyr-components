@@ -15,6 +15,7 @@
  * seconds, and while a game runs, it is off.
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +28,7 @@
 #include <zephyr/net/sntp.h>
 #include <zephyr/net/wifi_mgmt.h>
 #include <zephyr/sys/printk.h>
+#include <zephyr/sys/atomic.h>
 
 #include "core/app.h"
 #include "core/cfg.h"
@@ -59,9 +61,10 @@ enum link_state {
 	LINK_CONNECTED,		/* joined, waiting for the address */
 	LINK_ONLINE,		/* has an address */
 	LINK_FAILED,
+	LINK_SUSPENDED,
 };
 
-enum command { CMD_SCAN, CMD_CONNECT, CMD_DISCONNECT, CMD_SYNC, CMD_PAUSE };
+enum command { CMD_SCAN, CMD_CONNECT, CMD_DISCONNECT, CMD_SYNC, CMD_PAUSE, CMD_SUSPEND };
 
 struct request {
 	enum command cmd;
@@ -92,6 +95,35 @@ static K_SEM_DEFINE(scan_done, 0, 1);
 static K_SEM_DEFINE(connect_done, 0, 1);
 static K_SEM_DEFINE(got_ip, 0, 1);
 static int connect_status;
+
+#ifdef CONFIG_NEKOBOX_FEATURE_MIRACAST
+static atomic_t suspended;
+static K_SEM_DEFINE(station_stopped, 0, 1);
+#endif
+
+static bool net_suspended(void)
+{
+#ifdef CONFIG_NEKOBOX_FEATURE_MIRACAST
+	return atomic_get(&suspended) != 0;
+#else
+	return false;
+#endif
+}
+
+static int wait_event(struct k_sem *event, int seconds)
+{
+	int64_t deadline = k_uptime_get() + seconds * 1000;
+
+	while (!net_suspended()) {
+		if (k_sem_take(event, K_MSEC(100)) == 0) {
+			return net_suspended() ? -ECANCELED : 0;
+		}
+		if (k_uptime_get() >= deadline) {
+			return -ETIMEDOUT;
+		}
+	}
+	return -ECANCELED;
+}
 
 /* ---- events ---------------------------------------------------------------------------- */
 
@@ -215,8 +247,14 @@ static bool time_sync(void)
 
 	for (int i = 0; i < ARRAY_SIZE(servers); i++) {
 		for (int n = 0; n < SYNC_RETRIES; n++) {
+			if (net_suspended()) {
+				return false;
+			}
 			int ret = sntp_simple(servers[i], 3000, &ts);
 
+			if (net_suspended()) {
+				return false;
+			}
 			if (ret == 0) {
 				printk("net: time from %s: %llu\n", servers[i],
 				       (unsigned long long)ts.seconds);
@@ -283,7 +321,7 @@ static void do_scan(struct net_if *iface)
 		fail("Scan request failed");
 		return;
 	}
-	if (k_sem_take(&scan_done, K_SECONDS(20)) != 0) {
+	if (wait_event(&scan_done, 20) == -ETIMEDOUT) {
 		printk("net: scan timed out\n");
 	}
 	link = before == LINK_SCANNING ? LINK_IDLE : before;
@@ -301,6 +339,9 @@ static void do_connect(struct net_if *iface, const char *ssid, const char *psk)
 		.band = WIFI_FREQ_BAND_UNKNOWN,
 	};
 
+	if (net_suspended()) {
+		return;
+	}
 	if (link == LINK_ONLINE || link == LINK_CONNECTED) {
 		/* the same network again is nothing to do; another one replaces the current */
 		if (strcmp(ssid_now, ssid) == 0) {
@@ -319,7 +360,12 @@ static void do_connect(struct net_if *iface, const char *ssid, const char *psk)
 		fail("Connect request failed");
 		return;
 	}
-	if (k_sem_take(&connect_done, K_SECONDS(CONNECT_WAIT_S)) != 0 || connect_status != 0) {
+	int ret = wait_event(&connect_done, CONNECT_WAIT_S);
+
+	if (net_suspended()) {
+		return;
+	}
+	if (ret != 0 || connect_status != 0) {
 		net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
 		fail(connect_status != 0 ? "Wrong password or no answer" : "No answer from the network");
 		if (connect_status != 0) {
@@ -332,7 +378,11 @@ static void do_connect(struct net_if *iface, const char *ssid, const char *psk)
 		return;
 	}
 	link = LINK_CONNECTED;
-	if (k_sem_take(&got_ip, K_SECONDS(DHCP_WAIT_S)) != 0) {
+	ret = wait_event(&got_ip, DHCP_WAIT_S);
+	if (net_suspended()) {
+		return;
+	}
+	if (ret != 0) {
 		fail("No address from DHCP");
 		return;
 	}
@@ -402,6 +452,9 @@ static bool saved_network(char *ssid, size_t ssid_size, char *psk, size_t psk_si
 /* starts the chip if it is not running; false when it does not answer */
 static bool radio_on(void)
 {
+	if (net_suspended()) {
+		return false;
+	}
 	if (radio_up) {
 		return true;
 	}
@@ -450,9 +503,11 @@ static void boot_check(struct net_if *iface)
 		return;
 	}
 #ifdef CONFIG_NEKOBOX_FEATURE_BT
-	bt_probe();
+	if (!net_suspended()) {
+		bt_probe();
+	}
 #endif
-	if (saved_network(ssid, sizeof(ssid), psk, sizeof(psk))) {
+	if (!net_suspended() && saved_network(ssid, sizeof(ssid), psk, sizeof(psk))) {
 		printk("net: joining %s\n", ssid);
 		do_connect(iface, ssid, psk);
 		printk("net: link state %d (%s)\n", (int)link, addr_now);
@@ -476,6 +531,9 @@ static void net_main(void *a, void *b, void *c)
 	}
 	if (iface == NULL) {
 		link = LINK_NONE;
+#ifdef CONFIG_NEKOBOX_FEATURE_MIRACAST
+		k_sem_give(&station_stopped);
+#endif
 		return;
 	}
 	net_mgmt_init_event_callback(&wifi_cb, wifi_event,
@@ -503,6 +561,9 @@ static void net_main(void *a, void *b, void *c)
 			if (radio_up && !keep_awake && k_uptime_get() - last_use > IDLE_OFF_S * 1000) {
 				radio_off();
 			}
+			continue;
+		}
+		if (net_suspended() && req.cmd != CMD_SUSPEND) {
 			continue;
 		}
 		last_use = k_uptime_get();
@@ -535,6 +596,14 @@ static void net_main(void *a, void *b, void *c)
 		case CMD_PAUSE:
 			/* nothing uses the network while a game runs */
 			radio_off();
+			break;
+		case CMD_SUSPEND:
+#ifdef CONFIG_NEKOBOX_FEATURE_MIRACAST
+			radio_off();
+			link = LINK_SUSPENDED;
+			sync_pending = false;
+			k_sem_give(&station_stopped);
+#endif
 			break;
 		case CMD_SYNC:
 			if (radio_on()) {
@@ -598,10 +667,49 @@ NEKOBOX_INIT(NEKOBOX_STAGE_SERVICES, 10, "network", net_step);
 
 static void put(const struct request *r)
 {
+	if (net_suspended()) {
+		return;
+	}
 	if (k_msgq_put(&requests, r, K_NO_WAIT) != 0) {
 		printk("net: busy\n");
 	}
 }
+
+#ifdef CONFIG_NEKOBOX_FEATURE_MIRACAST
+int app_net_suspend(void)
+{
+	struct request r = {.cmd = CMD_SUSPEND};
+
+	if (!atomic_cas(&suspended, 0, 1)) {
+		return -EBUSY;
+	}
+	k_sem_reset(&station_stopped);
+	if (link == LINK_NONE) {
+		atomic_clear(&suspended);
+		return -ENODEV;
+	}
+	/* Cancel waits without turning a cancelled connection into a failed password. */
+	k_msgq_purge(&requests);
+	k_msgq_put(&requests, &r, K_FOREVER);
+	k_sem_take(&station_stopped, K_FOREVER);
+	if (link == LINK_NONE) {
+		atomic_clear(&suspended);
+		return -ENODEV;
+	}
+	return 0;
+}
+
+void app_net_resume(void)
+{
+	struct request r = {.cmd = CMD_SYNC};
+
+	atomic_clear(&suspended);
+	link = LINK_OFF;
+	if (!nekobox_background_held()) {
+		put(&r);
+	}
+}
+#endif
 
 void app_net_status(char *buf, size_t size)
 {
@@ -633,6 +741,9 @@ void app_net_status(char *buf, size_t size)
 		break;
 	case LINK_FAILED:
 		snprintf(buf, size, "%s", fail_text);
+		break;
+	case LINK_SUSPENDED:
+		snprintf(buf, size, "Screen mirroring is using Wi-Fi");
 		break;
 	}
 	k_mutex_unlock(&lock);

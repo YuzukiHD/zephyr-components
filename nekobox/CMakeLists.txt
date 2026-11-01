@@ -3,7 +3,8 @@
 cmake_minimum_required(VERSION 3.20.0)
 # the emulator modules sit next to this application
 list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR}/../mgba ${CMAKE_CURRENT_SOURCE_DIR}/../gbsp ${CMAKE_CURRENT_SOURCE_DIR}/../nes
-	${CMAKE_CURRENT_SOURCE_DIR}/../aic8800 ${CMAKE_CURRENT_SOURCE_DIR}/../dlna)
+	${CMAKE_CURRENT_SOURCE_DIR}/../aic8800 ${CMAKE_CURRENT_SOURCE_DIR}/../dlna
+	${CMAKE_CURRENT_SOURCE_DIR}/../miracast)
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(nekobox)
@@ -31,3 +32,4 @@ add_subdirectory(src/features/games)
 add_subdirectory(src/features/usbdisplay)
 add_subdirectory(src/features/net)
 add_subdirectory(src/features/dlna)
+add_subdirectory(src/features/miracast)

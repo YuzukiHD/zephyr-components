@@ -451,12 +451,22 @@ void cast_enable(bool on)
 		while (k_msgq_get(&cmds, &c, K_NO_WAIT) == 0) {
 			free(c.media);
 		}
+		if (screen_open) {
+			screen_open = false;
+			player_close();
+		}
 		end_session(C_NONE);
 		app_net_keep_awake(false);
 	}
 }
 
 bool cast_enabled(void) { return enabled; }
+
+bool cast_idle(void)
+{
+	fetch_reap();
+	return !enabled && !fetch_thread_up;
+}
 
 void cast_status(char *buf, size_t size)
 {

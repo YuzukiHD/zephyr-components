@@ -14,13 +14,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <zephyr/fs/fs.h>
-#include <zephyr/random/random.h>
 #include <zephyr/sys/printk.h>
+#include <mbedtls/asn1.h>
 #include <mbedtls/base64.h>
-#include <mbedtls/bignum.h>
+#include <mbedtls/private/bignum.h>
 #include <mbedtls/pk.h>
-#include <mbedtls/rsa.h>
 #include <mbedtls/x509_crt.h>
+#include <psa/crypto.h>
 #include <mirror_zephyr/adb.h>
 #include "adb_priv.h"
 
@@ -31,17 +31,6 @@
 
 static mbedtls_pk_context pk;
 static bool have_key;
-
-/* The randomness is only needed for the blinding of signatures and for a new key */
-int adb_rng(void *ctx, unsigned char *out, size_t len)
-{
-	ARG_UNUSED(ctx);
-	sys_rand_get(out, len);
-
-	return 0;
-}
-
-#define rng adb_rng
 
 static int read_file(const char *path, uint8_t *buf, size_t size, size_t *len)
 {
@@ -82,6 +71,24 @@ static int write_file(const char *path, const uint8_t *buf, size_t len)
 	return n == (ssize_t)len ? 0 : (n < 0 ? (int)n : -EIO);
 }
 
+static int generate_key(void)
+{
+	psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
+	mbedtls_svc_key_id_t key = MBEDTLS_SVC_KEY_ID_INIT;
+	psa_status_t status, cleanup;
+	int ret;
+
+	psa_set_key_type(&attributes, PSA_KEY_TYPE_RSA_KEY_PAIR);
+	psa_set_key_bits(&attributes, KEY_BITS);
+	psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_EXPORT);
+	status = psa_generate_key(&attributes, &key);
+	ret = status == PSA_SUCCESS ? mbedtls_pk_copy_from_psa(key, &pk) : status;
+	cleanup = psa_destroy_key(key);
+	psa_reset_key_attributes(&attributes);
+
+	return ret != 0 ? ret : cleanup;
+}
+
 int adb_auth_init(const char *path)
 {
 	uint8_t *pem;
@@ -90,6 +97,9 @@ int adb_auth_init(const char *path)
 
 	if (have_key) {
 		return 0;
+	}
+	if (psa_crypto_init() != PSA_SUCCESS) {
+		return -EIO;
 	}
 	pem = malloc(PEM_MAX);
 	if (pem == NULL) {
@@ -100,7 +110,7 @@ int adb_auth_init(const char *path)
 	ret = read_file(path, pem, PEM_MAX, &len);
 	if (ret == 0) {
 		/* a key of the PC (~/.android/adbkey) is fine, the phone knows it already */
-		ret = mbedtls_pk_parse_key(&pk, pem, len + 1U, NULL, 0, rng, NULL);
+		ret = mbedtls_pk_parse_key(&pk, pem, len + 1U, NULL, 0);
 		if (ret != 0) {
 			printk("adb: cannot parse %s: -0x%x\n", path, -ret);
 			ret = -EINVAL;
@@ -108,10 +118,7 @@ int adb_auth_init(const char *path)
 	} else {
 		printk("adb: no key %s, generating a %d bit RSA key (takes a while)\n", path,
 		       KEY_BITS);
-		ret = mbedtls_pk_setup(&pk, mbedtls_pk_info_from_type(MBEDTLS_PK_RSA));
-		if (ret == 0) {
-			ret = mbedtls_rsa_gen_key(mbedtls_pk_rsa(pk), rng, NULL, KEY_BITS, 65537);
-		}
+		ret = generate_key();
 		if (ret == 0) {
 			ret = mbedtls_pk_write_key_pem(&pk, pem, PEM_MAX);
 		}
@@ -152,8 +159,7 @@ int adb_auth_sign(const uint8_t *token, size_t token_len, uint8_t *sig, size_t *
 	if (!have_key) {
 		return -ENOENT;
 	}
-	ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA1, token, token_len, sig, KEY_BYTES, sig_len, rng,
-			      NULL);
+	ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA1, token, token_len, sig, KEY_BYTES, sig_len);
 
 	return ret == 0 ? 0 : -EIO;
 }
@@ -180,10 +186,12 @@ int adb_auth_public_key(char *out, size_t size, size_t *len)
 {
 	static const char suffix[] = " mirror@f101";
 	mbedtls_mpi n, e, rr;
+	uint8_t der[PSA_KEY_EXPORT_RSA_PUBLIC_KEY_MAX_SIZE(KEY_BITS)];
 	uint8_t bin[KEY_BYTES];
 	uint8_t *blob;
+	unsigned char *p = der;
 	uint32_t n0, inv, pub_e;
-	size_t olen = 0;
+	size_t olen = 0, der_len = 0, sequence_len;
 	int ret;
 
 	if (!have_key) {
@@ -197,7 +205,20 @@ int adb_auth_public_key(char *out, size_t size, size_t *len)
 	mbedtls_mpi_init(&e);
 	mbedtls_mpi_init(&rr);
 
-	ret = mbedtls_rsa_export(mbedtls_pk_rsa(pk), &n, NULL, NULL, NULL, &e);
+	ret = mbedtls_pk_write_pubkey_psa(&pk, der, sizeof(der), &der_len);
+	if (ret == 0) {
+		ret = mbedtls_asn1_get_tag(&p, der + der_len, &sequence_len,
+					 MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE);
+	}
+	if (ret == 0 && sequence_len != (size_t)(der + der_len - p)) {
+		ret = -EINVAL;
+	}
+	if (ret == 0) {
+		ret = mbedtls_asn1_get_mpi(&p, der + der_len, &n);
+	}
+	if (ret == 0) {
+		ret = mbedtls_asn1_get_mpi(&p, der + der_len, &e);
+	}
 	if (ret != 0 || mbedtls_mpi_size(&n) != KEY_BYTES) {
 		ret = -EINVAL;
 		goto out;
@@ -303,7 +324,7 @@ int adb_auth_client_cert(mbedtls_x509_crt *chain)
 		ret = mbedtls_x509write_crt_set_basic_constraints(&w, 1, -1);
 	}
 	if (ret == 0) {
-		ret = mbedtls_x509write_crt_der(&w, der, 2048, rng, NULL);
+		ret = mbedtls_x509write_crt_der(&w, der, 2048);
 	}
 	if (ret > 0) {
 		/* the certificate is at the end of the buffer */

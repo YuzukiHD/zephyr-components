@@ -17,9 +17,9 @@
 #include <zephyr/random/random.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/printk.h>
-#include <mbedtls/gcm.h>
-#include <mbedtls/hkdf.h>
-#include <mbedtls/sha512.h>
+#include <mbedtls/private/gcm.h>
+#include <mbedtls/private/sha512.h>
+#include <psa/crypto.h>
 #include <mirror_zephyr/adb.h>
 #include <mirror_zephyr/pairing.h>
 #include "ed25519_ops.h"
@@ -157,13 +157,31 @@ static int gcm_key(const uint8_t key_material[64], mbedtls_gcm_context *g)
 {
 	static const uint8_t info[] = "adb pairing_auth aes-128-gcm key";	/* 32 bytes, no NUL */
 	uint8_t okm[16];
+	psa_key_derivation_operation_t operation = PSA_KEY_DERIVATION_OPERATION_INIT;
+	psa_status_t status, cleanup;
 	int ret;
 
-	ret = mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), NULL, 0, key_material, 64,
-			   info, sizeof(info) - 1U, okm, sizeof(okm));
-	if (ret == 0) {
-		ret = mbedtls_gcm_setkey(g, MBEDTLS_CIPHER_ID_AES, okm, 128);
+	status = psa_key_derivation_setup(&operation, PSA_ALG_HKDF(PSA_ALG_SHA_256));
+	if (status == PSA_SUCCESS) {
+		status = psa_key_derivation_input_bytes(&operation, PSA_KEY_DERIVATION_INPUT_SALT,
+						      NULL, 0);
 	}
+	if (status == PSA_SUCCESS) {
+		status = psa_key_derivation_input_bytes(&operation, PSA_KEY_DERIVATION_INPUT_SECRET,
+						      key_material, 64);
+	}
+	if (status == PSA_SUCCESS) {
+		status = psa_key_derivation_input_bytes(&operation, PSA_KEY_DERIVATION_INPUT_INFO,
+						      info, sizeof(info) - 1U);
+	}
+	if (status == PSA_SUCCESS) {
+		status = psa_key_derivation_output_bytes(&operation, okm, sizeof(okm));
+	}
+	cleanup = psa_key_derivation_abort(&operation);
+	if (status != PSA_SUCCESS || cleanup != PSA_SUCCESS) {
+		return -EIO;
+	}
+	ret = mbedtls_gcm_setkey(g, MBEDTLS_CIPHER_ID_AES, okm, 128);
 
 	return ret == 0 ? 0 : -EIO;
 }

@@ -99,7 +99,6 @@ int tls_io_start(struct tls_io *t, int fd, int timeout_ms)
 	 * phone checks the client by the key stored at pairing.
 	 */
 	mbedtls_ssl_conf_authmode(&t->conf, MBEDTLS_SSL_VERIFY_NONE);
-	mbedtls_ssl_conf_rng(&t->conf, adb_rng, NULL);
 	mbedtls_ssl_conf_ciphersuites(&t->conf, suites);
 	mbedtls_ssl_conf_sig_algs(&t->conf, sigalgs);
 	mbedtls_ssl_conf_tls13_key_exchange_modes(&t->conf,

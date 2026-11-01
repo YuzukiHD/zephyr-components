@@ -26,9 +26,20 @@ west build -b yuzukineko -d build/android-mirror zephyr-components/android-scree
 
 The sample adds this module and the sibling `aic8800` module to `ZEPHYR_EXTRA_MODULES` itself. In
 another application add both, enable `CONFIG_MIRROR=y` and `CONFIG_AIC8800=y`, set
-`CONFIG_MINIMAL_LIBC=y` (the glue headers of the AIC8800 driver need it) and
-`CONFIG_MBEDTLS_USER_CONFIG_FILE="mirror_mbedtls.h"`; `samples/mirror_player/prj.conf` lists the
-rest (network buffers, TLS 1.3, mbed TLS heap).
+`CONFIG_MINIMAL_LIBC=y` (the glue headers of the AIC8800 driver need it).
+The module selects its PSA Crypto and X.509 options; `samples/mirror_player/prj.conf`
+lists the rest (network buffers, TLS 1.3, Mbed TLS heap).
+
+The host crypto regression suite uses the workspace's Mbed TLS and TF-PSA-Crypto
+revisions. It requires CMake, a C compiler, Python and `cryptography`:
+
+```sh
+sh zephyr-components/android-screen-mirror/tests/host/run.sh
+```
+
+It checks key creation and reload, the ADB public key's Montgomery constants,
+challenge signatures, client certificates and pairing HKDF/AES-GCM, with
+ASan/UBSan on the module code and independent Python/OpenSSL verification.
 
 The API is `include/mirror_zephyr/`: `adb.h` (connection, streams, file push), `scrcpy.h`
 (`scrcpy_start()`, `scrcpy_read_packet()`, `scrcpy_send_touch()`, `scrcpy_send_key()`),

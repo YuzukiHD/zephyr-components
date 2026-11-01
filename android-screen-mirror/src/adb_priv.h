@@ -10,9 +10,6 @@
 #include <mbedtls/pk.h>
 #include <mbedtls/x509_crt.h>
 
-/** Random bytes for mbed TLS (a pseudo random source until the SoC has a generator) */
-int adb_rng(void *ctx, unsigned char *out, size_t len);
-
 /** The key of the client */
 mbedtls_pk_context *adb_auth_pk(void);
 

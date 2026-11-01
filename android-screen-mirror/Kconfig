@@ -4,25 +4,36 @@
 config MIRROR
 	bool "Android screen mirror client"
 	depends on NETWORKING && NET_TCP && FILE_SYSTEM
+	select PSA_CRYPTO
 	select MBEDTLS
-	select MBEDTLS_RSA_C
-	select MBEDTLS_PKCS1_V15
-	select MBEDTLS_GENPRIME_ENABLED
-	select MBEDTLS_SHA1
-	select MBEDTLS_MD
+	select MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS
+	select PSA_WANT_KEY_TYPE_RSA_KEY_PAIR_GENERATE
+	select PSA_WANT_KEY_TYPE_RSA_KEY_PAIR_IMPORT
+	select PSA_WANT_KEY_TYPE_RSA_KEY_PAIR_EXPORT
+	select PSA_WANT_KEY_TYPE_RSA_PUBLIC_KEY
+	select PSA_WANT_ALG_RSA_PKCS1V15_SIGN
+	select PSA_WANT_ALG_RSA_PSS
+	select PSA_WANT_ALG_RSA_OAEP
+	select PSA_WANT_ALG_SHA_1
+	select MBEDTLS_PK_PARSE_C
 	select MBEDTLS_PK_WRITE_C
-	select RING_BUFFER
+	select MBEDTLS_BASE64_C
+	select MBEDTLS_PEM_PARSE_C
+	select MBEDTLS_PEM_WRITE_C
+	select MBEDTLS_X509_CRT_WRITE_C
+	select MBEDTLS_X509_CRT_PARSE_C
+	select MBEDTLS_X509_RSASSA_PSS_SUPPORT
 	select RING_BUFFER_LARGE
-	select MBEDTLS_HKDF_C
-	select MBEDTLS_SHA256
-	select MBEDTLS_SHA512
-	select MBEDTLS_CIPHER_GCM_ENABLED
-	select MBEDTLS_USER_CONFIG_ENABLE
+	select PSA_WANT_ALG_HKDF
+	select PSA_WANT_ALG_SHA_256
+	select PSA_WANT_ALG_SHA_512
+	select PSA_WANT_ALG_GCM
+	select PSA_WANT_KEY_TYPE_AES
+	select MBEDTLS_SSL_KEYING_MATERIAL_EXPORT
 	help
 	  An ADB client over TCP and a client of the scrcpy server: starts the
 	  server on the phone and delivers its H.264 stream and a control
-	  channel for touch and key events. The application sets
-	  CONFIG_MBEDTLS_USER_CONFIG_FILE="mirror_mbedtls.h".
+	  channel for touch and key events.
 
 if MIRROR
 

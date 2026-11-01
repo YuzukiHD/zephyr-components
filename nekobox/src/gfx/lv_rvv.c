@@ -12,7 +12,7 @@
  *     the opacity and the mask)
  *   - a >= 253 or the background alpha <= 2: the result is the foreground, alpha a
  *   - a <= 2: the result is the background
- *   - background alpha 255: the colours are mixed with weight a, the result alpha stays 255
+ *   - background alpha >= 253: the colours are mixed with weight a, keeping background alpha
  *   - otherwise the result alpha is 255 - ((255 - a) * (255 - bg alpha) >> 8) and the colours
  *     are mixed with the weight a * 255 / result alpha; a weight of 253 or more takes the
  *     foreground, 2 or less the background
@@ -66,7 +66,7 @@ static inline vuint32m2_t mix(vuint32m2_t fg, vuint32m2_t a, vuint32m2_t bg, siz
 	vbool16_t m_fg = __riscv_vmor_mm_b16(__riscv_vmsgtu_vx_u32m2_b16(a, 252, vl),
 					     __riscv_vmsleu_vx_u32m2_b16(bga, 2, vl), vl);
 	vbool16_t m_tr = __riscv_vmandn_mm_b16(__riscv_vmsleu_vx_u32m2_b16(a, 2, vl), m_fg, vl);
-	vbool16_t m_opq = __riscv_vmseq_vx_u32m2_b16(bga, 255, vl);
+	vbool16_t m_opq = __riscv_vmsgeu_vx_u32m2_b16(bga, LV_OPA_MAX, vl);
 	vbool16_t m_done = __riscv_vmor_mm_b16(m_fg, m_tr, vl);
 	vuint32m2_t fgpx = __riscv_vor_vv_u32m2(__riscv_vand_vx_u32m2(fg, 0xffffff, vl),
 						__riscv_vsll_vx_u32m2(a, 24, vl), vl);
@@ -85,7 +85,7 @@ static inline vuint32m2_t mix(vuint32m2_t fg, vuint32m2_t a, vuint32m2_t bg, siz
 	vuint32m2_t ra = __riscv_vrsub_vx_u32m2(
 		__riscv_vsrl_vx_u32m2(__riscv_vmul_vv_u32m2(ia, ibga, vl), 8, vl), 255, vl);
 	vuint32m2_t w = a;
-	vuint32m2_t alpha = __riscv_vmv_v_x_u32m2(255, vl);
+	vuint32m2_t alpha = bga;
 
 	/* a lane that is neither done nor over an opaque background needs the division */
 	if ((size_t)__riscv_vcpop_m_b16(__riscv_vmandn_mm_b16(__riscv_vmnot_m_b16(m_done, vl), m_opq, vl),
@@ -94,7 +94,7 @@ static inline vuint32m2_t mix(vuint32m2_t fg, vuint32m2_t a, vuint32m2_t bg, siz
 		vuint32m2_t ratio = __riscv_vdivu_vv_u32m2(__riscv_vmul_vx_u32m2(a, 255, vl), den, vl);
 
 		w = __riscv_vmerge_vvm_u32m2(ratio, a, m_opq, vl);
-		alpha = __riscv_vmerge_vxm_u32m2(ra, 255, m_opq, vl);
+		alpha = __riscv_vmerge_vvm_u32m2(ra, bga, m_opq, vl);
 	}
 	vuint32m2_t iw = __riscv_vrsub_vx_u32m2(w, 255, vl);
 
@@ -159,8 +159,15 @@ static inline __attribute__((always_inline)) int color_blend(lv_draw_sw_blend_fi
 				a = __riscv_vsrl_vx_u32m2(
 					__riscv_vmul_vx_u32m2(load_u8_as_u32(&mask[x], vl), opa, vl), 8, vl);
 			}
-			VST32(&d[x], mix(__riscv_vmv_v_x_u32m2(rgb, vl), a,
-							 VLD32(&d[x], vl), vl), vl);
+			vuint32m2_t bg = VLD32(&d[x], vl);
+			vuint32m2_t result = mix(__riscv_vmv_v_x_u32m2(rgb, vl), a, bg, vl);
+
+			/* Masked fills leave transparent lanes untouched, including their RGB. */
+			if (mode == MASK || mode == MASK_OPA) {
+				result = __riscv_vmerge_vvm_u32m2(result, bg,
+					__riscv_vmsleu_vx_u32m2_b16(a, LV_OPA_MIN, vl), vl);
+			}
+			VST32(&d[x], result, vl);
 			x += vl;
 		}
 		dst += dsc->dest_stride;

@@ -1,7 +1,7 @@
 #define MBEDTLS_ALLOW_PRIVATE_ACCESS
 #include "includes.h"
-#include "mbedtls/bignum.h"
-#include "mbedtls/ecp.h"
+#include "mbedtls/private/bignum.h"
+#include "mbedtls/private/ecp.h"
 #include "common.h"
 #include "crypto.h"
 #include "random.h"
@@ -392,8 +392,8 @@ struct crypto_ec *crypto_ec_init(int group)
 		grp_id = MBEDTLS_ECP_DP_SECP521R1;
 		break;
 	case 25:
-		grp_id = MBEDTLS_ECP_DP_SECP192R1;
-		break;
+		/* Mbed TLS 4 no longer supports secp192r1. */
+		return NULL;
 	case 26:
 		// mbedtls support this curve (MBEDTLS_ECP_DP_SECP224R1) but since the prime
 		// of this curve is not 3 congruent module 4 the square root algo used in
@@ -652,6 +652,12 @@ end:
 	return ret;
 }
 
+static int crypto_mbedtls_rng(void *ctx, unsigned char *buf, size_t len)
+{
+	(void)ctx;
+	return random_get_bytes(buf, len);
+}
+
 /**
  * crypto_bignum_mul - res = b * p
  * @e: EC context from crypto_ec_init()
@@ -665,7 +671,7 @@ int crypto_ec_point_mul(struct crypto_ec *e, const struct crypto_ec_point *p,
 			struct crypto_ec_point *res)
 {
 	if (mbedtls_ecp_mul(&e->group, &res->point, &b->mpi, &p->point,
-			    NULL, NULL))
+			    crypto_mbedtls_rng, NULL))
 		return -1;
 
 	return 0;

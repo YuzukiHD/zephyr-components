@@ -1,5 +1,11 @@
 # zephyr-components
 
+The `zephyr-v4.5.0-f101` branch targets the matching F101 Zephyr branch based on
+Zephyr 4.5.0, including LVGL 9.6 and Mbed TLS 4. See the Zephyr board guide at
+`boards/yuzukihd/yuzukineko/doc/f101-migration-4.5.rst` for the environment,
+module revisions, build commands and rollback procedure. The previous component
+baseline remains on `main`.
+
 Zephyr modules for RISC-V boards. Each directory is a module of its own
 (`zephyr/module.yml`), add the ones you need to `ZEPHYR_EXTRA_MODULES`.
 

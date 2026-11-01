@@ -135,8 +135,10 @@ configdefault BT_HCI_ACL_FLOW_CONTROL
 config AIC8800_WPA3
 	bool "WPA3 (SAE)"
 	depends on MBEDTLS
-	select MBEDTLS_ECP_C
-	select MBEDTLS_ECP_DP_SECP256R1_ENABLED
+	select MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS
+	select PSA_WANT_ALG_ECDH
+	select PSA_WANT_ECC_SECP_R1_256
+	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR_IMPORT
 	help
 	  Build the SAE handshake of the supplicant on top of mbedTLS.
 

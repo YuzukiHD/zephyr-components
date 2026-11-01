@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/types.h>
+#include <zephyr/posix/posix_types.h>
 #include "lwip/sockets.h"
 #include "lwip/inet.h"
 

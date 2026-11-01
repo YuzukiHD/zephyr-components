@@ -241,7 +241,7 @@ static int aicz_send(const struct device *dev, struct net_pkt *pkt)
 	return aicz_net_tx(p) == 0 ? 0 : -EIO;
 }
 
-static enum ethernet_hw_caps aicz_caps(const struct device *dev)
+static enum ethernet_hw_caps aicz_caps(const struct device *dev, struct net_if *iface)
 {
 	return 0;
 }

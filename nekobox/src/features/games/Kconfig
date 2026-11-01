@@ -8,7 +8,6 @@ config NEKOBOX_FEATURE_GAMES
 	select GBSP
 	select NES
 	select CRC
-	select RING_BUFFER
 	select STATIC_INIT_GNU
 	select I2S
 	select AUDIO
@@ -22,9 +21,9 @@ config NEKOBOX_GAMES_HOT_RAM
 	select CODE_DATA_RELOCATION
 	help
 	  In an XIP image every instruction that is not in the cache comes from the flash window.
-	  The renderer, the memory handlers, the frame and timer loop and the recompiler of the GBA core (gpSP) run for every frame, so they
-	  are copied to RAM at boot. The translated game code is in RAM anyway. The Game Boy core
-	  (mGBA) stays in the flash window.
+	  The renderer, memory handlers, frame and timer loop and recompiler of the GBA core
+	  (gpSP) run for every frame, so they are copied to RAM at boot. The translated game code
+	  is in RAM anyway. The Game Boy core (mGBA) stays in the flash window.
 
 config NEKOBOX_GAME
 	string "Game to start at boot, for a check without touching (empty: none)"

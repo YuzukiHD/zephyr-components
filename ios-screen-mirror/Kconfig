@@ -8,11 +8,13 @@ config IOS_MIRROR
 	select DNS_SD
 	select NET_HOSTNAME_ENABLE
 	select DNS_RESOLVER
+	select PSA_CRYPTO
 	select MBEDTLS
-	select MBEDTLS_SHA512
-	select MBEDTLS_CIPHER_AES_ENABLED
-	select MBEDTLS_CIPHER_MODE_CTR_ENABLED
-	select MBEDTLS_CIPHER_MODE_CBC_ENABLED
+	select MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS
+	select PSA_WANT_ALG_SHA_512
+	select PSA_WANT_KEY_TYPE_AES
+	select PSA_WANT_ALG_CTR
+	select PSA_WANT_ALG_CBC_NO_PADDING
 	help
 	  An AirPlay screen mirroring receiver. The iPhone finds the board
 	  in the Screen Mirroring list of the control center and sends its

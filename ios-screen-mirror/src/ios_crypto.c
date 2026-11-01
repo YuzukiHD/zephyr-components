@@ -8,8 +8,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <mbedtls/aes.h>
-#include <mbedtls/sha512.h>
+#include <mbedtls/private/aes.h>
+#include <mbedtls/private/sha512.h>
 #include <zephyr/random/random.h>
 
 #include "crypto.h"

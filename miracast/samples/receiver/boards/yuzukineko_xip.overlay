@@ -1,0 +1,19 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/ {
+	soc {
+		wfd_flash: flash@e000000 {
+			compatible = "soc-nv-flash";
+			reg = <0x0e000000 0x600000>;
+			erase-block-size = <4096>;
+			write-block-size = <1>;
+		};
+	};
+	chosen {
+		zephyr,flash = &wfd_flash;
+	};
+};
+
+/* The SPIF window uses these pins throughout execution. */
+&spi0 {
+	status = "disabled";
+};

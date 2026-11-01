@@ -14,6 +14,7 @@ Zephyr modules for RISC-V boards. Each directory is a module of its own
 | [`pocketjs/`](pocketjs) | [PocketJS](https://github.com/pocket-nexus/pocketjs): QuickJS-ng guest, Rust UI core and RGB565 renderer with G2D / RVV acceleration, player sample |
 | [`litehtml/`](litehtml) | the [litehtml](https://github.com/litehtml/litehtml) HTML/CSS renderer drawing into an RGB565 buffer, HTML viewer sample |
 | [`android-screen-mirror/`](android-screen-mirror) | Android screen mirror over WiFi: ADB over TCP and a scrcpy client, H.264 decoded by the video engine, touch and key events back to the phone |
+| [`miracast/`](miracast) | Wi-Fi Display sink: RTSP negotiation, RTP/MPEG-TS demux, H.264/LPCM player, standalone receiver and NekoBox home screen app |
 | [`ios-screen-mirror/`](ios-screen-mirror) | iOS screen mirror: AirPlay receiver on the [RPiPlay](https://github.com/FD-/RPiPlay) library, DNS-SD announcements, H.264 decoded by the video engine |
 | [`uf2-downloader/`](uf2-downloader) | not a module but an application: shows a `F101BOOT` USB drive and writes the `.uf2` files copied onto it to the SPI NOR (`tools/mkuf2.py`) |
 | [`bochs/`](bochs) | the [Bochs](https://github.com/bochs-emu/Bochs) x86 PC emulator (486 class, no FPU) for a Windows 95 class guest; the BIOS runs on the board, output, input and a disk are not done yet |

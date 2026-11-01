@@ -1,0 +1,4 @@
+name: miracast
+build:
+  cmake: .
+  kconfig: Kconfig

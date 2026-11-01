@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+mainmenu "Miracast receiver"
+
+config SAMPLE_WFD_NAME
+	string "Wi-Fi Display device name"
+	default "YuzukiNeko Miracast"
+
+config SAMPLE_WFD_720P
+	bool "Also advertise 1280x720p30"
+	default n
+	help
+	  Requires enough memory for the decoder surfaces and sufficient network
+	  throughput. The mandatory 640x480p60 timing is always advertised.
+
+config SAMPLE_WFD_PEER
+	string "Source IPv4 address for an existing IP link (empty = Wi-Fi Direct)"
+	default ""
+	help
+	  Useful for transport testing on a preconfigured interface. This skips
+	  P2P startup. The source must implement Wi-Fi Display RTSP on port 7236.
+
+source "Kconfig.zephyr"

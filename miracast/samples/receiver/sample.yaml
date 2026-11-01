@@ -1,0 +1,11 @@
+sample:
+  name: Miracast Wi-Fi Display receiver
+tests:
+  sample.miracast.receiver:
+    build_only: true
+    platform_allow:
+      - yuzukineko
+    tags:
+      - net
+      - wifi
+      - display

@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig MIRACAST
+	bool "Miracast Wi-Fi Display sink"
+	depends on NETWORKING && NET_IPV4 && NET_UDP && NET_TCP
+	select NET_SOCKETS
+	help
+	  A Wi-Fi Display sink with RTSP capability negotiation and RTP/MPEG-TS
+	  demultiplexing. The application supplies an IP link to the source and
+	  consumes H.264 Annex B and LPCM (or optional AAC) payloads. Protected
+	  content, UIBC, and interleaved TCP media are not supported.
+
+if MIRACAST
+
+config MIRACAST_PLAYER
+	bool "H.264 and LPCM player on the Sunxi display and audio devices"
+	depends on DISPLAY_SUNXI && VDEC && I2S && AUDIO_CODEC
+	help
+	  Decode received video and audio on separate threads with bounded queues.
+	  Applications control the player from their UI or application thread and
+	  supply its media callback to the receiver. The device tree must provide
+	  the ve, audio_codec and codec_analog nodes and a chosen display.
+
+config MIRACAST_STACK_SIZE
+	int "Network receiver stack size"
+	default 8192
+	range 4096 32768
+
+config MIRACAST_THREAD_PRIORITY
+	int "Network receiver priority"
+	default 7
+
+config MIRACAST_TIMEOUT_MS
+	int "RTSP request and inactivity timeout in milliseconds"
+	default 30000
+	range 5000 120000
+
+endif

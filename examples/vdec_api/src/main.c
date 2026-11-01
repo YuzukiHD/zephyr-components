@@ -10,10 +10,18 @@
 #include <zephyr/sys/crc.h>
 #include <zephyr/sys/printk.h>
 
-#include "test_jpeg.h"
-#include "test_png.h"
-#include "test_h264.h"
-#include "test_mjpeg.h"
+#include "jpeg_cases.h"
+#include "png_cases.h"
+#include "h264_cases.h"
+
+static const struct {
+	const uint8_t *data;
+	size_t len;
+} test_mjpeg[] = {
+	{jpg_s320x240, sizeof(jpg_s320x240)},
+	{jpg_q2_test, sizeof(jpg_q2_test)},
+	{jpg_q31_test, sizeof(jpg_q31_test)},
+};
 
 static const struct device *const dev = DEVICE_DT_GET(DT_NODELABEL(ve));
 
@@ -60,7 +68,7 @@ static void demo_jpeg(void)
 
 	for (int i = 0; i < ARRAY_SIZE(formats); i++) {
 		t = k_uptime_get();
-		ret = vdec_decode_image(dev, VDEC_CODEC_JPEG, test_jpeg, sizeof(test_jpeg),
+		ret = vdec_decode_image(dev, VDEC_CODEC_JPEG, jpg_s320x240, sizeof(jpg_s320x240),
 					formats[i], &frame);
 		printk("[jpeg] vdec_decode_image(format %d) = %s, %lld ms\n", formats[i], err(ret),
 		       k_uptime_get() - t);
@@ -81,7 +89,7 @@ static void demo_png(void)
 	int64_t t = k_uptime_get();
 	int ret;
 
-	ret = vdec_decode_image(dev, VDEC_CODEC_PNG, test_png, sizeof(test_png),
+	ret = vdec_decode_image(dev, VDEC_CODEC_PNG, png_rgba8, sizeof(png_rgba8),
 				VDEC_FORMAT_RGBA8888, &frame);
 	printk("[png] vdec_decode_image(RGBA8888) = %s, %lld ms\n", err(ret), k_uptime_get() - t);
 	if (ret == 0) {
@@ -104,26 +112,26 @@ static void demo_image_errors(void)
 	struct vdec_frame frame;
 	int ret;
 
-	ret = vdec_decode_image(dev, VDEC_CODEC_PNG, test_png, sizeof(test_png), VDEC_FORMAT_NV12,
+	ret = vdec_decode_image(dev, VDEC_CODEC_PNG, png_rgba8, sizeof(png_rgba8), VDEC_FORMAT_NV12,
 				&frame);
 	printk("[error] PNG as NV12             = %s\n", err(ret));
-	ret = vdec_decode_image(dev, VDEC_CODEC_JPEG, test_jpeg, sizeof(test_jpeg),
+	ret = vdec_decode_image(dev, VDEC_CODEC_JPEG, jpg_s320x240, sizeof(jpg_s320x240),
 				VDEC_FORMAT_RGBA8888, &frame);
 	printk("[error] JPEG as RGBA8888        = %s\n", err(ret));
-	ret = vdec_decode_image(dev, VDEC_CODEC_H264, test_jpeg, sizeof(test_jpeg),
+	ret = vdec_decode_image(dev, VDEC_CODEC_H264, jpg_s320x240, sizeof(jpg_s320x240),
 				VDEC_FORMAT_NV12, &frame);
 	printk("[error] H.264 to decode_image   = %s\n", err(ret));
 	ret = vdec_decode_image(dev, VDEC_CODEC_JPEG, garbage, sizeof(garbage), VDEC_FORMAT_NV12,
 				&frame);
 	printk("[error] 16 bytes of 0x55 (JPEG) = %s\n", err(ret));
-	ret = vdec_decode_image(dev, VDEC_CODEC_JPEG, test_jpeg, sizeof(test_jpeg) / 2,
+	ret = vdec_decode_image(dev, VDEC_CODEC_JPEG, jpg_s320x240, sizeof(jpg_s320x240) / 2,
 				VDEC_FORMAT_NV12, &frame);
 	printk("[error] half a JPEG             = %s\n", err(ret));
 	if (ret == 0) {
 		vdec_frame_release(dev, &frame);
 	}
 	/* the decoder must still work after the errors */
-	ret = vdec_decode_image(dev, VDEC_CODEC_JPEG, test_jpeg, sizeof(test_jpeg),
+	ret = vdec_decode_image(dev, VDEC_CODEC_JPEG, jpg_s320x240, sizeof(jpg_s320x240),
 				VDEC_FORMAT_NV12, &frame);
 	printk("[error] a good JPEG afterwards  = %s\n", err(ret));
 	if (ret == 0) {
@@ -175,8 +183,9 @@ static void demo_stream_get_frame_mjpeg(void)
 
 static size_t next_start_code(const uint8_t *d, size_t len, size_t from)
 {
-	for (size_t i = from; i + 4 <= len; i++) {
-		if (d[i] == 0 && d[i + 1] == 0 && d[i + 2] == 0 && d[i + 3] == 1) {
+	for (size_t i = from; i + 3 <= len; i++) {
+		if (d[i] == 0 && d[i + 1] == 0 &&
+		    (d[i + 2] == 1 || (i + 4 <= len && d[i + 2] == 0 && d[i + 3] == 1))) {
 			return i;
 		}
 	}
@@ -211,7 +220,7 @@ static void demo_stream_get_frame_h264(void)
 			if (frames < 4) {
 				show_frame("[h264]", &frame);
 			}
-			if (frames < ARRAY_SIZE(test_h264_crc)) {
+			if (frames < ARRAY_SIZE(crc_base)) {
 				/* the same CRC the vdec h264 sample checks */
 				uint32_t crc = 0;
 
@@ -223,7 +232,7 @@ static void demo_stream_get_frame_h264(void)
 					crc = crc32_ieee_update(crc, frame.plane[1] +
 							      y * frame.stride[1], frame.width);
 				}
-				if (crc != test_h264_crc[frames]) {
+				if (crc != crc_base[frames]) {
 					printk("[h264] frame %d: bad crc\n", frames);
 				}
 			}
@@ -232,15 +241,17 @@ static void demo_stream_get_frame_h264(void)
 		} else if (ret == -ENODATA) {
 			break;
 		} else if (ret == -EAGAIN) {
-			if (off < sizeof(test_h264)) {
+			if (off < sizeof(h264_base)) {
+				size_t prefix = h264_base[off + 2] == 1 ? 3 : 4;
+
 				/* one NAL unit per call, so every call has a time stamp */
-				nal_end = next_start_code(test_h264, sizeof(test_h264), off + 4);
-				ret = vdec_stream_feed(dev, stream, test_h264 + off, nal_end - off,
+				nal_end = next_start_code(h264_base, sizeof(h264_base), off + 4);
+				ret = vdec_stream_feed(dev, stream, h264_base + off, nal_end - off,
 						       nal, &used);
 				if (nal < 6) {
 					printk("[h264] feed NAL #%d (type %d, %zu bytes, pts %d) = %s, used %zu\n",
-					       nal, test_h264[off + 4] & 0x1f, nal_end - off, nal,
-					       err(ret), used);
+					       nal, h264_base[off + prefix] & 0x1f, nal_end - off,
+					       nal, err(ret), used);
 				}
 				if (ret == 0) {
 					off += used;
@@ -287,11 +298,11 @@ static void demo_hold(void)
 			n++;
 			continue;
 		}
-		if (ret != -EAGAIN || off >= sizeof(test_h264)) {
+		if (ret != -EAGAIN || off >= sizeof(h264_base)) {
 			break;
 		}
-		nal_end = next_start_code(test_h264, sizeof(test_h264), off + 4);
-		if (vdec_stream_feed(dev, stream, test_h264 + off, nal_end - off, -1, &used) == 0) {
+		nal_end = next_start_code(h264_base, sizeof(h264_base), off + 4);
+		if (vdec_stream_feed(dev, stream, h264_base + off, nal_end - off, -1, &used) == 0) {
 			off += used;
 		}
 	}
@@ -315,7 +326,7 @@ static void demo_frame_release(void)
 	struct vdec_frame frame;
 	int ret;
 
-	ret = vdec_decode_image(dev, VDEC_CODEC_JPEG, test_jpeg, sizeof(test_jpeg),
+	ret = vdec_decode_image(dev, VDEC_CODEC_JPEG, jpg_s320x240, sizeof(jpg_s320x240),
 				VDEC_FORMAT_NV12, &frame);
 	printk("[release] first decode = %s, plane %p\n", err(ret), frame.plane[0]);
 	if (ret != 0) {
@@ -325,7 +336,7 @@ static void demo_frame_release(void)
 	printk("[release] vdec_frame_release done\n");
 
 	/* the decoder is free again: the next picture can be decoded at once */
-	ret = vdec_decode_image(dev, VDEC_CODEC_JPEG, test_jpeg, sizeof(test_jpeg),
+	ret = vdec_decode_image(dev, VDEC_CODEC_JPEG, jpg_s320x240, sizeof(jpg_s320x240),
 				VDEC_FORMAT_NV12, &frame);
 	printk("[release] second decode = %s, plane %p\n", err(ret), frame.plane[0]);
 	if (ret == 0) {
@@ -412,12 +423,12 @@ static void demo_stream_feed(void)
 	printk("[feed] 16 bytes of 0x55        = %s, used %zu\n", err(ret), used);
 
 	/* no data at all */
-	ret = vdec_stream_feed(dev, stream, test_h264, 0, -1, &used);
+	ret = vdec_stream_feed(dev, stream, h264_base, 0, -1, &used);
 	printk("[feed] 0 bytes                 = %s, used %zu\n", err(ret), used);
 
 	/* the whole clip, in Annex B form, in one call */
-	ret = vdec_stream_feed(dev, stream, test_h264, sizeof(test_h264), 0, &used);
-	printk("[feed] whole clip (%zu bytes) = %s, used %zu\n", sizeof(test_h264), err(ret),
+	ret = vdec_stream_feed(dev, stream, h264_base, sizeof(h264_base), 0, &used);
+	printk("[feed] whole clip (%zu bytes) = %s, used %zu\n", sizeof(h264_base), err(ret),
 	       used);
 
 	vdec_stream_close(dev, stream);

@@ -50,7 +50,7 @@ static void demo_get_host_props(void)
 	printk("[props] sdhc_get_host_props = %s: clock %u..%u Hz, power-up delay %u ms\n", err(ret),
 	       props.f_min, props.f_max, props.power_delay);
 	printk("[props] 4 bit bus %d, 8 bit bus %d, high speed %d, 3.3 V %d, 3.0 V %d, 1.8 V %d, SDR50 %d, DDR50 %d, SPI mode %d\n",
-	       props.host_caps.bus_4_bit_support, props.host_caps.bus_8_bit_support,
+	       props.bus_4_bit_support, props.host_caps.bus_8_bit_support,
 	       props.host_caps.high_spd_support, props.host_caps.vol_330_support,
 	       props.host_caps.vol_300_support, props.host_caps.vol_180_support,
 	       props.host_caps.sdr50_support, props.host_caps.ddr50_support, props.is_spi);
